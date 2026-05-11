@@ -1,0 +1,261 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-11T13:50:06.558858+00:00",
+    "plugin_path": "/Users/avishaylidani/DEV/GitHubRepo/MelechDSP/MasterLimiter/build-debug/MasterLimiter_artefacts/Debug/VST3/MasterLimiter.vst3",
+    "plugin_version": null,
+    "bench_git_sha": "f6e04aa746629900107383132e64879faac5c0a1",
+    "sample_rate": 48000,
+    "slice": 2,
+    "host": {
+      "python": "3.11.1 (v3.11.1:a7a450f84a, Dec  6 2022, 15:24:06) [Clang 13.0.0 (clang-1300.0.29.30)]",
+      "platform": "macOS-26.4-arm64-arm-64bit"
+    }
+  },
+  "criteria": {
+    "pass": true,
+    "checks": {
+      "null_residual_kweighted_db": {
+        "pass": true,
+        "value": {
+          "by_signal": {
+            "pink_noise_60s@gr0": null,
+            "sine_sweep_log_30s@gr0": null,
+            "imd_smpte@gr0": null,
+            "dirac_impulse@gr0": null,
+            "transient_train@gr0": null
+          },
+          "worst_finite_lufs": null
+        },
+        "limit": -140.0
+      },
+      "thd_plus_n_pct_pink": {
+        "pass": true,
+        "value": 0.0,
+        "limit": 0.001
+      },
+      "imd_smpte_pct": {
+        "pass": true,
+        "value": 0.0,
+        "limit": 0.001
+      },
+      "latency_samples": {
+        "pass": true,
+        "value": {
+          "measured": 0,
+          "reported": 0
+        },
+        "limit": 0
+      },
+      "true_peak_overs": {
+        "pass": true,
+        "value": 0,
+        "limit": 0
+      }
+    }
+  },
+  "metrics": {
+    "null_residual_kweighted_db_by_signal": {
+      "pink_noise_60s@gr0": null,
+      "sine_sweep_log_30s@gr0": null,
+      "imd_smpte@gr0": null,
+      "dirac_impulse@gr0": null,
+      "transient_train@gr0": null
+    },
+    "noise_residual_pct_pink": 0.0,
+    "imd_smpte_pct": 0.0,
+    "latency_samples_measured": 0,
+    "latency_samples_reported": 0,
+    "true_peak_overs_max": 0
+  },
+  "rows": [
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 0.0,
+      "metric": "null_residual_kweighted_db",
+      "value": null,
+      "pass": true
+    },
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 0.0,
+      "metric": "noise_residual_pct",
+      "value": 0.0,
+      "pass": true
+    },
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 0.0,
+      "metric": "true_peak_overs",
+      "value": 0,
+      "pass": true
+    },
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 0.0,
+      "metric": "aliasing_residual_db",
+      "value": 0.0,
+      "pass": true
+    },
+    {
+      "signal": "sine_sweep_log_30s",
+      "gr_db": 0.0,
+      "metric": "null_residual_kweighted_db",
+      "value": null,
+      "pass": true
+    },
+    {
+      "signal": "sine_sweep_log_30s",
+      "gr_db": 0.0,
+      "metric": "true_peak_overs",
+      "value": 0,
+      "pass": true
+    },
+    {
+      "signal": "sine_sweep_log_30s",
+      "gr_db": 0.0,
+      "metric": "aliasing_residual_db",
+      "value": 0.0,
+      "pass": true
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 0.0,
+      "metric": "null_residual_kweighted_db",
+      "value": null,
+      "pass": true
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 0.0,
+      "metric": "imd_smpte_pct",
+      "value": 0.0,
+      "pass": true
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 0.0,
+      "metric": "true_peak_overs",
+      "value": 0,
+      "pass": true
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 0.0,
+      "metric": "aliasing_residual_db",
+      "value": 0.0,
+      "pass": true
+    },
+    {
+      "signal": "dirac_impulse",
+      "gr_db": 0.0,
+      "metric": "null_residual_kweighted_db",
+      "value": null,
+      "pass": true
+    },
+    {
+      "signal": "dirac_impulse",
+      "gr_db": 0.0,
+      "metric": "true_peak_overs",
+      "value": 4,
+      "pass": false
+    },
+    {
+      "signal": "dirac_impulse",
+      "gr_db": 0.0,
+      "metric": "aliasing_residual_db",
+      "value": 0.0,
+      "pass": true
+    },
+    {
+      "signal": "transient_train",
+      "gr_db": 0.0,
+      "metric": "null_residual_kweighted_db",
+      "value": null,
+      "pass": true
+    },
+    {
+      "signal": "transient_train",
+      "gr_db": 0.0,
+      "metric": "true_peak_overs",
+      "value": 360,
+      "pass": false
+    },
+    {
+      "signal": "transient_train",
+      "gr_db": 0.0,
+      "metric": "aliasing_residual_db",
+      "value": 0.0,
+      "pass": true
+    },
+    {
+      "signal": "_global",
+      "gr_db": 0.0,
+      "metric": "latency_samples_measured",
+      "value": 0,
+      "pass": true
+    },
+    {
+      "signal": "_global",
+      "gr_db": 0.0,
+      "metric": "latency_samples_reported",
+      "value": 0,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "pass": true,
+    "checks": {
+      "null_residual_kweighted_db": {
+        "pass": true,
+        "value": {
+          "by_signal": {
+            "pink_noise_60s@gr0": null,
+            "sine_sweep_log_30s@gr0": null,
+            "imd_smpte@gr0": null,
+            "dirac_impulse@gr0": null,
+            "transient_train@gr0": null
+          },
+          "worst_finite_lufs": null
+        },
+        "limit": -140.0
+      },
+      "thd_plus_n_pct_pink": {
+        "pass": true,
+        "value": 0.0,
+        "limit": 0.001
+      },
+      "imd_smpte_pct": {
+        "pass": true,
+        "value": 0.0,
+        "limit": 0.001
+      },
+      "latency_samples": {
+        "pass": true,
+        "value": {
+          "measured": 0,
+          "reported": 0
+        },
+        "limit": 0
+      },
+      "true_peak_overs": {
+        "pass": true,
+        "value": 0,
+        "limit": 0
+      }
+    },
+    "crest_dry": {
+      "pink_noise_60s": 13.586756650255612,
+      "sine_sweep_log_30s": 3.0102957380602913,
+      "imd_smpte": 4.681782121435864,
+      "dirac_impulse": 46.812412373755876,
+      "transient_train": 33.17486142135169
+    },
+    "crest_wet": {
+      "pink_noise_60s": 13.586756650255612,
+      "sine_sweep_log_30s": 3.0102957380602913,
+      "imd_smpte": 4.681782121435864,
+      "dirac_impulse": 46.812412373755876,
+      "transient_train": 33.17486142135169
+    }
+  }
+}
