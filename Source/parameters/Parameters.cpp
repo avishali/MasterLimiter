@@ -38,6 +38,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         100.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (release_sustain_ratio, 1),
+        "Release Sustain Ratio",
+        NormalisableRange<float> (1.0f, 10.0f, 0.0f),
+        4.0f,
+        AudioParameterFloatAttributes().withLabel ("")));
+
     const auto releaseAutoAttrs = AudioParameterBoolAttributes()
                                       .withStringFromValueFunction ([] (bool v, int) { return v ? "Auto" : "Off"; })
                                       .withValueFromStringFunction ([] (const String& t)

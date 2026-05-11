@@ -28,6 +28,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("input_gain_db") != nullptr);
     jassert (apvts.getParameter ("ceiling_db") != nullptr);
     jassert (apvts.getParameter ("release_ms") != nullptr);
+    jassert (apvts.getParameter ("release_sustain_ratio") != nullptr);
 }
 
 MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor() = default;
@@ -56,6 +57,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
     jassert (ceilingMode_ != nullptr);
+
+    releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
+    jassert (releaseSustainRatio_ != nullptr);
 
     baseLatencySamples_ = lookaheadSamples;
     osLatencySamples_   = ispTrim_.getLatencyInSamples();
@@ -88,7 +92,8 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     juce::ignoreUnused (midi);
 
     if (apvts.getParameter ("input_gain_db") == nullptr || apvts.getParameter ("ceiling_db") == nullptr
-        || apvts.getParameter ("release_ms") == nullptr || ceilingMode_ == nullptr)
+        || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
+        || ceilingMode_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -114,6 +119,7 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     const float thresholdLin = juce::Decibels::decibelsToGain (readFloatParam (apvts, "ceiling_db"));
     envelope_.setThresholdLinear (thresholdLin);
     envelope_.setReleaseMs (readFloatParam (apvts, "release_ms"));
+    envelope_.setReleaseSustainRatio (releaseSustainRatio_->get());
 
     auto* gain = gainBuf_.getWritePointer (0);
     envelope_.process (peak, gain, n);

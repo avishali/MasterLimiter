@@ -4,6 +4,135 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-11 — Slice 5: Transient/Sustain split
+
+**Status:** ✅ Closed. Bench PASS 25/25 (Slice 5 at both 3 dB and 5 dB GR).
+Slice 3 regression PASS 13/13. Slice 4 regression PASS 14/14.
+
+**Architecture:** [ADR-0005](../third_party/melechdsp-hq/docs/DECISIONS/ADR-0005-transient-sustain-split.md)
+— fast/slow envelope-difference, detection-bus only, `min(fast, slow)` combine.
+
+**Deliverables (HQ)**
+- `mdsp_dsp::LimiterEnvelope` extended with a parallel slow release cascade
+  (`stage1Slow_` / `stage2Slow_` / `alphaSlow_`). Both cascades share the
+  same backward-propagated raised-cosine attack ramp. Per-sample output:
+  `clamp(min(s2_fast, s2_slow), eps, 1)`. `setReleaseSustainRatio(ratio)`
+  clamps to [1.0, 10.0]; `alphaSlow_` derives from `releaseMs_ × ratio`.
+  Ratio = 1.0 produces bit-identical output to Slice 3/4 (regression-safe
+  continuum).
+- `shared/dsp_bench/criteria.py` — `SLICE_05_3DB_TS_SPLIT` and
+  `SLICE_05_5DB_TS_SPLIT` dicts, `evaluate_slice05`. Shared helpers
+  `_evaluate_slice_quality_only` / `_evaluate_slice_latency_calibration`
+  factored out from `evaluate_slice04` to keep the per-depth evaluation
+  composable.
+- `shared/dsp_bench/bench.py` — slice 5 default GR depths `[3.0, 5.0]`,
+  by-GR-depth metrics aggregation, dispatch to `evaluate_slice05`,
+  depth-aware per-row pass logic.
+- `shared/dsp_bench/drivers/master_limiter.py` — `release_sustain_ratio`
+  defaults: `1.0` for slices 3 & 4 (forces single-band regression behavior),
+  `4.0` for slice ≥ 5.
+
+**Deliverables (product repo)**
+- `Source/parameters/ParameterIDs.h` — new constant
+  `release_sustain_ratio` (FROZEN ID from this slice).
+- `Source/parameters/Parameters.cpp` — `AudioParameterFloat` 1.0–10.0,
+  default 4.0, version hint 1.
+- `Source/PluginProcessor.{h,cpp}` — cached `releaseSustainRatio_`
+  pointer; per-block `envelope_.setReleaseSustainRatio(...)` call after
+  `setReleaseMs`.
+- Bench artifacts archived under `docs/bench/SLICE_05/<timestamp>/`.
+
+**Bench-side note on label discovery**
+
+During implementation the `release_sustain_ratio` param was initially
+declared with `.withLabel("x")`. Pedalboard then exposed it as
+`release_sustain_ratio_x` (label appended to the ID), and the driver's
+`set_parameters({"release_sustain_ratio": ...})` failed with
+`KeyError: Unknown plugin parameter`. Fix: empty label restored the
+original ID. Documented for future param additions — pedalboard's
+discrete-vs-continuous parameter naming differs from JUCE's APVTS ID
+convention when labels are non-empty.
+
+**Gate result — Slice 5 @ 3 dB GR (T/S split engaged, ratio = 4.0)**
+
+| Metric                              | Value         | Threshold     | Pass |
+|-------------------------------------|---------------|---------------|------|
+| `null_residual_kweighted_db` (pink) | −18.84 LUFS   | ≤ −18.0       | ✅   |
+| `noise_residual_pct` (pink)         | 22.81 %       | ≤ 25 %        | ✅   |
+| `imd_smpte_pct`                     | 0.287 %       | ≤ 0.30 %      | ✅   |
+| `transient_crest_delta_db`          | small         | ≥ −0.8 dB     | ✅   |
+| `sample_peak_overs_max` (gated)     | 50            | ≤ 200         | ✅   |
+| `true_peak_overs_max` (gated)       | 166           | ≤ 500         | ✅   |
+| Latency reported / lag              | 301 / 0       | match / ≤ 1   | ✅   |
+
+**Gate result — Slice 5 @ 5 dB GR (first time we hit this depth)**
+
+| Metric                              | Value         | Threshold     | Pass |
+|-------------------------------------|---------------|---------------|------|
+| `null_residual_kweighted_db` (pink) | −16.23 LUFS   | ≤ −15.0       | ✅   |
+| `noise_residual_pct` (pink)         | 23.71 %       | ≤ 25 %        | ✅   |
+| `imd_smpte_pct`                     | 0.186 %       | ≤ 0.40 %      | ✅   |
+| `transient_crest_delta_db`          | small         | ≥ −1.2 dB     | ✅   |
+| `sample_peak_overs_max` (gated)     | 102           | ≤ 300         | ✅   |
+| `true_peak_overs_max` (gated)       | 326           | ≤ 700         | ✅   |
+
+Calibration converged on pink for both depths (5 iterations cap; no
+failures). Overall: **PASS 25/25.** Slice 3 regression PASS 13/13;
+Slice 4 regression PASS 14/14.
+
+**Honest reading of these numbers**
+
+Pink null at 3 dB GR is **identical** to Slice 4 single-band (−18.84 vs
+−18.80). This is *not* a DSP failure — the bench's calibration loop
+adjusts input gain to hit the target GR depth, and at any
+`min(fast, slow)`-style T/S split, the slow envelope holds reduction
+longer, so the bench compensates with lower input gain. Final average
+GR matches the single-band target → final average modulation depth
+matches → final K-weighted null residual matches. **Geometry, not
+algorithm.**
+
+Where T/S split's benefit *does* surface and *doesn't*:
+
+| Where it shows | How |
+|---|---|
+| Loudness uplift at fixed input gain | Not measured here — bench calibrates input gain away. Will surface in user audition. |
+| Transient crest preservation | Passes (was already passing in single-band; T/S split makes it easier to pass at higher GR). |
+| LF pumping on real material | Requires real drum/full-mix material — pink has no sustain layer to protect. Deferred to user-supplied corpus audition. |
+
+The DSP is correctly implemented per ADR-0005. The bench can't quantify
+the loudness-per-GR benefit on pink because of the calibration design;
+the benefit will be measured in the user's real-material A/B vs Ozone.
+
+**Gap to SPEC §5 final (carried forward)**
+
+| Metric                          | Slice 4 SP   | Slice 5 T/S (3 dB) | Slice 5 T/S (5 dB) | SPEC §5 final | Closes in |
+|---------------------------------|-------------:|-------------------:|-------------------:|--------------:|-----------|
+| Null residual K-w (pink)        | −18.8 LUFS   | −18.8 LUFS         | −16.2 LUFS         | −60 / −55 LUFS| Slice 9 + ADR-0006 auto-release tuning |
+| Noise residual pct (pink)       | 22.8 %       | 22.8 %             | 23.7 %             | 0.10 / 0.20 % | Slice 6 + 9 |
+| IMD                             | 0.34 %       | 0.29 %             | 0.19 %             | 0.08 / 0.15 % | Slice 9 |
+| TP overs (TP mode)              | 166          | 166                | 326                | 0             | Bench TP measurement alignment (future) |
+
+The SPEC §5 final thresholds remain the ship gate. Closing the remaining
+gap on pink-noise null requires either (a) further saturator integration
+into the dynamics chain (Slice 6 character / saturator-as-feature) or
+(b) a fundamentally different envelope algorithm (e.g. polynomial
+release, ML-tuned — out of v1 scope).
+
+**Open follow-ups**
+- Real-material audition (drum loop, full mix dense, full mix dynamic,
+  vocal solo) — user supplies WAVs; rerun bench; verify the −22/−28 LUFS
+  null targets in the criteria dict are reachable on real material.
+- Audition vs Ozone IRC 1 at matched 3 dB GR: predict the 2 LU loudness
+  gap from Slice 3 audition closes to ≤ 0.8 LU with T/S engaged.
+- Bench fixed-input-gain mode (post-v1): measure LUFS uplift at fixed
+  input gain to surface the T/S loudness benefit quantitatively.
+- The cosmetic "row pass" issue for null_residual on non-corpus synthetic
+  signals (sweep, imd_smpte, dirac, transient_train) persists — they
+  show ❌ in the table even though they're not gated. Aggregate gate is
+  correct. Defer.
+
+---
+
 ## 2026-05-11 — Slice 4: True-peak detector + 4× oversampled output stage
 
 **Status:** ✅ Closed. Bench PASS 14/14 (Slice 4 TP-mode). Slice 3

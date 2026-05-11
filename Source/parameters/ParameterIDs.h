@@ -8,6 +8,7 @@ namespace param
 inline constexpr std::string_view input_gain_db { "input_gain_db" };
 inline constexpr std::string_view ceiling_db { "ceiling_db" };
 inline constexpr std::string_view release_ms { "release_ms" };
+inline constexpr std::string_view release_sustain_ratio { "release_sustain_ratio" };
 inline constexpr std::string_view release_auto { "release_auto" };
 inline constexpr std::string_view lookahead_ms { "lookahead_ms" };
 inline constexpr std::string_view ceiling_mode { "ceiling_mode" };

@@ -63,6 +63,7 @@ private:
     juce::AudioBuffer<float> gainBuf_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
+    juce::AudioParameterFloat* releaseSustainRatio_ = nullptr;
 
     int  baseLatencySamples_ = 0;
     int  osLatencySamples_   = 0;
