@@ -1,0 +1,11 @@
+{
+  "folders": [
+    { "path": ".", "name": "MasterLimiter" },
+    { "path": "../melechdsp-hq", "name": "melechdsp-hq" }
+  ],
+  "settings": {
+    "files.exclude": { "**/third_party/melechdsp-hq": true },
+    "search.exclude": { "**/third_party/melechdsp-hq": true },
+    "githubPullRequests.ignoredPullRequestBranches": ["master"]
+  }
+}
