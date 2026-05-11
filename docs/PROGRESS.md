@@ -105,6 +105,33 @@ restored at Slice 9.
   processor still hard-codes 5.0 internally. Range was tightened from
   the original `(5.0, 5.0+1e-5)` lambda-NormalisableRange workaround.
 
+**Audition record — vs Ozone 11 Maximizer (2026-05-11)**
+
+Live A/B on dense mix material (~−6 dBFS peak source). Both plugins
+configured for peak ceiling −1 dBFS, Sample-Peak / IRC 1 Character 0,
+all soft-clip / upward-compress / transient-emphasis disabled, no
+true-peak (Slice 3 = SP only). Measured via Insight 2 LUFS.
+
+| Reading                       | MasterLimiter | Ozone IRC 1 |
+|-------------------------------|--------------:|------------:|
+| Pre LUFS-I                    |       −17.3   |     −17.3   |
+| Post LUFS-I                   |       −12.5   |     −10.5   |
+| LUFS gain                     |       +4.8    |      +6.8   |
+| Average GR (8 − LUFS gain)    |        3.2 dB |       1.2 dB|
+| Post True Peak                |     −0.9 dBTP |   −0.7 dBTP |
+
+Both held the −1 dBFS peak ceiling. **At matched +8 dB input gain,
+Ozone reached the ceiling with only 1.2 dB of GR vs our 3.2 dB —
+producing 2.0 LU more output loudness.** That 2 LU is the multi-stage
+IRC advantage at preserving average level for the same peak control.
+Slice 5 (T/S split) is the planned closure.
+
+**Matched-loudness A/B** (Ozone attenuated by 2 dB post-limiter to put
+both outputs at ~−12.5 LUFS-I) — avishali audition: *"sounds about
+the same, I even tend towards ours."* No clicks, no pumping artifacts,
+no L/R asymmetry. Single-band lookahead DSP is competitive at
+matched transparency; the loudness gap is operating-point, not quality.
+
 ---
 
 ## 2026-05-11 — Slice 2: DSP bench harness
