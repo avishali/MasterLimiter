@@ -63,7 +63,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (ceiling_mode, 1),
         "Ceiling Mode",
         StringArray { "SamplePeak", "TruePeak" },
-        1,
+        0,
         AudioParameterChoiceAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (

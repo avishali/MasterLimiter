@@ -45,13 +45,28 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     spec.maxBlockSize = samplesPerBlock;
     envelope_.prepare (spec);
 
+    mdsp_dsp::IspTrimStage::Spec tspec;
+    tspec.sampleRate    = sampleRate;
+    tspec.numChannels   = 2;
+    tspec.maxBlockSize  = samplesPerBlock;
+    ispTrim_.prepare (tspec);
+
     peakBuf_.setSize (1, samplesPerBlock, false, true, true);
     gainBuf_.setSize (1, samplesPerBlock, false, true, true);
 
+    ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
+    jassert (ceilingMode_ != nullptr);
+
+    baseLatencySamples_ = lookaheadSamples;
+    osLatencySamples_   = ispTrim_.getLatencyInSamples();
+    cachedCeilingMode_  = ceilingMode_->getIndex();
+
     lookahead_.reset();
     envelope_.reset();
+    ispTrim_.reset();
 
-    setLatencySamples (lookaheadSamples);
+    setLatencySamples (cachedCeilingMode_ == 1 ? (baseLatencySamples_ + osLatencySamples_)
+                                               : baseLatencySamples_);
 }
 
 void MasterLimiterAudioProcessor::releaseResources()
@@ -73,7 +88,7 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     juce::ignoreUnused (midi);
 
     if (apvts.getParameter ("input_gain_db") == nullptr || apvts.getParameter ("ceiling_db") == nullptr
-        || apvts.getParameter ("release_ms") == nullptr)
+        || apvts.getParameter ("release_ms") == nullptr || ceilingMode_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -114,6 +129,28 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     }
 
     currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
+
+    const int modeIdx = ceilingMode_->getIndex();
+
+    if (modeIdx != cachedCeilingMode_)
+    {
+        const int newLatency = (modeIdx == 1) ? (baseLatencySamples_ + osLatencySamples_)
+                                              : baseLatencySamples_;
+        setLatencySamples (newLatency);
+        ispTrim_.reset();
+        cachedCeilingMode_ = modeIdx;
+    }
+
+    if (modeIdx == 1)
+    {
+        ispTrim_.setCeilingLinear (thresholdLin);
+        ispTrim_.process (buffer);
+        currentTpTrimDb_.store (ispTrim_.getLastBlockMaxTpDbReduction(), std::memory_order_relaxed);
+    }
+    else
+    {
+        currentTpTrimDb_.store (0.0f, std::memory_order_relaxed);
+    }
 }
 
 juce::AudioProcessorEditor* MasterLimiterAudioProcessor::createEditor()
