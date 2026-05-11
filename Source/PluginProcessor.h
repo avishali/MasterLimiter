@@ -1,6 +1,14 @@
 #pragma once
 
+#include <atomic>
+
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_dsp/juce_dsp.h>
+
+#include <mdsp_dsp/dynamics/LimiterEnvelope.h>
+#include <mdsp_dsp/dynamics/LookaheadDelay.h>
+#include <mdsp_dsp/dynamics/PeakDetector.h>
+
 #include "parameters/Parameters.h"
 
 //==============================================================================
@@ -39,8 +47,19 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     const juce::AudioProcessorValueTreeState& getAPVTS() const noexcept { return apvts; }
 
+    float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
+
 private:
     juce::AudioProcessorValueTreeState apvts;
+
+    mdsp_dsp::LookaheadDelay<float> lookahead_;
+    mdsp_dsp::PeakDetector peakDetector_;
+    mdsp_dsp::LimiterEnvelope envelope_;
+
+    juce::AudioBuffer<float> peakBuf_;
+    juce::AudioBuffer<float> gainBuf_;
+
+    std::atomic<float> currentGrDb_ { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterLimiterAudioProcessor)
 };

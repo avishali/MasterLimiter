@@ -1,0 +1,374 @@
+{
+  "metadata": {
+    "timestamp": "2026-05-11T15:32:59.018762+00:00",
+    "plugin_path": "/Users/avishaylidani/DEV/GitHubRepo/MelechDSP/MasterLimiter/build-release/MasterLimiter_artefacts/Release/VST3/MasterLimiter.vst3",
+    "plugin_version": null,
+    "bench_git_sha": "2e40e1deafdf26785f699b3c2df29218aac1af4a",
+    "sample_rate": 48000,
+    "slice": 3,
+    "host": {
+      "python": "3.11.1 (v3.11.1:a7a450f84a, Dec  6 2022, 15:24:06) [Clang 13.0.0 (clang-1300.0.29.30)]",
+      "platform": "macOS-26.4-arm64-arm-64bit"
+    }
+  },
+  "criteria": {
+    "pass": true,
+    "checks": {
+      "null_residual_kweighted_db::pink_noise_60s": {
+        "pass": true,
+        "value": -31.286639982218936,
+        "limit": -25.0
+      },
+      "null_residual_missing::drum_loop_dense": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "null_residual_missing::full_mix_dense": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "null_residual_missing::full_mix_dynamic": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "null_residual_missing::vocal_solo": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "noise_residual_pct_pink": {
+        "pass": true,
+        "value": 9.612795036570727,
+        "limit": 12.0
+      },
+      "imd_smpte_pct": {
+        "pass": true,
+        "value": 0.08111261190041809,
+        "limit": 1.0
+      },
+      "transient_crest_delta_db": {
+        "pass": true,
+        "value": -0.005637707740298481,
+        "limit": -2.0
+      },
+      "sample_peak_overs_max": {
+        "pass": true,
+        "value": 20,
+        "limit": 200
+      },
+      "latency_reported_samples": {
+        "pass": true,
+        "value": 240,
+        "limit": "expected 240 \u00b11"
+      },
+      "latency_alignment_lag_samples": {
+        "pass": true,
+        "value": 0,
+        "limit": "\u00b11"
+      },
+      "calibration_failures": {
+        "pass": true,
+        "value": 0,
+        "limit": 0
+      }
+    }
+  },
+  "metrics": {
+    "null_residual_kweighted_db_by_signal": {
+      "pink_noise_60s@gr3": -31.286639982218936,
+      "sine_sweep_log_30s@gr3": -53.441969276846265,
+      "imd_smpte@gr3": -50.99270225874762,
+      "dirac_impulse@gr3": null,
+      "transient_train@gr3": null
+    },
+    "noise_residual_pct_pink": 9.612795036570727,
+    "thd_plus_n_pct_pink": 9.612795036570727,
+    "imd_smpte_pct": 0.08111261190041809,
+    "expected_latency_samples": 240,
+    "latency_reported_samples": 240,
+    "latency_alignment_lag_samples": 0,
+    "sample_peak_overs_max": 20,
+    "true_peak_overs_max": 27102,
+    "transient_crest_delta_db": -0.005637707740298481
+  },
+  "rows": [
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 3.0,
+      "metric": "null_residual_kweighted_db",
+      "value": -31.286639982218936,
+      "pass": true
+    },
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 3.0,
+      "metric": "noise_residual_pct",
+      "value": 9.612795036570727,
+      "pass": true
+    },
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 3.0,
+      "metric": "true_peak_overs",
+      "value": 426,
+      "pass": false
+    },
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 3.0,
+      "metric": "sample_peak_overs",
+      "value": 20,
+      "pass": true
+    },
+    {
+      "signal": "pink_noise_60s",
+      "gr_db": 3.0,
+      "metric": "aliasing_residual_db",
+      "value": -2.698508661789267,
+      "pass": true
+    },
+    {
+      "signal": "sine_sweep_log_30s",
+      "gr_db": 3.0,
+      "metric": "null_residual_kweighted_db",
+      "value": -53.441969276846265,
+      "pass": false
+    },
+    {
+      "signal": "sine_sweep_log_30s",
+      "gr_db": 3.0,
+      "metric": "true_peak_overs",
+      "value": 27102,
+      "pass": false
+    },
+    {
+      "signal": "sine_sweep_log_30s",
+      "gr_db": 3.0,
+      "metric": "sample_peak_overs",
+      "value": 18,
+      "pass": true
+    },
+    {
+      "signal": "sine_sweep_log_30s",
+      "gr_db": 3.0,
+      "metric": "aliasing_residual_db",
+      "value": -7.526579916026408,
+      "pass": true
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 3.0,
+      "metric": "null_residual_kweighted_db",
+      "value": -50.99270225874762,
+      "pass": false
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 3.0,
+      "metric": "imd_smpte_pct",
+      "value": 0.08111261190041809,
+      "pass": true
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 3.0,
+      "metric": "true_peak_overs",
+      "value": 11200,
+      "pass": false
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 3.0,
+      "metric": "sample_peak_overs",
+      "value": 0,
+      "pass": true
+    },
+    {
+      "signal": "imd_smpte",
+      "gr_db": 3.0,
+      "metric": "aliasing_residual_db",
+      "value": -7.472676978267801,
+      "pass": true
+    },
+    {
+      "signal": "dirac_impulse",
+      "gr_db": 3.0,
+      "metric": "null_residual_kweighted_db",
+      "value": null,
+      "pass": true
+    },
+    {
+      "signal": "dirac_impulse",
+      "gr_db": 3.0,
+      "metric": "true_peak_overs",
+      "value": 2,
+      "pass": false
+    },
+    {
+      "signal": "dirac_impulse",
+      "gr_db": 3.0,
+      "metric": "sample_peak_overs",
+      "value": 0,
+      "pass": true
+    },
+    {
+      "signal": "dirac_impulse",
+      "gr_db": 3.0,
+      "metric": "aliasing_residual_db",
+      "value": -13.526859753511788,
+      "pass": true
+    },
+    {
+      "signal": "transient_train",
+      "gr_db": 3.0,
+      "metric": "null_residual_kweighted_db",
+      "value": null,
+      "pass": true
+    },
+    {
+      "signal": "transient_train",
+      "gr_db": 3.0,
+      "metric": "true_peak_overs",
+      "value": 200,
+      "pass": false
+    },
+    {
+      "signal": "transient_train",
+      "gr_db": 3.0,
+      "metric": "sample_peak_overs",
+      "value": 0,
+      "pass": true
+    },
+    {
+      "signal": "transient_train",
+      "gr_db": 3.0,
+      "metric": "aliasing_residual_db",
+      "value": -12.564932921622567,
+      "pass": true
+    },
+    {
+      "signal": "_global",
+      "gr_db": 3.0,
+      "metric": "latency_reported_samples",
+      "value": 240,
+      "pass": true
+    },
+    {
+      "signal": "_global",
+      "gr_db": 3.0,
+      "metric": "latency_alignment_lag_samples",
+      "value": 0,
+      "pass": true
+    }
+  ],
+  "calibration": {
+    "pairs": [
+      {
+        "signal": "pink_noise_60s",
+        "target_gr_db": 3.0,
+        "iterations": [
+          {
+            "iter": 0,
+            "input_gain_db": 10.0,
+            "measured_gr_db": 1.0503361301616898
+          },
+          {
+            "iter": 1,
+            "input_gain_db": 11.94966386983831,
+            "measured_gr_db": 2.4228059213814612
+          },
+          {
+            "iter": 2,
+            "input_gain_db": 12.52685794845685,
+            "measured_gr_db": 2.8690126159430536
+          }
+        ],
+        "failed": false,
+        "final_input_gain_db": 12.52685794845685
+      }
+    ],
+    "failure_count": 0
+  },
+  "summary": {
+    "pass": true,
+    "checks": {
+      "null_residual_kweighted_db::pink_noise_60s": {
+        "pass": true,
+        "value": -31.286639982218936,
+        "limit": -25.0
+      },
+      "null_residual_missing::drum_loop_dense": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "null_residual_missing::full_mix_dense": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "null_residual_missing::full_mix_dynamic": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "null_residual_missing::vocal_solo": {
+        "pass": true,
+        "value": null,
+        "limit": "signal absent"
+      },
+      "noise_residual_pct_pink": {
+        "pass": true,
+        "value": 9.612795036570727,
+        "limit": 12.0
+      },
+      "imd_smpte_pct": {
+        "pass": true,
+        "value": 0.08111261190041809,
+        "limit": 1.0
+      },
+      "transient_crest_delta_db": {
+        "pass": true,
+        "value": -0.005637707740298481,
+        "limit": -2.0
+      },
+      "sample_peak_overs_max": {
+        "pass": true,
+        "value": 20,
+        "limit": 200
+      },
+      "latency_reported_samples": {
+        "pass": true,
+        "value": 240,
+        "limit": "expected 240 \u00b11"
+      },
+      "latency_alignment_lag_samples": {
+        "pass": true,
+        "value": 0,
+        "limit": "\u00b11"
+      },
+      "calibration_failures": {
+        "pass": true,
+        "value": 0,
+        "limit": 0
+      }
+    },
+    "crest_dry": {
+      "pink_noise_60s": 13.174854710642913,
+      "sine_sweep_log_30s": 3.010255032760015,
+      "imd_smpte": 4.681782121435864,
+      "dirac_impulse": 46.812412373755876,
+      "transient_train": 33.17486142135169
+    },
+    "crest_wet": {
+      "pink_noise_60s": 10.558890201108335,
+      "sine_sweep_log_30s": 3.00442997169839,
+      "imd_smpte": 4.654326155228263,
+      "dirac_impulse": 46.812412373755876,
+      "transient_train": 33.169223934137776
+    }
+  }
+}

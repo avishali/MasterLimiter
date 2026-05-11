@@ -52,17 +52,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         false,
         releaseAutoAttrs));
 
-    const NormalisableRange<float> lookaheadRange (
-        5.0f,
-        5.0f + 1.0e-5f,
-        [] (float, float, float) { return 5.0f; },
-        [] (float, float, float) { return 0.5f; },
-        [] (float, float, float) { return 5.0f; });
-
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (lookahead_ms, 1),
         "Lookahead",
-        lookaheadRange,
+        NormalisableRange<float> (4.0f, 6.0f, 0.01f),
         5.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
