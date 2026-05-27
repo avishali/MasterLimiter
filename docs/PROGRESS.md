@@ -4,6 +4,97 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-27 — Slice 8.1: UI polish (AnalyzerPro meter/loudness pattern)
+
+**Status:** ✅ UI gate passed (audition 2026-05-27). DSP defects surfaced
+during the same audition are out of this slice's scope and tracked in a new
+DSP slice (see "Audition findings" below).
+
+**Deliverables (product repo, UI-thread only — no DSP)**
+- New local meter components copied/adapted from AnalyzerPro:
+  - `Source/ui/meters/MeterComponent.{h,cpp}` — `Kind { Level, GainReduction }`.
+    GR variant is new (AnalyzerPro has none): **top-down**, 0 dB at top,
+    fills downward, GR color scale, positive-dB readout.
+  - `Source/ui/meters/MeterGroupComponent.{h,cpp}` — IN / GR / OUT groups,
+    per-channel L/R bars, numeric readout with peak-hold + decay smoothing.
+  - `Source/ui/loudness/LoudnessNumericPanel.{h,cpp}` — M/S/I LUFS rows.
+    **Fixes the Slice 8 ASCII-label bug** (`"77:" → "M:"`) by constructing
+    labels as `juce::String("M: ")`. LUFS text commits ≤ every 200 ms.
+- `Source/ui/MainView.{h,cpp}` — redesigned layout: 280 px meter strip
+  (IN/GR/OUT + LUFS panel + TP/SP readout + Reset Peaks), new Sustain Ratio
+  knob, JUCE-native tooltips on all knobs. Readout ballistics smoothed so
+  values are legible at 30 Hz (peak-hold 1 s then ~300 ms decay; GR ~100 ms).
+- `Source/PluginEditor.{h,cpp}` — resizable, default 1100×620, min 960×540,
+  30 Hz timer driving `syncMetersFromProcessor()` + LUFS refresh.
+- `CMakeLists.txt` — registers the four new UI `.cpp` files.
+- `docs/TODO.md` — HQ-lift candidates (meter components, per-meter
+  `resetPeakHold`, true-peak in snapshot path, GR ballistics tuning).
+
+**Scope correction (Slice 8.1.1)**
+- Implementation had also retuned `Source/parameters/Parameters.cpp`
+  (input-gain floor −12→0, release default 100→250, ratio 4→2). That is
+  out of scope for a UI slice and the input-gain floor change would clamp
+  saved sessions with negative input gain. Reverted to HEAD via
+  `PROMPTS/SLICE_08_1_1_scope_revert.md`. The retune will get its own slice
+  with the saved-session migration question addressed explicitly.
+
+**Gate result**
+- [x] Debug + Release build clean (one int→float warning in
+      MeterComponent.cpp fixed at close).
+- [x] HQ + AnalyzerPro unmodified.
+- [x] Bench regression unchanged: Slice 3 PASS 13/13, Slice 4 PASS 14/14,
+      Slice 5 PASS 25/25.
+- [x] UI audition pass: LUFS labels correct, GR top-down with L/R bars,
+      readouts legible (no flicker), layout uncrowded, resize OK, tooltips
+      and Reset Peaks work.
+
+**Audition findings**
+- **Pops/clicks — root cause: the new 30 Hz editor `juce::Timer`, NOT the
+  DSP.** Reproduced only with the editor window open AND the DAW occluded
+  (switched to another macOS Space) under VST3-in-Ableton; closing the
+  editor window eliminates it. Before Slice 8 the editor had no timer.
+  When occluded, the per-frame `syncMetersFromProcessor()` + `repaint()`
+  disturbs host audio. The limiter gain path (SP) is byte-for-byte Slice 5
+  and is innocent. **Fixed in Slice 8.1.3** by occlusion-aware suspension
+  of the meter timer (skip sync/repaint when the window is not visible on
+  screen; macOS `NSWindowOcclusionState`, `isShowing()` fallback).
+- **Limiter sounds compressor-like / too slow** — separate, by-design:
+  5 ms attack + T/S slow-release-dominant envelope (`min(fast, slow)`,
+  ratio 4.0) feels gentle rather than brickwall. Deferred to Slice 9
+  (auto-release / ADR-0006) per avishali. Not a defect.
+
+**Deferred**
+- UI layout/sizing rearrange for better visual sense — avishali wants a
+  later dedicated UI pass.
+- Limiter brickwall voicing → Slice 9 (ADR-0006).
+
+---
+
+## 2026-05-27 — Slice 8: Meters (GR + I/O peak + TP + LUFS) — DSP wiring
+
+**Status:** ✅ Closed together with Slice 8.1 (committed as the meters DSP
+backend; UI consuming it landed in 8.1).
+
+**Deliverables (product repo)**
+- `Source/PluginProcessor.{h,cpp}` — lock-free meter snapshot path
+  (UI-thread reads, audio-thread writes, relaxed atomics):
+  - `inputPeakL/RDb_` (pre-gain), `outputPeakL/RDb_`, `outputTpDb_`
+    (max-sample-peak **approximation** — real true-peak measurement deferred,
+    see `docs/TODO.md`).
+  - `mdsp_dsp::LoudnessAnalyzer loudness_` member: `prepare`/`reset` in
+    `prepareToPlay`, `process(buffer)` post-limiter each block; UI polls
+    `getSnapshot()` for M/S/I LUFS.
+  - Getters: `getInputPeakL/RDb`, `getOutputPeakL/RDb`, `getOutputTpDb`,
+    `getLoudnessAnalyzer`.
+- No change to the limiter DSP itself; meters are observational only.
+
+**Gate result**
+- Builds clean; bench Slice 3/4/5 unchanged (meters don't touch the audio
+  path's gain math). RT-safety: atomics relaxed, no locks/alloc on audio
+  thread, LoudnessAnalyzer prepared with block size.
+
+---
+
 ## 2026-05-11 — Slice 5: Transient/Sustain split
 
 **Status:** ✅ Closed. Bench PASS 25/25 (Slice 5 at both 3 dB and 5 dB GR).

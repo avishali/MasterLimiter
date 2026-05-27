@@ -269,6 +269,14 @@ target_sources(${PLUGIN_NAME}
         Source/parameters/ParameterIDs.h
         Source/ui/MainView.cpp
         Source/ui/MainView.h
+        Source/ui/loudness/LoudnessNumericPanel.cpp
+        Source/ui/loudness/LoudnessNumericPanel.h
+        Source/ui/meters/MeterComponent.cpp
+        Source/ui/meters/MeterComponent.h
+        Source/ui/meters/MeterGroupComponent.cpp
+        Source/ui/meters/MeterGroupComponent.h
+        Source/util/PlatformOcclusion.h
+        Source/util/PlatformOcclusion.mm
 )
 
 set(_mdsp_consumer_targets

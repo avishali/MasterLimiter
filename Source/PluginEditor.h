@@ -10,7 +10,7 @@
 #include "ui/MainView.h"
 
 //==============================================================================
-class MasterLimiterAudioProcessorEditor : public juce::AudioProcessorEditor
+class MasterLimiterAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
     explicit MasterLimiterAudioProcessorEditor (MasterLimiterAudioProcessor&);
@@ -20,9 +20,11 @@ public:
     void resized() override;
 
 private:
-    MasterLimiterAudioProcessor& audioProcessor;
+    void timerCallback() override;
+
     mdsp_ui::UiContext ui_;
     mdsp_ui::LookAndFeel lnf_;
+    juce::ComponentBoundsConstrainer constrainer_;
     MainView mainView;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterLimiterAudioProcessorEditor)
