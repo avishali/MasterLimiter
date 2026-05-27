@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "parameters/Parameters.h"
@@ -71,6 +72,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     setLatencySamples (cachedCeilingMode_ == 1 ? (baseLatencySamples_ + osLatencySamples_)
                                                : baseLatencySamples_);
+
+    loudness_.prepare (sampleRate, samplesPerBlock);
+    loudness_.reset();
 }
 
 void MasterLimiterAudioProcessor::releaseResources()
@@ -103,6 +107,13 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     const int nch = juce::jmin (2, buffer.getNumChannels());
     if (nch <= 0)
         return;
+
+    {
+        const float pL = buffer.getMagnitude (0, 0, n);
+        const float pR = (nch > 1) ? buffer.getMagnitude (1, 0, n) : pL;
+        inputPeakLDb_.store (juce::Decibels::gainToDecibels (pL, -100.0f), std::memory_order_relaxed);
+        inputPeakRDb_.store (juce::Decibels::gainToDecibels (pR, -100.0f), std::memory_order_relaxed);
+    }
 
     const float inGainLin = juce::Decibels::decibelsToGain (readFloatParam (apvts, "input_gain_db"));
     for (int ch = 0; ch < nch; ++ch)
@@ -156,6 +167,18 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     else
     {
         currentTpTrimDb_.store (0.0f, std::memory_order_relaxed);
+    }
+
+    {
+        const float pL = buffer.getMagnitude (0, 0, n);
+        const float pR = (nch > 1) ? buffer.getMagnitude (1, 0, n) : pL;
+        const float outLdb = juce::Decibels::gainToDecibels (pL, -100.0f);
+        const float outRdb = juce::Decibels::gainToDecibels (pR, -100.0f);
+        outputPeakLDb_.store (outLdb, std::memory_order_relaxed);
+        outputPeakRDb_.store (outRdb, std::memory_order_relaxed);
+        outputTpDb_.store (std::max (outLdb, outRdb), std::memory_order_relaxed);
+
+        loudness_.process (buffer);
     }
 }
 
