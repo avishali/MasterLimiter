@@ -22,6 +22,14 @@ juce::String channelLabel (int channelCount, int index)
 
     return (index == 0) ? "L" : "R";
 }
+
+juce::String formatDbBare (float v)
+{
+    if (! std::isfinite (v) || v <= -100.0f)
+        return "-inf";
+
+    return juce::String (v, 1);
+}
 } // namespace
 
 void MeterGroupComponent::PeakNumericSmoother::reset() noexcept
@@ -155,6 +163,8 @@ void MeterGroupComponent::handlePeakReset() noexcept
     provider1_.resetPeakHold();
     peakSmooth0_.reset();
     peakSmooth1_.reset();
+    maxPeakLDb_ = -200.0f;
+    maxPeakRDb_ = -200.0f;
     pushLevelRenderStates();
 }
 
@@ -216,6 +226,11 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     peakSmooth0_.tick (lPeak, dtSec, holdTicks);
     peakSmooth1_.tick (rPeak, dtSec, holdTicks);
 
+    if (std::isfinite (lPeak))
+        maxPeakLDb_ = juce::jmax (maxPeakLDb_, lPeak);
+    if (std::isfinite (rPeak))
+        maxPeakRDb_ = juce::jmax (maxPeakRDb_, rPeak);
+
     constexpr float kClipThresholdDb = 0.0f;  // digital full-scale
     const bool clippedL = renderState0_.clipLatched || (std::isfinite (lPeak) && lPeak >= kClipThresholdDb);
     const bool clippedR = renderState1_.clipLatched || (std::isfinite (rPeak) && rPeak >= kClipThresholdDb);
@@ -224,13 +239,15 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     provider1_.updateFromValues (rPeak, rPeak, clippedR, false);
     pushLevelRenderStates();
 
-    const auto lText = PeakNumericSmoother::formatDb (peakSmooth0_.duty);
-    const auto rText = PeakNumericSmoother::formatDb (peakSmooth1_.duty);
+    const auto lCurrentText = formatDbBare (peakSmooth0_.duty);
+    const auto rCurrentText = formatDbBare (peakSmooth1_.duty);
+    const auto lMaxText = formatDbBare (maxPeakLDb_);
+    const auto rMaxText = formatDbBare (maxPeakRDb_);
 
     if (meter0_ != nullptr)
-        meter0_->setNumericReadoutOverride (true, lText, lText);
+        meter0_->setNumericReadoutOverride (true, lCurrentText, lMaxText);
     if (meter1_ != nullptr)
-        meter1_->setNumericReadoutOverride (true, rText, rText);
+        meter1_->setNumericReadoutOverride (true, rCurrentText, rMaxText);
 }
 
 void MeterGroupComponent::paint (juce::Graphics& g)

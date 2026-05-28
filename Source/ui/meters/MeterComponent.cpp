@@ -137,7 +137,7 @@ void MeterComponent::resized()
     auto b = getLocalBounds();
 
     labelArea_ = b.removeFromTop (16);
-    numericArea_ = b.removeFromBottom (20).reduced (2, 2);
+    numericArea_ = b.removeFromBottom (kind_ == Kind::Level ? 30 : 20).reduced (2, 2);
 
     auto ledRow = labelArea_;
     ledArea_ = ledRow.removeFromRight (14).withSizeKeepingCentre (10, 10);
@@ -509,19 +509,19 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     g.setColour (theme.grid.withAlpha (0.35f));
     g.drawRoundedRectangle (boxR, m.rMed, m.strokeThin);
 
-    g.setFont (juce::Font (juce::FontOptions().withHeight (10.0f)));
+    g.setFont (juce::Font (juce::FontOptions().withHeight (12.0f)));
+
+    const juce::String peakLine = numericOverrideActive_ ? numericOverridePeak_ : numericTextPeak_;
+    const juce::String rmsLine = numericOverrideActive_ ? numericOverrideRms_ : numericTextRms_;
 
     auto numBounds = numericArea_;
     auto peakBounds = numBounds.removeFromTop (numBounds.getHeight() / 2);
     auto rmsBounds = numBounds;
 
-    const juce::String peakLine = numericOverrideActive_ ? numericOverridePeak_ : numericTextPeak_;
-    const juce::String rmsLine = numericOverrideActive_ ? numericOverrideRms_ : numericTextRms_;
-
-    g.setColour (theme.textMuted.withAlpha (0.82f));
+    g.setColour (theme.seriesPeak.withAlpha (0.9f));
     g.drawText (peakLine, peakBounds, juce::Justification::centred);
 
-    g.setColour (theme.textMuted.withAlpha (0.68f));
+    g.setColour (theme.text.withAlpha (0.68f));
     g.drawText (rmsLine, rmsBounds, juce::Justification::centred);
 
     if (renderState_.bypassed)

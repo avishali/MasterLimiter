@@ -42,7 +42,7 @@ slice or split a follow-up slice.
 | 8  | Meters (GR + TP) to mdsp_ui                            | `mdsp_ui/GainReductionMeter`, `TruePeakMeter`| UI assembly           | Meters track snapshots accurately, no UI-thread DSP access.    |
 | 9  | Auto-release algorithm + preset pass + ship gate       | `LimiterEnvelope` (auto mode)               | presets                | Full §5 corpus passes at 5 dB GR. ADR-0006 written.            |
 | 10 | Maximizer UI shell (Ozone-inspired two-panel layout)   | —                                           | `ui/MainView`          | Look-lock: two-panel layout, drive Gain at 0 dB hard-left, placeholders for new controls. Audition the look. |
-| 11 | I/O gains + dual Gain-Match (auto-track + Gain⇄Ceiling)| (loudness match — likely product-side)      | new params + DSP + UI  | I/O Input/Output trims (independent) + Gain Match (Auto/Track + Gain⇄Ceiling link), positive-only drive. ADR-0007 written. **Split: 11a = ADR + params + DSP wiring (Drive 0..+24, Ceiling 0..−24, L/R I/O trims); 11b = Gain-Match Auto/Track + Gain⇄Ceiling Link + Learn Input Gain + Bypass.** |
+| 11 | I/O gains + dual Gain-Match (auto-track + Gain⇄Ceiling)| (loudness match — likely product-side)      | new params + DSP + UI  | I/O Input/Output trims (independent) + Gain Match (Auto/Track + Gain⇄Ceiling link), positive-only drive. ADR-0007 written. **Split: 11a = ADR + params + DSP wiring (✅ shipped); 11b1 = Gain⇄Ceiling Link (control coupling only); 11b2 = Auto/Track + Learn (one-shot short-term snapshot, momentary tracking) + Bypass-with-match.** |
 
 Note: Slices 6 (saturator) and 7 (stereo/M-S link) remain in the backlog;
 ordering was adjusted to do meters (8) and the Maximizer UI/I-O model

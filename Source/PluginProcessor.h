@@ -14,7 +14,8 @@
 #include "parameters/Parameters.h"
 
 //==============================================================================
-class MasterLimiterAudioProcessor : public juce::AudioProcessor
+class MasterLimiterAudioProcessor : public juce::AudioProcessor,
+                                    private juce::AudioProcessorValueTreeState::Listener
 {
 public:
     MasterLimiterAudioProcessor();
@@ -62,6 +63,10 @@ public:
     const mdsp_dsp::LoudnessAnalyzer& getLoudnessAnalyzer() const noexcept { return loudness_; }
 
 private:
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void cacheGainCeilingLinkParameters();
+    void refreshGainCeilingLinkBaseline();
+
     juce::AudioProcessorValueTreeState apvts;
 
     mdsp_dsp::LookaheadDelay<float> lookahead_;
@@ -73,6 +78,9 @@ private:
     juce::AudioBuffer<float> gainBuf_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
+    juce::AudioParameterFloat* inputGainDbParam_ = nullptr;
+    juce::AudioParameterFloat* ceilingDbParam_ = nullptr;
+    juce::AudioParameterBool* gainCeilingLink_ = nullptr;
     juce::AudioParameterFloat* releaseSustainRatio_ = nullptr;
     std::atomic<float>* ioInputLDb_ = nullptr;
     std::atomic<float>* ioInputRDb_ = nullptr;
@@ -93,6 +101,10 @@ private:
     std::atomic<float> outputPeakLDb_ { -100.0f };
     std::atomic<float> outputPeakRDb_ { -100.0f };
     std::atomic<float> outputTpDb_ { -100.0f };
+    std::atomic<float> lastLinkedInputGainDb_ { 0.0f };
+    std::atomic<float> lastLinkedCeilingDb_ { -1.0f };
+    std::atomic<bool> gainCeilingLinkWasEnabled_ { false };
+    std::atomic<bool> couplingInProgress_ { false };
 
     mdsp_dsp::LoudnessAnalyzer loudness_;
 

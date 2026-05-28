@@ -7,6 +7,7 @@ namespace param
 
 inline constexpr std::string_view input_gain_db { "input_gain_db" };
 inline constexpr std::string_view ceiling_db { "ceiling_db" };
+inline constexpr std::string_view gain_ceiling_link { "gain_ceiling_link" };
 inline constexpr std::string_view io_input_l_db { "io_input_l_db" };
 inline constexpr std::string_view io_input_r_db { "io_input_r_db" };
 inline constexpr std::string_view io_input_link { "io_input_link" };

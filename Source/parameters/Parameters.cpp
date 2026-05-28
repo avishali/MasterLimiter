@@ -31,6 +31,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         -1.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
 
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (gain_ceiling_link, 1),
+        "Gain/Ceiling Link",
+        false,
+        AudioParameterBoolAttributes()));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (io_input_l_db, 1),
         "I/O Input L",

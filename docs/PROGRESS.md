@@ -4,6 +4,94 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-28 — Slice 11b1: Gain ⇄ Ceiling structural link + meter readout improvements (ADR-0007)
+
+**Status:** ✅ Closed. One new frozen bool param + inverse coupling
+listener + meter readout polish. NO DSP audio-path changes. Slice 3/4/5
+bench regression PASSES unchanged. Auto/Track, Learn, Bypass-with-match
+remain in Slice 11b2.
+
+**Architecture:** [ADR-0007](../third_party/melechdsp-hq/docs/DECISIONS/ADR-0007-masterlimiter-io-gain-and-gain-match.md)
+§Decision item 2 (Gain ⇄ Ceiling Link). Structural dB-for-dB control
+coupling — *not* measurement-based.
+
+**Deliverables (product repo)**
+- `Source/parameters/ParameterIDs.h` — one new **FROZEN** ID:
+  `gain_ceiling_link`.
+- `Source/parameters/Parameters.cpp` — `AudioParameterBool
+  gain_ceiling_link`, default `false` (so bench at defaults is a
+  byte-identical no-op).
+- `Source/PluginProcessor.{h,cpp}` —
+  `juce::AudioProcessorValueTreeState::Listener` on the processor,
+  subscribed to `input_gain_db`, `ceiling_db`, and `gain_ceiling_link`.
+  Caches the bool + cached `AudioParameterFloat*` pointers + last-known
+  values per coupled param. When link is on, a Δ on one coupled param
+  writes −Δ to the partner (clamped to the partner's range) via
+  `setValueNotifyingHost`. `couplingInProgress_` atomic guards against
+  feedback re-entry. Toggling the link on captures current values as
+  the new baseline — no jump on enable.
+- `Source/ui/MainView.{h,cpp}` — existing "Gain / Ceiling Link" button
+  (placeholder since Slice 10) gets a `ButtonAttachment` to the new
+  bool. No layout change.
+
+**Meter readout polish (Slices 11b1.1 / 11b1.2 / 11b1.3, all folded
+into this close)**
+- 11b1.1 — **Latched max-peak per channel** in `MeterGroupComponent`:
+  `maxPeakL/RDb_` floats latch the per-block peak, cleared by all three
+  reset paths (Reset Peaks button, click-on-LED, click-on-value). The
+  numeric readout now matches the yellow max-peak tick line that was
+  already drawn on the bar.
+- 11b1.2 — **Number-only readout format** for IN/OUT meter values
+  (local `formatDbBare` helper); the " dB" suffix is dropped from the
+  meter readouts (commercial-meter convention; the scale beside the
+  bar implies the unit). TP readout and knob/fader readouts elsewhere
+  keep their " dB" suffix.
+- 11b1.3 — **Two-line readout restored** with genuinely distinct
+  values: top = current peak (smoothed via the existing
+  `PeakNumericSmoother`, 1 s hold + decay); bottom = latched max
+  (only goes up until reset). Font 12 px, area 30 px tall, no
+  truncation. Previous Slice 8 two-line layout passed peak for both
+  args (so both lines were the same number); we now show two
+  meaningful, distinct values.
+
+**Behavioural note — Link is structural, not measurement-based**
+- "Output level holds constant" is exact **only when the limiter is
+  actively clamping** (signal pinned at ceiling). Below the limiting
+  point, raising Drive raises output level — no compensation can
+  happen without measuring the signal. Verified by avishali against
+  external meters; the math holds: drive +X / ceiling −X / unlimited
+  signal → output +X; same drive+ceiling/limited signal → output =
+  ceiling (which dropped X).
+- Universal output-level constancy across all drive levels is exactly
+  what **Auto/Track (Slice 11b2)** will provide — the two Gain-Match
+  methods are complementary, as ADR-0007 §Decision §item-2 anticipated.
+
+**Gate result**
+- [x] Debug + Release build clean. No new `Source/` warnings.
+- [x] Bench Slice 3/4/5 PASS unchanged (`gain_ceiling_link` default
+      OFF → no behavior change; bench drivers don't touch the new
+      param).
+- [x] Audition: Link off ⇒ independent; Link on + Gain Δ ⇒ Ceiling −Δ
+      with output peak unchanged in the limiting region; range-edge
+      clamp graceful (no oscillation, no feedback storm); meter
+      readouts dual-line + readable + latch + reset correctly.
+
+**Deferred → Slice 12 (Meter panel restructure)**
+- **Real per-channel RMS measurement** (per-block RMS DSP in
+  `PluginProcessor` + 4 atomics + getter access). Today's "second
+  line" is latched-max peak, not RMS.
+- **Meter panel restructure**: meters get wider and taller; Learn +
+  LUFS panel move to the Maximizer bottom strip; per-channel readouts
+  arranged cleanly for mastering.
+- **IN/OUT calibration check**: avishali noted IN and OUT readouts can
+  differ slightly even at unity (likely the ~5 ms lookahead shift
+  between IN-measurement-point and OUT-measurement-point, both
+  observing different time windows of the same audio); confirm
+  convergence over long playback, fix if a persistent gap remains.
+- **vs Ableton meter calibration** — Slice 12 plus Slice 13 ballistics.
+
+---
+
 ## 2026-05-28 — Slice 11a: I/O gain stages + Drive re-range + Ceiling 0..−24 (ADR-0007)
 
 **Status:** ✅ Closed. ADR-0007 committed in HQ locally (`276c397`,

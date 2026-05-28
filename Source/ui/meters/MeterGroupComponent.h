@@ -66,6 +66,8 @@ private:
     PeakNumericSmoother peakSmooth0_ {};
     PeakNumericSmoother peakSmooth1_ {};
     GrNumericSmoother grSmooth_ {};
+    float maxPeakLDb_ { -200.0f };
+    float maxPeakRDb_ { -200.0f };
 
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
