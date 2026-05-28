@@ -113,15 +113,14 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     styleRotary (sldStereoLink_);
     styleRotary (sldMsLink_);
     styleHorizontalPlaceholder (sldCharacter_);
-    stylePlaceholderFader (sldIoInputTrimL_);
-    stylePlaceholderFader (sldIoInputTrimR_);
-    stylePlaceholderFader (sldIoOutputTrimL_);
-    stylePlaceholderFader (sldIoOutputTrimR_);
+    styleIoTrimFader (sldIoInputTrimL_);
+    styleIoTrimFader (sldIoInputTrimR_);
+    styleIoTrimFader (sldIoOutputTrimL_);
+    styleIoTrimFader (sldIoOutputTrimR_);
 
     sldGainDrive_.setRange (0.0, 24.0, 0.1);
-    sldGainDrive_.setNumDecimalPlacesToDisplay (1);
+    sldGainDrive_.setNumDecimalPlacesToDisplay (2);
     sldGainDrive_.setTextValueSuffix (" dB");
-    sldGainDrive_.getProperties().set ("gainDrivePlaceholder", true);
     sldGainDrive_.setValue (0.0, juce::dontSendNotification);
 
     addAndMakeVisible (sldGainDrive_);
@@ -157,6 +156,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (btnIoOutputLink_);
     addAndMakeVisible (btnBypass_);
 
+    attGainDrive_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::input_gain_db), sldGainDrive_);
     attCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ceiling_db), sldCeiling_);
     attRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_ms), sldRelease_);
     attReleaseSustain_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldReleaseSustain_);
@@ -165,6 +165,12 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::stereo_link_pct), sldStereoLink_);
     attMsLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ms_link_pct), sldMsLink_);
     attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::character), sldCharacter_);
+    attIoInputTrimL_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_input_l_db), sldIoInputTrimL_);
+    attIoInputTrimR_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_input_r_db), sldIoInputTrimR_);
+    attIoInputLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::io_input_link), btnIoInputLink_);
+    attIoOutputTrimL_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_output_l_db), sldIoOutputTrimL_);
+    attIoOutputTrimR_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_output_r_db), sldIoOutputTrimR_);
+    attIoOutputLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::io_output_link), btnIoOutputLink_);
 
     auto useSliderTextboxFormat = [] (juce::Slider& slider, int numDecimals, const juce::String& suffix)
     {
@@ -173,13 +179,17 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
         slider.setTextValueSuffix (suffix);
     };
 
-    useSliderTextboxFormat (sldGainDrive_, 1, " dB");
+    useSliderTextboxFormat (sldGainDrive_, 2, " dB");
     useSliderTextboxFormat (sldCeiling_, 2, " dB");
     useSliderTextboxFormat (sldRelease_, 0, " ms");
     useSliderTextboxFormat (sldReleaseSustain_, 1, juce::String());
     useSliderTextboxFormat (sldLookahead_, 2, " ms");
     useSliderTextboxFormat (sldStereoLink_, 0, "%");
     useSliderTextboxFormat (sldMsLink_, 0, "%");
+    useSliderTextboxFormat (sldIoInputTrimL_, 2, " dB");
+    useSliderTextboxFormat (sldIoInputTrimR_, 2, " dB");
+    useSliderTextboxFormat (sldIoOutputTrimL_, 2, " dB");
+    useSliderTextboxFormat (sldIoOutputTrimR_, 2, " dB");
     sldCharacter_.textFromValueFunction = [] (double) { return juce::String ("Clean"); };
 
     addAndMakeVisible (meterIn_);
@@ -219,16 +229,16 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         updateCeilingModeButton (c->getIndex());
 
-    sldGainDrive_.setTooltip (kPlaceholderTooltip);
+    sldGainDrive_.setTooltip ("Drive into the limiter in dB.");
     btnGainCeilingLink_.setTooltip (kPlaceholderTooltip);
     btnGainMatchAutoTrack_.setTooltip (kPlaceholderTooltip);
     btnLearnInputGain_.setTooltip (kPlaceholderTooltip);
-    sldIoInputTrimL_.setTooltip (kPlaceholderTooltip);
-    sldIoInputTrimR_.setTooltip (kPlaceholderTooltip);
-    btnIoInputLink_.setTooltip (kPlaceholderTooltip);
-    sldIoOutputTrimL_.setTooltip (kPlaceholderTooltip);
-    sldIoOutputTrimR_.setTooltip (kPlaceholderTooltip);
-    btnIoOutputLink_.setTooltip (kPlaceholderTooltip);
+    sldIoInputTrimL_.setTooltip ("Left input trim before the drive stage.");
+    sldIoInputTrimR_.setTooltip ("Right input trim before the drive stage.");
+    btnIoInputLink_.setTooltip ("When enabled, moving one Input fader mirrors the other.");
+    sldIoOutputTrimL_.setTooltip ("Left output trim after the ceiling stage.");
+    sldIoOutputTrimR_.setTooltip ("Right output trim after the ceiling stage.");
+    btnIoOutputLink_.setTooltip ("When enabled, moving one Output fader mirrors the other.");
     btnBypass_.setTooltip (kPlaceholderTooltip);
     sldCeiling_.setTooltip ("Output ceiling in dBFS.");
     sldRelease_.setTooltip ("Limiter release time in milliseconds.");
@@ -250,12 +260,13 @@ void MainView::styleRotary (juce::Slider& s) const
     s.setScrollWheelEnabled (false);
 }
 
-void MainView::stylePlaceholderFader (juce::Slider& s) const
+void MainView::styleIoTrimFader (juce::Slider& s) const
 {
     s.setSliderStyle (juce::Slider::LinearVertical);
+    s.setSliderSnapsToMousePosition (false);
     s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    s.setRange (-24.0, 24.0, 0.1);
-    s.setNumDecimalPlacesToDisplay (1);
+    s.setRange (-24.0, 24.0, 0.01);
+    s.setNumDecimalPlacesToDisplay (2);
     s.setTextValueSuffix (" dB");
     s.setValue (0.0, juce::dontSendNotification);
     s.setScrollWheelEnabled (false);
@@ -276,7 +287,7 @@ void MainView::syncLinkedFaders (juce::Slider& source, juce::Slider& target, juc
     const juce::ScopedValueSetter<bool> guard (adjustingIoFaders_, true);
 
     if (link.getToggleState())
-        target.setValue (source.getValue(), juce::dontSendNotification);
+        target.setValue (source.getValue(), juce::sendNotificationSync);
 
     updateIoTrimReadouts();
 }

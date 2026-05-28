@@ -20,16 +20,56 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (input_gain_db, 1),
         "Input Gain",
-        NormalisableRange<float> (-12.0f, 24.0f, 0.01f),
+        NormalisableRange<float> (0.0f, 24.0f, 0.01f),
         0.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (ceiling_db, 1),
         "Ceiling",
-        NormalisableRange<float> (-12.0f, 0.0f, 0.01f),
+        NormalisableRange<float> (-24.0f, 0.0f, 0.01f),
         -1.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (io_input_l_db, 1),
+        "I/O Input L",
+        NormalisableRange<float> (-24.0f, 24.0f, 0.01f),
+        0.0f,
+        AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (io_input_r_db, 1),
+        "I/O Input R",
+        NormalisableRange<float> (-24.0f, 24.0f, 0.01f),
+        0.0f,
+        AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (io_input_link, 1),
+        "I/O Input Link",
+        true,
+        AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (io_output_l_db, 1),
+        "I/O Output L",
+        NormalisableRange<float> (-24.0f, 24.0f, 0.01f),
+        0.0f,
+        AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (io_output_r_db, 1),
+        "I/O Output R",
+        NormalisableRange<float> (-24.0f, 24.0f, 0.01f),
+        0.0f,
+        AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (io_output_link, 1),
+        "I/O Output Link",
+        true,
+        AudioParameterBoolAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (release_ms, 1),

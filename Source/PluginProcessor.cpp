@@ -28,6 +28,12 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
 {
     jassert (apvts.getParameter ("input_gain_db") != nullptr);
     jassert (apvts.getParameter ("ceiling_db") != nullptr);
+    jassert (apvts.getParameter ("io_input_l_db") != nullptr);
+    jassert (apvts.getParameter ("io_input_r_db") != nullptr);
+    jassert (apvts.getParameter ("io_input_link") != nullptr);
+    jassert (apvts.getParameter ("io_output_l_db") != nullptr);
+    jassert (apvts.getParameter ("io_output_r_db") != nullptr);
+    jassert (apvts.getParameter ("io_output_link") != nullptr);
     jassert (apvts.getParameter ("release_ms") != nullptr);
     jassert (apvts.getParameter ("release_sustain_ratio") != nullptr);
 }
@@ -61,6 +67,20 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
     jassert (releaseSustainRatio_ != nullptr);
+
+    ioInputLDb_ = apvts.getRawParameterValue ("io_input_l_db");
+    ioInputRDb_ = apvts.getRawParameterValue ("io_input_r_db");
+    ioOutputLDb_ = apvts.getRawParameterValue ("io_output_l_db");
+    ioOutputRDb_ = apvts.getRawParameterValue ("io_output_r_db");
+    jassert (ioInputLDb_ != nullptr);
+    jassert (ioInputRDb_ != nullptr);
+    jassert (ioOutputLDb_ != nullptr);
+    jassert (ioOutputRDb_ != nullptr);
+
+    ioInputLink_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("io_input_link"));
+    ioOutputLink_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("io_output_link"));
+    jassert (ioInputLink_ != nullptr);
+    jassert (ioOutputLink_ != nullptr);
 
     baseLatencySamples_ = lookaheadSamples;
     osLatencySamples_   = ispTrim_.getLatencyInSamples();
@@ -97,7 +117,9 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
     if (apvts.getParameter ("input_gain_db") == nullptr || apvts.getParameter ("ceiling_db") == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
-        || ceilingMode_ == nullptr)
+        || ceilingMode_ == nullptr || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr
+        || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr || ioInputLink_ == nullptr
+        || ioOutputLink_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -107,6 +129,12 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     const int nch = juce::jmin (2, buffer.getNumChannels());
     if (nch <= 0)
         return;
+
+    const float ioInputLGain = juce::Decibels::decibelsToGain (ioInputLDb_->load (std::memory_order_relaxed));
+    const float ioInputRGain = juce::Decibels::decibelsToGain (ioInputRDb_->load (std::memory_order_relaxed));
+    buffer.applyGain (0, 0, n, ioInputLGain);
+    if (nch > 1)
+        buffer.applyGain (1, 0, n, ioInputRGain);
 
     {
         const float pL = buffer.getMagnitude (0, 0, n);
@@ -168,6 +196,12 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     {
         currentTpTrimDb_.store (0.0f, std::memory_order_relaxed);
     }
+
+    const float ioOutputLGain = juce::Decibels::decibelsToGain (ioOutputLDb_->load (std::memory_order_relaxed));
+    const float ioOutputRGain = juce::Decibels::decibelsToGain (ioOutputRDb_->load (std::memory_order_relaxed));
+    buffer.applyGain (0, 0, n, ioOutputLGain);
+    if (nch > 1)
+        buffer.applyGain (1, 0, n, ioOutputRGain);
 
     {
         const float pL = buffer.getMagnitude (0, 0, n);

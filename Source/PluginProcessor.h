@@ -74,6 +74,12 @@ private:
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
     juce::AudioParameterFloat* releaseSustainRatio_ = nullptr;
+    std::atomic<float>* ioInputLDb_ = nullptr;
+    std::atomic<float>* ioInputRDb_ = nullptr;
+    std::atomic<float>* ioOutputLDb_ = nullptr;
+    std::atomic<float>* ioOutputRDb_ = nullptr;
+    juce::AudioParameterBool* ioInputLink_ = nullptr;
+    juce::AudioParameterBool* ioOutputLink_ = nullptr;
 
     int  baseLatencySamples_ = 0;
     int  osLatencySamples_   = 0;

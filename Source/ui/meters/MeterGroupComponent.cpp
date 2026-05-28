@@ -118,6 +118,8 @@ MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
         meter1_->setKind (MeterComponent::Kind::Level);
         meter0_->setPeakResetCallback (&MeterGroupComponent::peakResetThunk, this);
         meter1_->setPeakResetCallback (&MeterGroupComponent::peakResetThunk, this);
+        meter0_->setClipResetCallback (&MeterGroupComponent::peakResetThunk, this);
+        meter1_->setClipResetCallback (&MeterGroupComponent::peakResetThunk, this);
         addAndMakeVisible (*meter0_);
         addAndMakeVisible (*meter1_);
 
@@ -145,6 +147,10 @@ void MeterGroupComponent::handlePeakReset() noexcept
         return;
     }
 
+    const float lPeak = (kind_ == BusKind::Input) ? processor_.getInputPeakLDb() : processor_.getOutputPeakLDb();
+    const float rPeak = (kind_ == BusKind::Input) ? processor_.getInputPeakRDb() : processor_.getOutputPeakRDb();
+    provider0_.updateFromValues (lPeak, lPeak, false, false);
+    provider1_.updateFromValues (rPeak, rPeak, false, false);
     provider0_.resetPeakHold();
     provider1_.resetPeakHold();
     peakSmooth0_.reset();
@@ -210,8 +216,12 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     peakSmooth0_.tick (lPeak, dtSec, holdTicks);
     peakSmooth1_.tick (rPeak, dtSec, holdTicks);
 
-    provider0_.updateFromValues (lPeak, lPeak, false, false);
-    provider1_.updateFromValues (rPeak, rPeak, false, false);
+    constexpr float kClipThresholdDb = 0.0f;  // digital full-scale
+    const bool clippedL = renderState0_.clipLatched || (std::isfinite (lPeak) && lPeak >= kClipThresholdDb);
+    const bool clippedR = renderState1_.clipLatched || (std::isfinite (rPeak) && rPeak >= kClipThresholdDb);
+
+    provider0_.updateFromValues (lPeak, lPeak, clippedL, false);
+    provider1_.updateFromValues (rPeak, rPeak, clippedR, false);
     pushLevelRenderStates();
 
     const auto lText = PeakNumericSmoother::formatDb (peakSmooth0_.duty);

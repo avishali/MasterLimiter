@@ -27,7 +27,7 @@ public:
     void resetPeakHolds();
 
 private:
-    static constexpr const char* kPlaceholderTooltip = "Placeholder - wired in the I/O + Gain-Match slice.";
+    static constexpr const char* kPlaceholderTooltip = "Placeholder - wired in a later slice.";
 
     struct TpReadoutSmoother
     {
@@ -41,7 +41,7 @@ private:
     };
 
     void styleRotary (juce::Slider& s) const;
-    void stylePlaceholderFader (juce::Slider& s) const;
+    void styleIoTrimFader (juce::Slider& s) const;
     void styleHorizontalPlaceholder (juce::Slider& s) const;
     void syncLinkedFaders (juce::Slider& source, juce::Slider& target, juce::ToggleButton& link);
     void updateIoTrimReadouts();
@@ -121,6 +121,7 @@ private:
     TpReadoutSmoother tpSmoother_ {};
     bool adjustingIoFaders_ { false };
 
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attGainDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attReleaseSustain_;
@@ -129,6 +130,12 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attStereoLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMsLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCharacter_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimR_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attIoInputLink_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoOutputTrimL_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoOutputTrimR_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attIoOutputLink_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainView)
 };

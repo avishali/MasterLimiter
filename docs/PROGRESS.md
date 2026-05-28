@@ -4,6 +4,90 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-28 — Slice 11a: I/O gain stages + Drive re-range + Ceiling 0..−24 (ADR-0007)
+
+**Status:** ✅ Closed. ADR-0007 committed in HQ locally (`276c397`,
+unpushed). Product repo: new frozen params introduced, two existing param
+ranges changed, DSP chain restructured, UI placeholders wired. Slice
+3/4/5 bench regression PASSES unchanged. Gain-Match logic deferred to
+Slice 11b.
+
+**Architecture:** [ADR-0007](../third_party/melechdsp-hq/docs/DECISIONS/ADR-0007-masterlimiter-io-gain-and-gain-match.md) —
+I/O gain staging + dual Gain-Match design (Auto/Track + Gain⇄Ceiling
+Link). 11a wires the gain staging; 11b implements the match.
+
+**Deliverables (HQ)**
+- `docs/DECISIONS/ADR-0007-masterlimiter-io-gain-and-gain-match.md` —
+  control model, all eight new frozen params (six in 11a, two in 11b),
+  two range changes, dual Gain-Match design, signal chain, meter
+  measurement points, alternatives considered.
+
+**Deliverables (product repo)**
+- `Source/parameters/ParameterIDs.h` — six new FROZEN IDs:
+  `io_input_l_db`, `io_input_r_db`, `io_input_link`, `io_output_l_db`,
+  `io_output_r_db`, `io_output_link`.
+- `Source/parameters/Parameters.cpp` —
+  - re-ranged `input_gain_db`: `−12..+24` → **`0..+24`**, default 0.0
+    (positive-only drive);
+  - re-ranged `ceiling_db`: `0..−12` → **`−24..0`**, default −1.0;
+  - added four bipolar I/O gain floats (`±24` dB, default 0.0) and two
+    link bools (default `true`).
+- `Source/PluginProcessor.{h,cpp}` — `processBlock` restructured to:
+  per-channel **I/O Input** → IN-meter measure (post-IO-In, pre-drive) →
+  **Drive** (mono `input_gain_db`) → peak detect / envelope / lookahead /
+  ceiling → TP `ispTrim_` when in TP mode → per-channel **I/O Output** →
+  OUT-meter + TP measure (post-IO-Out) → `loudness_.process(buffer)`.
+  Atomic loads relaxed, dB→gain converted once per block per channel,
+  no allocations.
+- `Source/ui/MainView.{h,cpp}` — Gain knob becomes a real
+  `SliderAttachment` to `input_gain_db`; I/O Input/Output L/R faders
+  attach to the four new floats; L/R Link buttons attach to the two
+  bools, with guarded UI-side mirroring so toggling link-on syncs L→R
+  (and subsequent moves mirror) without feedback loops.
+- `Source/ui/meters/MeterGroupComponent.cpp` — **clip indicator wired**
+  (Slice 11a.1): IN/OUT providers now receive `clipped = (peak ≥ 0 dB)`
+  instead of hardcoded `false`, so the latched clip LED actually lights;
+  and **click-to-reset** (Slice 11a.2): clicking the LED *or* the value
+  readout on any IN/OUT meter clears peak hold + clip latch (same handler
+  as the global Reset Peaks button).
+- `Source/ui/MainView.cpp` — **fader click-to-snap disabled**
+  (Slice 11a.3): the four I/O L/R faders now use
+  `setSliderSnapsToMousePosition (false)` so accidental clicks on the
+  meter area do NOT jump the value — the user must grab the thumb and
+  drag. Important safety property when monitoring loud material. The
+  meter's LED and value-readout click-areas remain exposed so the
+  click-to-reset behaviour above still works.
+
+**Gate result**
+- [x] HQ ADR drafted, committed locally (`276c397`), unpushed.
+- [x] Debug + Release build clean. No new `Source/` warnings.
+- [x] Bench regression: Slice 3 PASS 13/13, Slice 4 PASS 14/14,
+      Slice 5 PASS 25/25 — DSP is byte-identical at default I/O = 0 dB
+      (the whole point of those defaults).
+- [x] Audition smoke checks pass: I/O L/R + link, Drive engages
+      limiting, Output Gain past 0 dB visibly exceeds ceiling on the
+      OUT meter and TP readout (post-Output-Gain measurement), Ceiling
+      drags to −24, clip LEDs latch + click-to-reset works, resize
+      stable.
+
+**Deferred → Slice 11b**
+- Gain-Match **Auto / Track** (continuous LUFS compensation via the
+  Slice 8 `LoudnessAnalyzer`).
+- Gain ⇄ Ceiling Link (structural dB-for-dB coupling of `input_gain_db`
+  and `ceiling_db`).
+- Learn Input Gain (capture reference loudness).
+- Bypass (host-bypass wiring; pairs naturally with bypass-loudness-match
+  in 11b).
+- `gain_match_auto`, `gain_ceiling_link` bools — introduced when 11b
+  ships, per ADR-0007.
+
+**Range-change note (per ADR-0007)**
+- No sessions/automation to protect — pre-1.0, in active dev. APVTS
+  clamps any pre-existing out-of-range value on load. Documented and
+  accepted; no state-versioning hook needed.
+
+---
+
 ## 2026-05-28 — Slice 10: Maximizer UI shell (Ozone-inspired two-panel layout)
 
 **Status:** ✅ Closed. UI shell only — no DSP, no APVTS changes, no existing
