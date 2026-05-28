@@ -139,7 +139,8 @@ void MeterComponent::resized()
     labelArea_ = b.removeFromTop (16);
     numericArea_ = b.removeFromBottom (20).reduced (2, 2);
 
-    ledArea_ = labelArea_.removeFromRight (14).withSizeKeepingCentre (10, 10);
+    auto ledRow = labelArea_;
+    ledArea_ = ledRow.removeFromRight (14).withSizeKeepingCentre (10, 10);
     meterArea_ = b.reduced (6, 2);
 }
 
@@ -302,8 +303,9 @@ void MeterComponent::paintLevel (juce::Graphics& g)
 
     const float mainH = mainNorm * h;
     const float mainTop = yMax - mainH;
+    const bool hasMainSignal = mainNorm > 0.002f;
 
-    if (mainH > 0.5f)
+    if (hasMainSignal && mainH > 0.5f)
     {
         auto mainRect = meterArea_.withTop (static_cast<int> (std::round (mainTop)));
         const auto mainRectF = mainRect.toFloat();
@@ -333,7 +335,7 @@ void MeterComponent::paintLevel (juce::Graphics& g)
 
     if (renderState_.displayMode == mdsp_ui::meters::MeterDisplayMode::Rms)
     {
-        if (renderState_.peakNorm > renderState_.rmsNorm)
+        if (renderState_.peakNorm > renderState_.rmsNorm && renderState_.peakNorm > 0.002f)
         {
             g.setColour (theme.accent.withAlpha (0.3f));
             g.fillRect (xLeft + 2.0f,
@@ -342,21 +344,27 @@ void MeterComponent::paintLevel (juce::Graphics& g)
                         mainTop - peakTop);
         }
 
-        g.setColour (theme.seriesPeak.withAlpha (0.95f));
-        g.drawLine (xLeft + m.strokeThick,
-                    peakTop,
-                    xRight - m.strokeThick,
-                    peakTop,
-                    m.strokeMed);
+        if (renderState_.peakNorm > 0.002f)
+        {
+            g.setColour (theme.seriesPeak.withAlpha (0.95f));
+            g.drawLine (xLeft + m.strokeThick,
+                        peakTop,
+                        xRight - m.strokeThick,
+                        peakTop,
+                        m.strokeMed);
+        }
     }
     else
     {
-        g.setColour (theme.seriesPeak.withAlpha (0.95f));
-        g.drawLine (xLeft + m.strokeThick,
-                    mainTop,
-                    xRight - m.strokeThick,
-                    mainTop,
-                    m.strokeMed);
+        if (hasMainSignal)
+        {
+            g.setColour (theme.seriesPeak.withAlpha (0.95f));
+            g.drawLine (xLeft + m.strokeThick,
+                        mainTop,
+                        xRight - m.strokeThick,
+                        mainTop,
+                        m.strokeMed);
+        }
     }
 
     if (renderState_.maxPeakNorm > 0.001f)
@@ -510,10 +518,10 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     const juce::String peakLine = numericOverrideActive_ ? numericOverridePeak_ : numericTextPeak_;
     const juce::String rmsLine = numericOverrideActive_ ? numericOverrideRms_ : numericTextRms_;
 
-    g.setColour (theme.seriesPeak.withAlpha (0.9f));
+    g.setColour (theme.textMuted.withAlpha (0.82f));
     g.drawText (peakLine, peakBounds, juce::Justification::centred);
 
-    g.setColour (theme.accent.withAlpha (0.9f));
+    g.setColour (theme.textMuted.withAlpha (0.68f));
     g.drawText (rmsLine, rmsBounds, juce::Justification::centred);
 
     if (renderState_.bypassed)

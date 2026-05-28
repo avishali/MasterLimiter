@@ -51,10 +51,10 @@ void LoudnessNumericPanel::paint (juce::Graphics& g)
     g.setColour (theme.borderDivider);
     g.drawRect (getLocalBounds());
 
-    auto bounds = getLocalBounds().reduced (m.pad);
+    auto bounds = getLocalBounds().reduced (m.gap, m.gapSmall);
     const int rowH = juce::jmax (14, bounds.getHeight() / 3);
 
-    g.setFont (type.labelFont().withHeight (13.0f));
+    g.setFont (type.labelFont().withHeight (12.0f));
     g.setColour (theme.text);
 
     auto r0 = bounds.removeFromTop (rowH);

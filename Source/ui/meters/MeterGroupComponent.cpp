@@ -121,8 +121,8 @@ MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
         addAndMakeVisible (*meter0_);
         addAndMakeVisible (*meter1_);
 
-        provider0_.setScaleMode (ScaleMode::FullRange);
-        provider1_.setScaleMode (ScaleMode::FullRange);
+        provider0_.setScaleMode (ScaleMode::Top24Db);
+        provider1_.setScaleMode (ScaleMode::Top24Db);
         provider0_.setDisplayMode (DisplayMode::Peak);
         provider1_.setDisplayMode (DisplayMode::Peak);
         provider0_.setHoldEnabled (true);

@@ -4,9 +4,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <mdsp_ui/UiContext.h>
 #include <mdsp_ui/ThemeVariant.h>
-#include <mdsp_ui/LookAndFeel.h>
 
 #include "PluginProcessor.h"
+#include "ui/MasterLimiterLookAndFeel.h"
 #include "ui/MainView.h"
 
 //==============================================================================
@@ -20,10 +20,13 @@ public:
     void resized() override;
 
 private:
+    static constexpr int kDesignWidth = 1100;
+    static constexpr int kDesignHeight = 620;
+
     void timerCallback() override;
 
     mdsp_ui::UiContext ui_;
-    mdsp_ui::LookAndFeel lnf_;
+    MasterLimiterLookAndFeel lnf_;
     juce::ComponentBoundsConstrainer constrainer_;
     MainView mainView;
 

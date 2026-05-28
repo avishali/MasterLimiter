@@ -41,6 +41,13 @@ slice or split a follow-up slice.
 | 7  | Stereo / M-S link options                              | `mdsp_dsp/StereoMSLink`                     | params + UI            | Bench A/B confirms link % continuum behaves monotonically.     |
 | 8  | Meters (GR + TP) to mdsp_ui                            | `mdsp_ui/GainReductionMeter`, `TruePeakMeter`| UI assembly           | Meters track snapshots accurately, no UI-thread DSP access.    |
 | 9  | Auto-release algorithm + preset pass + ship gate       | `LimiterEnvelope` (auto mode)               | presets                | Full §5 corpus passes at 5 dB GR. ADR-0006 written.            |
+| 10 | Maximizer UI shell (Ozone-inspired two-panel layout)   | —                                           | `ui/MainView`          | Look-lock: two-panel layout, drive Gain at 0 dB hard-left, placeholders for new controls. Audition the look. |
+| 11 | I/O gains + dual Gain-Match (auto-track + Gain⇄Ceiling)| (loudness match — likely product-side)      | new params + DSP + UI  | I/O Input/Output trims (independent) + Gain Match (Auto/Track + Gain⇄Ceiling link), positive-only drive. ADR written. |
+
+Note: Slices 6 (saturator) and 7 (stereo/M-S link) remain in the backlog;
+ordering was adjusted to do meters (8) and the Maximizer UI/I-O model
+(10–11) ahead of them. A separate Slice 9 covers the "compressor-like /
+too slow" brickwall voicing (ADR-0006).
 
 ## Repository locations
 

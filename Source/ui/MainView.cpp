@@ -10,6 +10,11 @@ juce::String pid (std::string_view sv)
 {
     return { sv.data(), static_cast<size_t> (sv.size()) };
 }
+
+juce::String formatDb1 (double v)
+{
+    return juce::String (v, 1) + " dB";
+}
 } // namespace
 
 void MainView::TpReadoutSmoother::reset() noexcept
@@ -58,7 +63,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
       processor_ (processor),
       apvts_ (processor.getAPVTS()),
       meterIn_ (ui_, processor, MeterGroupComponent::BusKind::Input),
-      meterGr_ (ui_, processor, MeterGroupComponent::BusKind::GainReduction),
+      meterGr_ (ui_, processor),
       meterOut_ (ui_, processor, MeterGroupComponent::BusKind::Output),
       lufsPanel_ (ui_, processor)
 {
@@ -66,8 +71,13 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     header_.setJustificationType (juce::Justification::centredLeft);
     header_.setFont (ui_.type().titleFont().withHeight (20.0f).boldened());
-    header_.setColour (juce::Label::textColourId, theme.text);
+    header_.setColour (juce::Label::textColourId, theme.accent.brighter (0.5f));
     addAndMakeVisible (header_);
+
+    headerMode_.setJustificationType (juce::Justification::centredLeft);
+    headerMode_.setFont (ui_.type().labelFont().withHeight (12.0f));
+    headerMode_.setColour (juce::Label::textColourId, theme.textMuted);
+    addAndMakeVisible (headerMode_);
 
     auto setupLabel = [&] (juce::Label& l)
     {
@@ -77,7 +87,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
         addAndMakeVisible (l);
     };
 
-    setupLabel (lblInputGain_);
+    setupLabel (lblGainDrive_);
+    setupLabel (lblGainDriveRange_);
     setupLabel (lblCeiling_);
     setupLabel (lblRelease_);
     setupLabel (lblReleaseSustain_);
@@ -87,43 +98,89 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblStereoLink_);
     setupLabel (lblMsLink_);
     setupLabel (lblCharacter_);
+    setupLabel (lblGainMatchNote_);
+    setupLabel (lblLearnInputLufs_);
+    setupLabel (lblIoInputTrim_);
+    setupLabel (lblIoInputReadout_);
+    setupLabel (lblIoOutputTrim_);
+    setupLabel (lblIoOutputReadout_);
 
-    styleRotary (sldInputGain_);
+    styleRotary (sldGainDrive_);
     styleRotary (sldCeiling_);
     styleRotary (sldRelease_);
     styleRotary (sldReleaseSustain_);
     styleRotary (sldLookahead_);
     styleRotary (sldStereoLink_);
     styleRotary (sldMsLink_);
+    styleHorizontalPlaceholder (sldCharacter_);
+    stylePlaceholderFader (sldIoInputTrimL_);
+    stylePlaceholderFader (sldIoInputTrimR_);
+    stylePlaceholderFader (sldIoOutputTrimL_);
+    stylePlaceholderFader (sldIoOutputTrimR_);
 
-    addAndMakeVisible (sldInputGain_);
+    sldGainDrive_.setRange (0.0, 24.0, 0.1);
+    sldGainDrive_.setNumDecimalPlacesToDisplay (1);
+    sldGainDrive_.setTextValueSuffix (" dB");
+    sldGainDrive_.getProperties().set ("gainDrivePlaceholder", true);
+    sldGainDrive_.setValue (0.0, juce::dontSendNotification);
+
+    addAndMakeVisible (sldGainDrive_);
     addAndMakeVisible (sldCeiling_);
     addAndMakeVisible (sldRelease_);
     addAndMakeVisible (sldReleaseSustain_);
     btnReleaseAuto_.setClickingTogglesState (true);
     addAndMakeVisible (btnReleaseAuto_);
     addAndMakeVisible (sldLookahead_);
-    addAndMakeVisible (cmbCeilingMode_);
-    addAndMakeVisible (cmbCharacter_);
+    btnCeilingMode_.setClickingTogglesState (true);
+    addAndMakeVisible (btnCeilingMode_);
+    addAndMakeVisible (sldCharacter_);
     addAndMakeVisible (sldStereoLink_);
     addAndMakeVisible (sldMsLink_);
 
-    if (auto* p = apvts_.getParameter (pid (param::ceiling_mode)))
-        cmbCeilingMode_.addItemList (p->getAllValueStrings(), 1);
+    btnGainCeilingLink_.setClickingTogglesState (true);
+    btnGainMatchAutoTrack_.setClickingTogglesState (true);
+    btnIoInputLink_.setClickingTogglesState (true);
+    btnIoInputLink_.setButtonText ("L/R");
+    btnIoInputLink_.setToggleState (true, juce::dontSendNotification);
+    btnIoOutputLink_.setClickingTogglesState (true);
+    btnIoOutputLink_.setButtonText ("L/R");
+    btnIoOutputLink_.setToggleState (true, juce::dontSendNotification);
+    btnBypass_.setClickingTogglesState (true);
+    addAndMakeVisible (btnGainCeilingLink_);
+    addAndMakeVisible (btnGainMatchAutoTrack_);
+    addAndMakeVisible (btnLearnInputGain_);
+    addAndMakeVisible (sldIoInputTrimL_);
+    addAndMakeVisible (sldIoInputTrimR_);
+    addAndMakeVisible (btnIoInputLink_);
+    addAndMakeVisible (sldIoOutputTrimL_);
+    addAndMakeVisible (sldIoOutputTrimR_);
+    addAndMakeVisible (btnIoOutputLink_);
+    addAndMakeVisible (btnBypass_);
 
-    if (auto* p = apvts_.getParameter (pid (param::character)))
-        cmbCharacter_.addItemList (p->getAllValueStrings(), 1);
-
-    attInputGain_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::input_gain_db), sldInputGain_);
     attCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ceiling_db), sldCeiling_);
     attRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_ms), sldRelease_);
     attReleaseSustain_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldReleaseSustain_);
     attReleaseAuto_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::release_auto), btnReleaseAuto_);
     attLookahead_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::lookahead_ms), sldLookahead_);
-    attCeilingMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::ceiling_mode), cmbCeilingMode_);
     attStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::stereo_link_pct), sldStereoLink_);
     attMsLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ms_link_pct), sldMsLink_);
-    attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::character), cmbCharacter_);
+    attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::character), sldCharacter_);
+
+    auto useSliderTextboxFormat = [] (juce::Slider& slider, int numDecimals, const juce::String& suffix)
+    {
+        slider.textFromValueFunction = nullptr;
+        slider.setNumDecimalPlacesToDisplay (numDecimals);
+        slider.setTextValueSuffix (suffix);
+    };
+
+    useSliderTextboxFormat (sldGainDrive_, 1, " dB");
+    useSliderTextboxFormat (sldCeiling_, 2, " dB");
+    useSliderTextboxFormat (sldRelease_, 0, " ms");
+    useSliderTextboxFormat (sldReleaseSustain_, 1, juce::String());
+    useSliderTextboxFormat (sldLookahead_, 2, " ms");
+    useSliderTextboxFormat (sldStereoLink_, 0, "%");
+    useSliderTextboxFormat (sldMsLink_, 0, "%");
+    sldCharacter_.textFromValueFunction = [] (double) { return juce::String ("Clean"); };
 
     addAndMakeVisible (meterIn_);
     addAndMakeVisible (meterGr_);
@@ -141,16 +198,47 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     };
     addAndMakeVisible (btnResetPeaks_);
 
-    sldInputGain_.setTooltip ("Input gain applied before limiting.");
+    sldIoInputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
+    sldIoInputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimR_, sldIoInputTrimL_, btnIoInputLink_); };
+    sldIoOutputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoOutputTrimL_, sldIoOutputTrimR_, btnIoOutputLink_); };
+    sldIoOutputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoOutputTrimR_, sldIoOutputTrimL_, btnIoOutputLink_); };
+    btnIoInputLink_.onClick = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
+    btnIoOutputLink_.onClick = [this] { syncLinkedFaders (sldIoOutputTrimL_, sldIoOutputTrimR_, btnIoOutputLink_); };
+    btnCeilingMode_.onClick = [this]
+    {
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
+        {
+            const int nextIdx = c->getIndex() == 0 ? 1 : 0;
+            c->beginChangeGesture();
+            c->setValueNotifyingHost (nextIdx == 0 ? 0.0f : 1.0f);
+            c->endChangeGesture();
+            updateCeilingModeButton (nextIdx);
+        }
+    };
+    updateIoTrimReadouts();
+    if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
+        updateCeilingModeButton (c->getIndex());
+
+    sldGainDrive_.setTooltip (kPlaceholderTooltip);
+    btnGainCeilingLink_.setTooltip (kPlaceholderTooltip);
+    btnGainMatchAutoTrack_.setTooltip (kPlaceholderTooltip);
+    btnLearnInputGain_.setTooltip (kPlaceholderTooltip);
+    sldIoInputTrimL_.setTooltip (kPlaceholderTooltip);
+    sldIoInputTrimR_.setTooltip (kPlaceholderTooltip);
+    btnIoInputLink_.setTooltip (kPlaceholderTooltip);
+    sldIoOutputTrimL_.setTooltip (kPlaceholderTooltip);
+    sldIoOutputTrimR_.setTooltip (kPlaceholderTooltip);
+    btnIoOutputLink_.setTooltip (kPlaceholderTooltip);
+    btnBypass_.setTooltip (kPlaceholderTooltip);
     sldCeiling_.setTooltip ("Output ceiling in dBFS.");
     sldRelease_.setTooltip ("Limiter release time in milliseconds.");
     sldReleaseSustain_.setTooltip ("Multiplier on release time for sustained peaks (1–10×).");
     btnReleaseAuto_.setTooltip ("When Auto is on, release time follows the program.");
     sldLookahead_.setTooltip ("Lookahead delay in milliseconds (higher catches peaks earlier).");
-    cmbCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
+    btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
     sldStereoLink_.setTooltip ("Stereo linking between channels (0–100%).");
     sldMsLink_.setTooltip ("Mid/side stereo link amount (0–100%).");
-    cmbCharacter_.setTooltip ("Character / color mode (Clean in v0.1).");
+    sldCharacter_.setTooltip ("Character / color mode (Clean in v0.1).");
 }
 
 MainView::~MainView() = default;
@@ -158,96 +246,199 @@ MainView::~MainView() = default;
 void MainView::styleRotary (juce::Slider& s) const
 {
     s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-    s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 72, 18);
+    s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     s.setScrollWheelEnabled (false);
+}
+
+void MainView::stylePlaceholderFader (juce::Slider& s) const
+{
+    s.setSliderStyle (juce::Slider::LinearVertical);
+    s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    s.setRange (-24.0, 24.0, 0.1);
+    s.setNumDecimalPlacesToDisplay (1);
+    s.setTextValueSuffix (" dB");
+    s.setValue (0.0, juce::dontSendNotification);
+    s.setScrollWheelEnabled (false);
+}
+
+void MainView::styleHorizontalPlaceholder (juce::Slider& s) const
+{
+    s.setSliderStyle (juce::Slider::LinearHorizontal);
+    s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    s.setScrollWheelEnabled (false);
+}
+
+void MainView::syncLinkedFaders (juce::Slider& source, juce::Slider& target, juce::ToggleButton& link)
+{
+    if (adjustingIoFaders_)
+        return;
+
+    const juce::ScopedValueSetter<bool> guard (adjustingIoFaders_, true);
+
+    if (link.getToggleState())
+        target.setValue (source.getValue(), juce::dontSendNotification);
+
+    updateIoTrimReadouts();
+}
+
+void MainView::updateIoTrimReadouts()
+{
+    const auto inputValue = btnIoInputLink_.getToggleState()
+                                ? sldIoInputTrimL_.getValue()
+                                : (sldIoInputTrimL_.getValue() + sldIoInputTrimR_.getValue()) * 0.5;
+    const auto outputValue = btnIoOutputLink_.getToggleState()
+                                 ? sldIoOutputTrimL_.getValue()
+                                 : (sldIoOutputTrimL_.getValue() + sldIoOutputTrimR_.getValue()) * 0.5;
+
+    lblIoInputReadout_.setText (formatDb1 (inputValue), juce::dontSendNotification);
+    lblIoOutputReadout_.setText (formatDb1 (outputValue), juce::dontSendNotification);
+}
+
+void MainView::updateCeilingModeButton (int ceilingIdx)
+{
+    const bool isTruePeak = ceilingIdx == 1;
+    btnCeilingMode_.setButtonText (isTruePeak ? "TP" : "SP");
+    btnCeilingMode_.setToggleState (isTruePeak, juce::dontSendNotification);
 }
 
 void MainView::paint (juce::Graphics& g)
 {
-    if (! vSeparatorBounds_.isEmpty())
+    const auto& theme = ui_.theme();
+    const auto& type = ui_.type();
+    const auto& m = ui_.metrics();
+
+    g.fillAll (theme.background);
+
+    if (! headerArea_.isEmpty())
     {
-        g.setColour (ui_.theme().grid.withAlpha (0.45f));
-        g.fillRect (vSeparatorBounds_);
+        g.setColour (theme.background.brighter (0.04f));
+        g.fillRect (headerArea_);
+    }
+
+    auto drawPanel = [&] (juce::Rectangle<int> area, const juce::String& title)
+    {
+        if (area.isEmpty())
+            return;
+
+        const auto panel = area.toFloat();
+        g.setColour (theme.panel.brighter (0.02f));
+        g.fillRoundedRectangle (panel, m.rLarge);
+        g.setColour (theme.borderDivider);
+        g.drawRoundedRectangle (panel.reduced (0.5f), m.rLarge, m.strokeThin);
+
+        auto titleArea = area.reduced (18, 10).removeFromTop (18);
+        g.setColour (theme.textMuted.withAlpha (0.8f));
+        g.setFont (type.labelFont().withHeight (13.0f).boldened());
+        g.drawText (title, titleArea, title == "I/O" ? juce::Justification::centred : juce::Justification::centredLeft, true);
+    };
+
+    drawPanel (maximizerPanelArea_, "M A X I M I Z E R");
+    drawPanel (ioPanelArea_, "I/O");
+
+    if (! gainMatchLabelArea_.isEmpty())
+    {
+        g.setColour (theme.textMuted.withAlpha (0.75f));
+        g.setFont (type.labelFont().withHeight (12.0f).boldened());
+        g.drawText ("G A I N  M A T C H", gainMatchLabelArea_, juce::Justification::centredLeft, true);
+    }
+
+    g.setColour (theme.textMuted.withAlpha (0.72f));
+    g.setFont (type.labelFont().withHeight (11.0f));
+    g.drawText ("Clean", juce::Rectangle<int> { 34, 362, 80, 16 }, juce::Justification::centredLeft);
+    g.drawText ("Fast & Loud", juce::Rectangle<int> { 330, 362, 104, 16 }, juce::Justification::centredRight);
+
+    if (! footerArea_.isEmpty())
+    {
+        g.setColour (theme.background.brighter (0.02f));
+        g.fillRect (footerArea_);
+        g.setColour (theme.grid.withAlpha (0.45f));
+        auto footerTopLine = footerArea_;
+        g.fillRect (footerTopLine.removeFromTop (1));
     }
 }
 
 void MainView::resized()
 {
-    const auto& m = ui_.metrics();
-    auto bounds = getLocalBounds().reduced (static_cast<int> (m.pad), 10);
+    headerArea_ = { 0, 0, 1100, 52 };
+    maximizerPanelArea_ = { 16, 64, 736, 540 };
+    ioPanelArea_ = { 768, 64, 316, 540 };
+    footerArea_ = {};
 
-    auto headerBar = bounds.removeFromTop (40);
-    header_.setBounds (headerBar.reduced (4, 6));
+    header_.setBounds (24, 8, 150, 34);
+    headerMode_.setBounds (184, 12, 170, 28);
+    btnBypass_.setBounds (982, 12, 92, 28);
 
-    const int stripW = 280;
-    auto meterCol = bounds.removeFromRight (stripW);
-    bounds.removeFromRight (static_cast<int> (m.padSmall));
-    vSeparatorBounds_ = bounds.removeFromRight (1);
-    bounds.removeFromRight (static_cast<int> (m.padSmall));
-    meterStripArea_ = meterCol;
+    lblGainDrive_.setBounds (48, 116, 140, 18);
+    sldGainDrive_.setBounds (40, 134, 156, 136);
+    lblGainDriveRange_.setBounds (42, 270, 154, 18);
+    btnGainCeilingLink_.setBounds (204, 222, 90, 26);
 
-    auto strip = meterCol.reduced (static_cast<int> (m.padSmall), static_cast<int> (m.padSmall));
-    const int gapY = 6;
-    const int lufsH = 92;
-    const int tpH = 22;
-    const int btnH = 30;
-    const int minMeterH = 72;
-    const int fixedBelow = lufsH + tpH + btnH + gapY * 4;
-    const int metersTotal = juce::jmax (minMeterH * 3 + gapY * 2, strip.getHeight() - fixedBelow);
-    const int oneMeterH = (metersTotal - gapY * 2) / 3;
+    lblCeiling_.setBounds (300, 116, 156, 18);
+    sldCeiling_.setBounds (300, 134, 156, 136);
+    lblCeilingMode_.setBounds (318, 274, 120, 18);
+    btnCeilingMode_.setBounds (330, 294, 96, 26);
+    lblTruePeak_.setBounds (300, 324, 156, 20);
 
-    meterIn_.setBounds (strip.removeFromTop (oneMeterH));
-    strip.removeFromTop (gapY);
-    meterGr_.setBounds (strip.removeFromTop (oneMeterH));
-    strip.removeFromTop (gapY);
-    meterOut_.setBounds (strip.removeFromTop (oneMeterH));
-    strip.removeFromTop (gapY);
-    lufsPanel_.setBounds (strip.removeFromTop (lufsH));
-    strip.removeFromTop (gapY);
-    lblTruePeak_.setBounds (strip.removeFromTop (tpH));
-    strip.removeFromTop (gapY);
-    btnResetPeaks_.setBounds (strip.removeFromTop (btnH));
+    lblCharacter_.setBounds (34, 314, 128, 18);
+    sldCharacter_.setBounds (34, 336, 400, 24);
 
-    const int labelH = 18;
-    const int colGap = static_cast<int> (m.padSmall);
-    const int rowGap = 10;
-    const int nCols = 5;
-    const int colW = (bounds.getWidth() - colGap * (nCols - 1)) / nCols;
+    const int knobY = 388;
+    const int knobW = 78;
+    const int knobH = 86;
+    lblRelease_.setBounds (42, knobY, knobW, 18);
+    sldRelease_.setBounds (42, knobY + 18, knobW, knobH);
+    lblReleaseSustain_.setBounds (132, knobY, knobW, 18);
+    sldReleaseSustain_.setBounds (132, knobY + 18, knobW, knobH);
+    lblLookahead_.setBounds (222, knobY, knobW, 18);
+    sldLookahead_.setBounds (222, knobY + 18, knobW, knobH);
+    lblReleaseAuto_.setBounds (312, knobY, knobW, 18);
+    btnReleaseAuto_.setBounds (314, knobY + 46, 74, 28);
+    lblStereoLink_.setBounds (402, knobY, knobW, 18);
+    sldStereoLink_.setBounds (402, knobY + 18, knobW, knobH);
+    lblMsLink_.setBounds (492, knobY, knobW, 18);
+    sldMsLink_.setBounds (492, knobY + 18, knobW, knobH);
 
-    auto placeCell = [&] (juce::Rectangle<int> cell, juce::Label& lbl, juce::Component& ctrl)
-    {
-        lbl.setBounds (cell.removeFromTop (labelH));
-        cell.removeFromTop (3);
-        ctrl.setBounds (cell);
-    };
+    gainMatchLabelArea_ = { 34, 492, 150, 18 };
+    btnGainMatchAutoTrack_.setBounds (34, 514, 126, 30);
+    lblGainMatchNote_.setBounds (170, 514, 220, 30);
 
-    auto row1 = bounds.removeFromTop (128);
-    int x = row1.getX();
+    meterGr_.setBounds (674, 104, 54, 354);
 
-    placeCell ({ x, row1.getY(), colW, row1.getHeight() }, lblInputGain_, sldInputGain_);
-    x += colW + colGap;
-    placeCell ({ x, row1.getY(), colW, row1.getHeight() }, lblCeiling_, sldCeiling_);
-    x += colW + colGap;
-    placeCell ({ x, row1.getY(), colW, row1.getHeight() }, lblRelease_, sldRelease_);
-    x += colW + colGap;
-    placeCell ({ x, row1.getY(), colW, row1.getHeight() }, lblReleaseAuto_, btnReleaseAuto_);
-    x += colW + colGap;
-    placeCell ({ x, row1.getY(), colW, row1.getHeight() }, lblLookahead_, sldLookahead_);
+    btnLearnInputGain_.setBounds (830, 102, 54, 22);
+    lblLearnInputLufs_.setBounds (894, 102, 92, 22);
 
-    bounds.removeFromTop (rowGap);
+    meterIn_.setBounds (790, 154, 116, 314);
+    meterOut_.setBounds (934, 154, 116, 314);
 
-    auto row2 = bounds.removeFromTop (128);
-    x = row2.getX();
+    lblIoInputTrim_.setBounds (790, 134, 116, 18);
+    sldIoInputTrimL_.setBounds (800, 184, 42, 250);
+    sldIoInputTrimR_.setBounds (856, 184, 42, 250);
+    btnIoInputLink_.setBounds (826, 470, 44, 20);
+    lblIoInputReadout_.setBounds (790, 492, 116, 20);
 
-    placeCell ({ x, row2.getY(), colW, row2.getHeight() }, lblCeilingMode_, cmbCeilingMode_);
-    x += colW + colGap;
-    placeCell ({ x, row2.getY(), colW, row2.getHeight() }, lblStereoLink_, sldStereoLink_);
-    x += colW + colGap;
-    placeCell ({ x, row2.getY(), colW, row2.getHeight() }, lblMsLink_, sldMsLink_);
-    x += colW + colGap;
-    placeCell ({ x, row2.getY(), colW, row2.getHeight() }, lblCharacter_, cmbCharacter_);
-    x += colW + colGap;
-    placeCell ({ x, row2.getY(), colW, row2.getHeight() }, lblReleaseSustain_, sldReleaseSustain_);
+    lblIoOutputTrim_.setBounds (934, 134, 116, 18);
+    sldIoOutputTrimL_.setBounds (946, 184, 42, 250);
+    sldIoOutputTrimR_.setBounds (1000, 184, 42, 250);
+    btnIoOutputLink_.setBounds (970, 470, 44, 20);
+    lblIoOutputReadout_.setBounds (934, 492, 116, 20);
+
+    lufsPanel_.setBounds (790, 520, 160, 68);
+    btnResetPeaks_.setBounds (962, 540, 100, 26);
+
+    sldIoInputTrimL_.toFront (false);
+    sldIoInputTrimR_.toFront (false);
+    sldIoOutputTrimL_.toFront (false);
+    sldIoOutputTrimR_.toFront (false);
+    btnIoInputLink_.toFront (false);
+    btnIoOutputLink_.toFront (false);
+    lblIoInputReadout_.toFront (false);
+    lblIoOutputReadout_.toFront (false);
+    btnBypass_.toFront (false);
+
+    meterStripArea_ = meterGr_.getBounds().getUnion (meterIn_.getBounds())
+                                      .getUnion (meterOut_.getBounds())
+                                      .getUnion (lufsPanel_.getBounds())
+                                      .getUnion (lblTruePeak_.getBounds());
 }
 
 void MainView::syncMetersFromProcessor()
@@ -256,13 +447,14 @@ void MainView::syncMetersFromProcessor()
     constexpr float dt = 1.0f / 30.0f;
 
     meterIn_.sync (sr, dt);
-    meterGr_.sync (sr, dt);
+    meterGr_.sync (dt);
     meterOut_.sync (sr, dt);
     lufsPanel_.refresh();
 
     int ceilingIdx = 0;
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         ceilingIdx = c->getIndex();
+    updateCeilingModeButton (ceilingIdx);
 
     const auto tpTag = (ceilingIdx == 1 ? juce::String ("TP") : juce::String ("SP"));
     const float tpDb = processor_.getOutputTpDb();

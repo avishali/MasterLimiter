@@ -4,6 +4,80 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-28 — Slice 10: Maximizer UI shell (Ozone-inspired two-panel layout)
+
+**Status:** ✅ Closed. UI shell only — no DSP, no APVTS changes, no existing
+param range/default/ID changes. Bench unaffected (editor-only). New controls
+land as **inert placeholders** and get real DSP/wiring in Slice 11.
+
+**Deliverables (product repo, UI-thread only)**
+- **Two-panel layout** matching `docs/mockups/SLICE10_ui_layout.svg`:
+  - **Maximizer** (left, wide): Gain (drive, placeholder, 0…+24 dB,
+    pointer parked at hard-left), Output Level (wired to `ceiling_db`),
+    SP/TP toggle (wired to `ceiling_mode`, replaced the dropdown), Character
+    slider (wired to `character`), Release/Sustain/Lookahead/Auto/Stereo-Lk/
+    M-S-Lk knobs (all wired), the dedicated GR meter, plus Gain-Match
+    Auto/Track and Gain⇄Ceiling Link toggles (placeholders).
+  - **I/O** (right): Learn Input Gain button (placeholder, compact), IN/OUT
+    `MeterGroupComponent`s on `MeterScaleMode::Top24Db`, vertical L/R fader
+    handles overlaid on the meter columns (placeholders, default
+    L/R-linked), small L/R Link toggles at the bottom of each meter group,
+    `LoudnessNumericPanel` (M/S/I LUFS), Reset Peaks.
+  - **Header**: title + Bypass button (placeholder).
+- **New components**
+  - `Source/ui/MasterLimiterLookAndFeel.{h,cpp}` — product LookAndFeel:
+    arc-style rotary knobs (~270° sweep, lower-left to lower-right),
+    rim-tick indicator + centred formatted value, teal accent, dark framed
+    panels, muted letter-spaced section labels.
+  - `Source/ui/meters/GainReductionMeter.{h,cpp}` — dedicated GR meter,
+    single bar, top-down, fine **0…−10 dB** scale (ticks 0/−2/−4/−6/−8/−10),
+    no clip LED, no peak/RMS box, fed live from `getCurrentGrDb()`.
+- **Resize stability** — `PluginEditor` uses
+  `setFixedAspectRatio(1100.0/620.0)` + `mainView.setTransform(AffineTransform::scale(w/1100))`,
+  with `MainView` laid out at the fixed 1100×620 design size. UI scales
+  uniformly across the editor's allowed range with no overlap/reflow.
+- **Slider readouts** formatted with sensible precision + single unit suffix
+  (Release `100 ms`, Sustain `4.0`, Lookahead `5.00 ms`, Links `100%`,
+  Output `−1.00 dB`, etc.). APVTS slider attachments install their own text
+  formatters on attach; cleared after attachment so each slider's
+  `setNumDecimalPlacesToDisplay` + `setTextValueSuffix` apply (this is the
+  fix for the double-dB and `99.999…` regressions).
+
+**Refinement rounds inside this slice**
+- Slice 10.0 — initial shell with placeholders.
+- Slice 10.1 — locked-aspect uniform scaling, product LookAndFeel,
+  dedicated GR meter, vertical L/R faders.
+- Slice 10.2 — rotary sweep + pointer tracks value, Bypass to header,
+  faders overlaid on meters, link button reposition, LUFS panel fix,
+  initial value-formatting pass.
+- Slice 10.3 — GR single bar 0…−10 with fine ticks, equalised
+  Gain/Output knob sizes, SP/TP toggle (was dropdown), compact Learn,
+  Character as a slider.
+- Slice 10.4 — Gain knob fully interactive (no snap-back), final
+  double-`dB`/decimal cleanup, meter cyan-artifact removed, IN/OUT scale
+  → `Top24Db`, centred I/O label, compact L/R Link buttons at the bottom
+  of each meter group, centred meter section labels.
+
+**Gate result**
+- [x] Debug + Release build clean. No new `Source/` warnings.
+- [x] HQ + AnalyzerPro untouched. Processor + parameters untouched.
+- [x] Bench unaffected (editor-only).
+- [x] Audition pass: layout matches mockup direction, knob pointers track
+      values, readouts clean, resize stable, meters legible top-weighted,
+      GR meter clear at low reduction, I/O panel meter-priority.
+
+**Deferred / known placeholders → Slice 11**
+- **Gain** drive (no APVTS attachment yet); **I/O Input/Output L/R faders**;
+  **Gain-Match Auto/Track**; **Gain⇄Ceiling Link** (needs real Gain to behave
+  correctly); **Learn Input Gain**. All become real with ADR-000X + Slice 11.
+- **Ceiling range** change from current `0…−12` → **`0…−24`** also folded
+  into Slice 11 (it's a frozen-param range change).
+- **GR L/R split** — gated on Slice 7 (stereo/M-S link DSP).
+- **Gain/Ceiling Link control restyle** — deferred to a later UI-graphics
+  pass per avishali's note.
+
+---
+
 ## 2026-05-27 — Slice 8.1: UI polish (AnalyzerPro meter/loudness pattern)
 
 **Status:** ✅ UI gate passed (audition 2026-05-27). DSP defects surfaced

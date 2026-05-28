@@ -269,8 +269,12 @@ target_sources(${PLUGIN_NAME}
         Source/parameters/ParameterIDs.h
         Source/ui/MainView.cpp
         Source/ui/MainView.h
+        Source/ui/MasterLimiterLookAndFeel.cpp
+        Source/ui/MasterLimiterLookAndFeel.h
         Source/ui/loudness/LoudnessNumericPanel.cpp
         Source/ui/loudness/LoudnessNumericPanel.h
+        Source/ui/meters/GainReductionMeter.cpp
+        Source/ui/meters/GainReductionMeter.h
         Source/ui/meters/MeterComponent.cpp
         Source/ui/meters/MeterComponent.h
         Source/ui/meters/MeterGroupComponent.cpp
