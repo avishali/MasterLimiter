@@ -89,6 +89,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     setupLabel (lblGainDrive_);
     setupLabel (lblGainDriveRange_);
+    setupLabel (lblClipperDrive_);
+    setupLabel (lblClipperReadout_);
     setupLabel (lblCeiling_);
     setupLabel (lblRelease_);
     setupLabel (lblReleaseSustain_);
@@ -106,6 +108,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblIoOutputReadout_);
 
     styleRotary (sldGainDrive_);
+    styleRotary (sldClipperDrive_);
     styleRotary (sldCeiling_);
     styleRotary (sldRelease_);
     styleRotary (sldReleaseSustain_);
@@ -124,6 +127,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldGainDrive_.setValue (0.0, juce::dontSendNotification);
 
     addAndMakeVisible (sldGainDrive_);
+    addAndMakeVisible (sldClipperDrive_);
     addAndMakeVisible (sldCeiling_);
     addAndMakeVisible (sldRelease_);
     addAndMakeVisible (sldReleaseSustain_);
@@ -137,6 +141,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldMsLink_);
 
     btnGainCeilingLink_.setClickingTogglesState (true);
+    btnLimiterActive_.setClickingTogglesState (true);
     btnGainMatchAutoTrack_.setClickingTogglesState (true);
     btnIoInputLink_.setClickingTogglesState (true);
     btnIoInputLink_.setButtonText ("L/R");
@@ -146,6 +151,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnIoOutputLink_.setToggleState (true, juce::dontSendNotification);
     btnBypass_.setClickingTogglesState (true);
     addAndMakeVisible (btnGainCeilingLink_);
+    addAndMakeVisible (btnLimiterActive_);
     addAndMakeVisible (btnGainMatchAutoTrack_);
     addAndMakeVisible (btnLearnInputGain_);
     addAndMakeVisible (sldIoInputTrimL_);
@@ -157,6 +163,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (btnBypass_);
 
     attGainDrive_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::input_gain_db), sldGainDrive_);
+    attLimiterActive_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::limiter_active), btnLimiterActive_);
+    attClipperDrive_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::clipper_drive_db), sldClipperDrive_);
     attCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ceiling_db), sldCeiling_);
     attGainCeilingLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_ceiling_link), btnGainCeilingLink_);
     attRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_ms), sldRelease_);
@@ -181,6 +189,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     };
 
     useSliderTextboxFormat (sldGainDrive_, 2, " dB");
+    useSliderTextboxFormat (sldClipperDrive_, 2, " dB");
     useSliderTextboxFormat (sldCeiling_, 2, " dB");
     useSliderTextboxFormat (sldRelease_, 0, " ms");
     useSliderTextboxFormat (sldReleaseSustain_, 1, juce::String());
@@ -191,7 +200,15 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     useSliderTextboxFormat (sldIoInputTrimR_, 2, " dB");
     useSliderTextboxFormat (sldIoOutputTrimL_, 2, " dB");
     useSliderTextboxFormat (sldIoOutputTrimR_, 2, " dB");
-    sldCharacter_.textFromValueFunction = [] (double) { return juce::String ("Clean"); };
+    sldCharacter_.textFromValueFunction = [] (double v)
+    {
+        switch (juce::jlimit (0, 2, (int) std::lround (v)))
+        {
+            case 0:  return juce::String ("Clean");
+            case 2:  return juce::String ("Aggressive");
+            default: return juce::String ("Tight");
+        }
+    };
 
     addAndMakeVisible (meterIn_);
     addAndMakeVisible (meterGr_);
@@ -208,6 +225,11 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
         resetPeakHolds();
     };
     addAndMakeVisible (btnResetPeaks_);
+
+    btnLimiterActive_.onClick = [this]
+    {
+        updateLimiterActiveState();
+    };
 
     sldIoInputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
     sldIoInputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimR_, sldIoInputTrimL_, btnIoInputLink_); };
@@ -227,10 +249,13 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
         }
     };
     updateIoTrimReadouts();
+    updateLimiterActiveState();
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         updateCeilingModeButton (c->getIndex());
 
     sldGainDrive_.setTooltip ("Drive into the limiter in dB.");
+    btnLimiterActive_.setTooltip ("Turns the limiter section on or off while preserving I/O trims.");
+    sldClipperDrive_.setTooltip ("Pre-envelope clipper drive in dB.");
     btnGainCeilingLink_.setTooltip ("When enabled, Gain and Ceiling move inversely.");
     btnGainMatchAutoTrack_.setTooltip (kPlaceholderTooltip);
     btnLearnInputGain_.setTooltip (kPlaceholderTooltip);
@@ -249,7 +274,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
     sldStereoLink_.setTooltip ("Stereo linking between channels (0–100%).");
     sldMsLink_.setTooltip ("Mid/side stereo link amount (0–100%).");
-    sldCharacter_.setTooltip ("Character / color mode (Clean in v0.1).");
+    sldCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
 }
 
 MainView::~MainView() = default;
@@ -313,6 +338,14 @@ void MainView::updateCeilingModeButton (int ceilingIdx)
     btnCeilingMode_.setToggleState (isTruePeak, juce::dontSendNotification);
 }
 
+void MainView::updateLimiterActiveState()
+{
+    const bool active = btnLimiterActive_.getToggleState();
+    btnLimiterActive_.setButtonText (active ? "Limiter On" : "Limiter Off");
+    lastLimiterActive_ = active;
+    repaint (maximizerPanelArea_);
+}
+
 void MainView::paint (juce::Graphics& g)
 {
     const auto& theme = ui_.theme();
@@ -339,7 +372,9 @@ void MainView::paint (juce::Graphics& g)
         g.drawRoundedRectangle (panel.reduced (0.5f), m.rLarge, m.strokeThin);
 
         auto titleArea = area.reduced (18, 10).removeFromTop (18);
-        g.setColour (theme.textMuted.withAlpha (0.8f));
+        const bool limiterOffTitle = title == "M A X I M I Z E R" && ! btnLimiterActive_.getToggleState();
+        g.setColour (limiterOffTitle ? juce::Colours::red.withAlpha (0.78f)
+                                      : theme.textMuted.withAlpha (0.8f));
         g.setFont (type.labelFont().withHeight (13.0f).boldened());
         g.drawText (title, titleArea, title == "I/O" ? juce::Justification::centred : juce::Justification::centredLeft, true);
     };
@@ -357,7 +392,14 @@ void MainView::paint (juce::Graphics& g)
     g.setColour (theme.textMuted.withAlpha (0.72f));
     g.setFont (type.labelFont().withHeight (11.0f));
     g.drawText ("Clean", juce::Rectangle<int> { 34, 362, 80, 16 }, juce::Justification::centredLeft);
-    g.drawText ("Fast & Loud", juce::Rectangle<int> { 330, 362, 104, 16 }, juce::Justification::centredRight);
+    g.drawText ("Aggressive", juce::Rectangle<int> { 330, 362, 104, 16 }, juce::Justification::centredRight);
+
+    if (clipLedLevel_ > 0.001f)
+    {
+        const auto led = lblClipperReadout_.getBounds().removeFromRight (12).withSizeKeepingCentre (8, 8).toFloat();
+        g.setColour (theme.warning.withAlpha (juce::jlimit (0.0f, 1.0f, clipLedLevel_)));
+        g.fillEllipse (led);
+    }
 
     if (! footerArea_.isEmpty())
     {
@@ -379,6 +421,7 @@ void MainView::resized()
     header_.setBounds (24, 8, 150, 34);
     headerMode_.setBounds (184, 12, 170, 28);
     btnBypass_.setBounds (982, 12, 92, 28);
+    btnLimiterActive_.setBounds (612, 82, 116, 24);
 
     lblGainDrive_.setBounds (48, 116, 140, 18);
     sldGainDrive_.setBounds (40, 134, 156, 136);
@@ -409,6 +452,9 @@ void MainView::resized()
     sldStereoLink_.setBounds (402, knobY + 18, knobW, knobH);
     lblMsLink_.setBounds (492, knobY, knobW, 18);
     sldMsLink_.setBounds (492, knobY + 18, knobW, knobH);
+    lblClipperDrive_.setBounds (582, knobY, knobW, 18);
+    sldClipperDrive_.setBounds (582, knobY + 18, knobW, knobH - 18);
+    lblClipperReadout_.setBounds (582, knobY + 82, knobW, 18);
 
     gainMatchLabelArea_ = { 34, 492, 150, 18 };
     btnGainMatchAutoTrack_.setBounds (34, 514, 126, 30);
@@ -445,6 +491,7 @@ void MainView::resized()
     btnIoOutputLink_.toFront (false);
     lblIoInputReadout_.toFront (false);
     lblIoOutputReadout_.toFront (false);
+    btnLimiterActive_.toFront (false);
     btnBypass_.toFront (false);
 
     meterStripArea_ = meterGr_.getBounds().getUnion (meterIn_.getBounds())
@@ -467,6 +514,22 @@ void MainView::syncMetersFromProcessor()
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         ceilingIdx = c->getIndex();
     updateCeilingModeButton (ceilingIdx);
+
+    if (btnLimiterActive_.getToggleState() != lastLimiterActive_)
+        updateLimiterActiveState();
+
+    const float clipDb = processor_.getCurrentClipDb();
+    if (clipDb > 0.0f)
+    {
+        clipLedLevel_ = 1.0f;
+        lblClipperReadout_.setText ("Clip: " + juce::String (clipDb, 1) + " dB", juce::dontSendNotification);
+    }
+    else
+    {
+        clipLedLevel_ *= std::exp (-dt / 0.2f);
+        lblClipperReadout_.setText ("Clip: —", juce::dontSendNotification);
+    }
+    repaint (lblClipperReadout_.getBounds().expanded (12, 2));
 
     const auto tpTag = (ceilingIdx == 1 ? juce::String ("TP") : juce::String ("SP"));
     const float tpDb = processor_.getOutputTpDb();

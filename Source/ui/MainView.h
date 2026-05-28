@@ -46,6 +46,7 @@ private:
     void syncLinkedFaders (juce::Slider& source, juce::Slider& target, juce::ToggleButton& link);
     void updateIoTrimReadouts();
     void updateCeilingModeButton (int ceilingIdx);
+    void updateLimiterActiveState();
 
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
@@ -65,6 +66,11 @@ private:
     juce::Slider sldGainDrive_;
     juce::Label lblGainDriveRange_ { {}, "0 to +24 dB drive" };
     juce::ToggleButton btnGainCeilingLink_ { "Gain / Ceiling Link" };
+    juce::ToggleButton btnLimiterActive_ { "Limiter" };
+
+    juce::Label lblClipperDrive_ { {}, "Clipper" };
+    juce::Slider sldClipperDrive_;
+    juce::Label lblClipperReadout_ { {}, "Clip: —" };
 
     juce::Label lblCeiling_ { {}, "Output Level" };
     juce::Slider sldCeiling_;
@@ -120,8 +126,12 @@ private:
 
     TpReadoutSmoother tpSmoother_ {};
     bool adjustingIoFaders_ { false };
+    bool lastLimiterActive_ { true };
+    float clipLedLevel_ { 0.0f };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attGainDrive_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attLimiterActive_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attClipperDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainCeilingLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRelease_;

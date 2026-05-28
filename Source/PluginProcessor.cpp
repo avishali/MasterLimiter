@@ -15,6 +15,16 @@ float readFloatParam (juce::AudioProcessorValueTreeState& apvts, const char* par
     jassert (p != nullptr);
     return (float) static_cast<juce::RangedAudioParameter*> (p)->convertFrom0to1 (p->getValue());
 }
+
+mdsp_dsp::LimiterEnvelope::Mode mapCharacterIndexToMode (int index) noexcept
+{
+    switch (index)
+    {
+        case 0:  return mdsp_dsp::LimiterEnvelope::Mode::Clean;
+        case 2:  return mdsp_dsp::LimiterEnvelope::Mode::Aggressive;
+        default: return mdsp_dsp::LimiterEnvelope::Mode::Tight;
+    }
+}
 } // namespace
 
 //==============================================================================
@@ -28,6 +38,8 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
              Parameters::createParameterLayout())
 {
     jassert (apvts.getParameter ("input_gain_db") != nullptr);
+    jassert (apvts.getParameter ("limiter_active") != nullptr);
+    jassert (apvts.getParameter ("clipper_drive_db") != nullptr);
     jassert (apvts.getParameter ("ceiling_db") != nullptr);
     jassert (apvts.getParameter ("io_input_l_db") != nullptr);
     jassert (apvts.getParameter ("io_input_r_db") != nullptr);
@@ -38,6 +50,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("release_ms") != nullptr);
     jassert (apvts.getParameter ("release_sustain_ratio") != nullptr);
     jassert (apvts.getParameter ("gain_ceiling_link") != nullptr);
+    jassert (apvts.getParameter ("character") != nullptr);
 
     apvts.addParameterListener (param::input_gain_db.data(), this);
     apvts.addParameterListener (param::ceiling_db.data(), this);
@@ -74,9 +87,16 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     gainBuf_.setSize (1, samplesPerBlock, false, true, true);
 
     ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
+    characterChoice_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("character"));
     jassert (ceilingMode_ != nullptr);
+    jassert (characterChoice_ != nullptr);
 
     cacheGainCeilingLinkParameters();
+
+    limiterActive_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("limiter_active"));
+    clipperDriveDb_ = apvts.getRawParameterValue ("clipper_drive_db");
+    jassert (limiterActive_ != nullptr);
+    jassert (clipperDriveDb_ != nullptr);
 
     releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
     jassert (releaseSustainRatio_ != nullptr);
@@ -225,9 +245,10 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
-        || ceilingMode_ == nullptr || gainCeilingLink_ == nullptr || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr
-        || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr || ioInputLink_ == nullptr
-        || ioOutputLink_ == nullptr)
+        || ceilingMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
+        || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || ioInputLDb_ == nullptr
+        || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
+        || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -251,38 +272,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         inputPeakRDb_.store (juce::Decibels::gainToDecibels (pR, -100.0f), std::memory_order_relaxed);
     }
 
-    const float inGainLin = juce::Decibels::decibelsToGain (inputGainDbParam_->get());
-    for (int ch = 0; ch < nch; ++ch)
-        buffer.applyGain (ch, 0, n, inGainLin);
-
-    auto* peak = peakBuf_.getWritePointer (0);
-    const float* const ch0 = buffer.getReadPointer (0);
-    const float* const ch1 = nch > 1 ? buffer.getReadPointer (1) : ch0;
-    const float* const channelPtrs[2] = { ch0, ch1 };
-
-    for (int i = 0; i < n; ++i)
-        peak[i] = peakDetector_.process (channelPtrs, nch, i);
-
-    const float thresholdLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
-    envelope_.setThresholdLinear (thresholdLin);
-    envelope_.setReleaseMs (readFloatParam (apvts, "release_ms"));
-    envelope_.setReleaseSustainRatio (releaseSustainRatio_->get());
-
-    auto* gain = gainBuf_.getWritePointer (0);
-    envelope_.process (peak, gain, n);
-
-    for (int ch = 0; ch < nch; ++ch)
-    {
-        auto* d = buffer.getWritePointer (ch);
-        for (int i = 0; i < n; ++i)
-        {
-            const float delayed = lookahead_.pushPop (ch, d[i]);
-            d[i] = delayed * gain[i];
-        }
-    }
-
-    currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
-
     const int modeIdx = ceilingMode_->getIndex();
 
     if (modeIdx != cachedCeilingMode_)
@@ -294,15 +283,84 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         cachedCeilingMode_ = modeIdx;
     }
 
-    if (modeIdx == 1)
+    if (limiterActive_->get())
     {
-        ispTrim_.setCeilingLinear (thresholdLin);
-        ispTrim_.process (buffer);
-        currentTpTrimDb_.store (ispTrim_.getLastBlockMaxTpDbReduction(), std::memory_order_relaxed);
+        const float inGainLin = juce::Decibels::decibelsToGain (inputGainDbParam_->get());
+        for (int ch = 0; ch < nch; ++ch)
+            buffer.applyGain (ch, 0, n, inGainLin);
+
+        const float clipperDriveDb = clipperDriveDb_->load (std::memory_order_relaxed);
+        if (clipperDriveDb > 0.0f)
+        {
+            const float driveGain = juce::Decibels::decibelsToGain (clipperDriveDb);
+            float maxPreClipAbs = 0.0f;
+            for (int ch = 0; ch < nch; ++ch)
+            {
+                auto* d = buffer.getWritePointer (ch);
+                for (int i = 0; i < n; ++i)
+                {
+                    const float scaled = d[i] * driveGain;
+                    const float a = std::abs (scaled);
+                    if (a > maxPreClipAbs)
+                        maxPreClipAbs = a;
+                    d[i] = juce::jlimit (-1.0f, 1.0f, scaled);
+                }
+            }
+            currentClipDb_.store (maxPreClipAbs > 1.0f
+                                      ? juce::Decibels::gainToDecibels (maxPreClipAbs)
+                                      : 0.0f,
+                                  std::memory_order_relaxed);
+        }
+        else
+        {
+            currentClipDb_.store (0.0f, std::memory_order_relaxed);
+        }
+
+        auto* peak = peakBuf_.getWritePointer (0);
+        const float* const ch0 = buffer.getReadPointer (0);
+        const float* const ch1 = nch > 1 ? buffer.getReadPointer (1) : ch0;
+        const float* const channelPtrs[2] = { ch0, ch1 };
+
+        for (int i = 0; i < n; ++i)
+            peak[i] = peakDetector_.process (channelPtrs, nch, i);
+
+        const float thresholdLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
+        envelope_.setThresholdLinear (thresholdLin);
+        envelope_.setReleaseMs (readFloatParam (apvts, "release_ms"));
+        envelope_.setReleaseSustainRatio (releaseSustainRatio_->get());
+        envelope_.setMode (mapCharacterIndexToMode (characterChoice_->getIndex()));
+
+        auto* gain = gainBuf_.getWritePointer (0);
+        envelope_.process (peak, gain, n);
+
+        for (int ch = 0; ch < nch; ++ch)
+        {
+            auto* d = buffer.getWritePointer (ch);
+            for (int i = 0; i < n; ++i)
+            {
+                const float delayed = lookahead_.pushPop (ch, d[i]);
+                d[i] = delayed * gain[i];
+            }
+        }
+
+        currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
+
+        if (modeIdx == 1)
+        {
+            ispTrim_.setCeilingLinear (thresholdLin);
+            ispTrim_.process (buffer);
+            currentTpTrimDb_.store (ispTrim_.getLastBlockMaxTpDbReduction(), std::memory_order_relaxed);
+        }
+        else
+        {
+            currentTpTrimDb_.store (0.0f, std::memory_order_relaxed);
+        }
     }
     else
     {
+        currentGrDb_.store (0.0f, std::memory_order_relaxed);
         currentTpTrimDb_.store (0.0f, std::memory_order_relaxed);
+        currentClipDb_.store (0.0f, std::memory_order_relaxed);
     }
 
     const float ioOutputLGain = juce::Decibels::decibelsToGain (ioOutputLDb_->load (std::memory_order_relaxed));

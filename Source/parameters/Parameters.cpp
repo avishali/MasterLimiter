@@ -24,6 +24,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         0.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
 
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (limiter_active, 1),
+        "Limiter Active",
+        true,
+        AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (clipper_drive_db, 1),
+        "Clipper Drive",
+        NormalisableRange<float> (0.0f, 12.0f, 0.01f),
+        0.0f,
+        AudioParameterFloatAttributes().withLabel ("dB")));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (ceiling_db, 1),
         "Ceiling",
@@ -81,7 +94,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (release_ms, 1),
         "Release",
         NormalisableRange<float> (1.0f, 1000.0f, 0.0f, 0.3f),
-        100.0f,
+        30.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
     layout.add (std::make_unique<AudioParameterFloat> (
@@ -136,8 +149,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (character, 1),
         "Character",
-        StringArray { "Clean" },
-        0,
+        StringArray { "Clean", "Tight", "Aggressive" },
+        1,
         AudioParameterChoiceAttributes()));
 
     return layout;

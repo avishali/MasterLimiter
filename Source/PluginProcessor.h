@@ -52,6 +52,7 @@ public:
 
     float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
     float getCurrentTpTrimDb() const noexcept { return currentTpTrimDb_.load (std::memory_order_relaxed); }
+    float getCurrentClipDb() const noexcept { return currentClipDb_.load (std::memory_order_relaxed); }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
     float getInputPeakRDb() const noexcept { return inputPeakRDb_.load (std::memory_order_relaxed); }
@@ -78,10 +79,13 @@ private:
     juce::AudioBuffer<float> gainBuf_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
+    juce::AudioParameterChoice* characterChoice_ = nullptr;
     juce::AudioParameterFloat* inputGainDbParam_ = nullptr;
     juce::AudioParameterFloat* ceilingDbParam_ = nullptr;
+    juce::AudioParameterBool* limiterActive_ = nullptr;
     juce::AudioParameterBool* gainCeilingLink_ = nullptr;
     juce::AudioParameterFloat* releaseSustainRatio_ = nullptr;
+    std::atomic<float>* clipperDriveDb_ = nullptr;
     std::atomic<float>* ioInputLDb_ = nullptr;
     std::atomic<float>* ioInputRDb_ = nullptr;
     std::atomic<float>* ioOutputLDb_ = nullptr;
@@ -95,6 +99,7 @@ private:
 
     std::atomic<float> currentGrDb_ { 0.0f };
     std::atomic<float> currentTpTrimDb_ { 0.0f };
+    std::atomic<float> currentClipDb_ { 0.0f };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
     std::atomic<float> inputPeakRDb_ { -100.0f };
