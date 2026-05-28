@@ -74,6 +74,13 @@ private:
     mdsp_dsp::PeakDetector peakDetector_;
     mdsp_dsp::LimiterEnvelope envelope_;
     mdsp_dsp::IspTrimStage ispTrim_;
+    juce::dsp::Oversampling<float> limiterOversampler_ {
+        2,
+        2,
+        juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
+        true,
+        true
+    };
 
     juce::AudioBuffer<float> peakBuf_;
     juce::AudioBuffer<float> gainBuf_;
@@ -94,6 +101,7 @@ private:
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 
     int  baseLatencySamples_ = 0;
+    int  limiterOsLatencySamples_ = 0;
     int  osLatencySamples_   = 0;
     int  cachedCeilingMode_   = 0;
 

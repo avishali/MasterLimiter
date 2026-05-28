@@ -66,15 +66,24 @@ MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
 
 void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    const int lookaheadSamples = static_cast<int> (std::llround (5.0e-3 * sampleRate));
-    lookahead_.prepare (2, lookaheadSamples);
-    lookahead_.setDelaySamples (lookaheadSamples);
+    constexpr int osFactor = 4;
+    const int baseLookaheadSamples = static_cast<int> (std::llround (5.0e-3 * sampleRate));
+    const int osLookaheadSamples = baseLookaheadSamples * osFactor;
+    const int osMaxBlockSize = samplesPerBlock * osFactor;
+    const double osSampleRate = sampleRate * (double) osFactor;
+
+    limiterOversampler_.initProcessing ((size_t) samplesPerBlock);
+    limiterOversampler_.reset();
+    limiterOsLatencySamples_ = (int) std::llround ((double) limiterOversampler_.getLatencyInSamples());
+
+    lookahead_.prepare (2, osLookaheadSamples);
+    lookahead_.setDelaySamples (osLookaheadSamples);
     peakDetector_.prepare (2);
 
     mdsp_dsp::LimiterEnvelope::Spec spec;
-    spec.sampleRate = sampleRate;
-    spec.lookaheadSamples = lookaheadSamples;
-    spec.maxBlockSize = samplesPerBlock;
+    spec.sampleRate = osSampleRate;
+    spec.lookaheadSamples = osLookaheadSamples;
+    spec.maxBlockSize = osMaxBlockSize;
     envelope_.prepare (spec);
 
     mdsp_dsp::IspTrimStage::Spec tspec;
@@ -83,8 +92,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     tspec.maxBlockSize  = samplesPerBlock;
     ispTrim_.prepare (tspec);
 
-    peakBuf_.setSize (1, samplesPerBlock, false, true, true);
-    gainBuf_.setSize (1, samplesPerBlock, false, true, true);
+    peakBuf_.setSize (1, osMaxBlockSize, false, true, true);
+    gainBuf_.setSize (1, osMaxBlockSize, false, true, true);
 
     ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
     characterChoice_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("character"));
@@ -115,10 +124,11 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (ioInputLink_ != nullptr);
     jassert (ioOutputLink_ != nullptr);
 
-    baseLatencySamples_ = lookaheadSamples;
+    baseLatencySamples_ = baseLookaheadSamples + limiterOsLatencySamples_;
     osLatencySamples_   = ispTrim_.getLatencyInSamples();
     cachedCeilingMode_  = ceilingMode_->getIndex();
 
+    limiterOversampler_.reset();
     lookahead_.reset();
     envelope_.reset();
     ispTrim_.reset();
@@ -289,6 +299,10 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         for (int ch = 0; ch < nch; ++ch)
             buffer.applyGain (ch, 0, n, inGainLin);
 
+        juce::dsp::AudioBlock<float> block (buffer);
+        auto osBlock = limiterOversampler_.processSamplesUp (block);
+        const int osN = (int) osBlock.getNumSamples();
+
         const float clipperDriveDb = clipperDriveDb_->load (std::memory_order_relaxed);
         if (clipperDriveDb > 0.0f)
         {
@@ -296,8 +310,8 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
             float maxPreClipAbs = 0.0f;
             for (int ch = 0; ch < nch; ++ch)
             {
-                auto* d = buffer.getWritePointer (ch);
-                for (int i = 0; i < n; ++i)
+                auto* d = osBlock.getChannelPointer ((size_t) ch);
+                for (int i = 0; i < osN; ++i)
                 {
                     const float scaled = d[i] * driveGain;
                     const float a = std::abs (scaled);
@@ -317,11 +331,11 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         }
 
         auto* peak = peakBuf_.getWritePointer (0);
-        const float* const ch0 = buffer.getReadPointer (0);
-        const float* const ch1 = nch > 1 ? buffer.getReadPointer (1) : ch0;
+        const float* const ch0 = osBlock.getChannelPointer ((size_t) 0);
+        const float* const ch1 = nch > 1 ? osBlock.getChannelPointer ((size_t) 1) : ch0;
         const float* const channelPtrs[2] = { ch0, ch1 };
 
-        for (int i = 0; i < n; ++i)
+        for (int i = 0; i < osN; ++i)
             peak[i] = peakDetector_.process (channelPtrs, nch, i);
 
         const float thresholdLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
@@ -331,12 +345,12 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         envelope_.setMode (mapCharacterIndexToMode (characterChoice_->getIndex()));
 
         auto* gain = gainBuf_.getWritePointer (0);
-        envelope_.process (peak, gain, n);
+        envelope_.process (peak, gain, osN);
 
         for (int ch = 0; ch < nch; ++ch)
         {
-            auto* d = buffer.getWritePointer (ch);
-            for (int i = 0; i < n; ++i)
+            auto* d = osBlock.getChannelPointer ((size_t) ch);
+            for (int i = 0; i < osN; ++i)
             {
                 const float delayed = lookahead_.pushPop (ch, d[i]);
                 d[i] = delayed * gain[i];
@@ -344,6 +358,7 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         }
 
         currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
+        limiterOversampler_.processSamplesDown (block);
 
         if (modeIdx == 1)
         {
