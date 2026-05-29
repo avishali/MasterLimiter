@@ -4,6 +4,132 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## Slice 7 — Stereo Link % + 2ch GR meter + envelope SIMD (2026-05-29)
+
+**Shipped (final state across the 7.x family):**
+
+Product (`MasterLimiter`):
+- **Stereo Link %** — new param `stereo_link_pct` (float 0..100%, step
+  0.1, default 100, frozen ID, "XX%" UI). Per-channel parallel
+  `LimiterEnvelope` instances (`envelope_L_` / `envelope_R_`) with
+  gain blend:
+    g_linked = min(g_L, g_R)
+    g_out_L  = link · g_linked + (1 − link) · g_L
+    g_out_R  = link · g_linked + (1 − link) · g_R
+  Fast-path at link ≥ 99.95: bit-exact Slice 9.6 behaviour (single
+  envelope on max(|L|, |R|), shared gain). Default 100 lands here →
+  Slice 3/4/5 bench PASS bit-exact.
+- **2ch GR meter** — two thin L/R bars in a dark inset slot,
+  top-down warning fill, single compact "current / max" readout
+  (e.g. "3.2 / 5.1"). Click the readout to reset latched max.
+- **Latched max readouts** for GR and Clipper. Click-to-reset.
+  Always-numeric formatting (no em-dash, no placeholder text).
+- **Clipper LED relocated** out of the readout text region (sits in
+  the Clipper knob label area now).
+- **limiter_active button relocated** from the Maximizer panel
+  header to a position above and between the Gain and Ceiling knobs,
+  so it no longer crowds the wider 2-bar GR meter.
+
+HQ (`mdsp_dsp::LimiterEnvelope`):
+- **NEON SIMD** on the inner ramp loop (`vld1q_f32`, `vfmaq_f32`,
+  `vminq_f32`, `vst1q_f32`) with `__ARM_NEON` guard and `__SSE2__`
+  fallback (`_mm_loadu_ps`, `_mm_mul_ps`, `_mm_add_ps`, `_mm_min_ps`,
+  `_mm_storeu_ps`). Assembly inspection confirms `fmla.4s` / `fmin.4s`
+  on arm64. ~4× speedup on the per-peak ramp work; resolves the
+  audible buffer underrun that occurred under heavy GR (Clean mode,
+  any Link value).
+- Loop refactored to forward j-iteration (substitute j = i + la − k)
+  so `ext_` and `attackTable_` read forward with stride 1 —
+  SIMD-friendly memory access.
+
+HQ (`dsp_bench`):
+- ADR-0008 documenting the stereo unlink decision (per-channel
+  parallel envelopes, gain blend math, fast-path bit-exactness,
+  constant latency, detection-bus-only — mirrors ADR-0005 reasoning,
+  M/S deferred as orthogonal axis).
+- Slice 3/4/5 PASS 13/13, 14/14, 25/25 unchanged after SIMD (math is
+  bit-equivalent within float-rounding tolerance; criteria
+  accommodate sub-epsilon variance).
+
+**Pop investigation arc (resolved, debug probes removed):**
+
+The 7.x family included a five-step pop investigation that surfaced
+several diagnostic findings:
+- 7.1.1: added per-section timing probe, tried envelope_R_ warm-keep
+  as defensive fix.
+- 7.1.2: numeric readouts (em-dash mojibake fix), Clipper LED
+  relocation, output click detector (max delta + max abs + click
+  counter).
+- 7.1.3: data showed warm-keep was paying CPU for a hypothesis
+  disproved by the click counter; reverted. Lowered click threshold
+  0.5 → 0.2 to chase subtler events. Added last-click section
+  snapshot via atomic stores.
+- 7.1.4: tried SIMD refactor via juce::dsp::SIMDRegister, but
+  available JUCE version's `fromRawArray` asserted on alignment.
+  Cursor's unaligned-wrapper workaround produced mathematically
+  correct output (bench PASS) but didn't actually vectorize.
+  avishali audition confirmed: mode-scaled pops (Aggressive 0,
+  Tight moderate, Clean many) — direct evidence of scalar-loop cost
+  proportional to attackSamples.
+- 7.1.4.1: replaced with direct NEON intrinsics. Assembly verified
+  SIMD engaged. avishali audition: pops resolved.
+- 7.1.5: raised click threshold back to 0.5 (the 0.2 threshold
+  caught legitimate brickwall transients as "clicks"). Attempted
+  Clean attack cap 3 → 1.5 ms for further CPU correlation reduction
+  but bench failed (sine sweep null −3.16 dB, IMD 10.05% / 10.0,
+  SP overs 4400 / 2200) — character changed more than predicted.
+  Reverted the cap; click threshold change shipped on its own.
+
+This close commit removes the debug instrumentation (per-section
+timing watermarks, click detector, last-click snapshot) — production
+code is cleaner without them and the audible issue they helped
+diagnose is resolved.
+
+**ADRs:**
+- ADR-0008 (Stereo unlink / per-channel parallel envelopes) — accepted
+  2026-05-29.
+
+**Gate status:**
+- Builds clean (Release + Debug).
+- avishali audition: default 100% sounds identical to Slice 9.6
+  (fast-path bit-exactness). Sweep 100 → 50 → 0 produces progressive
+  width preservation. A/B vs Ozone Stereo Unlink: width gap closed
+  into family. Pops resolved across all Character modes and Link
+  values after the 7.1.4.1 NEON SIMD fix.
+- Constant latency: 301 SP / 301 TP at 48k, unchanged from Slice 9.6.
+  Link % automation produces no PDC change.
+- Bench: Slice 3/4/5 PASS 13/13, 14/14, 25/25 — bit-exact at default
+  link = 100 via fast-path; SIMD ramp loop bit-equivalent within
+  float-rounding tolerance.
+- Reference Ozone IRC IV comparison from Slice 9.6c shows MasterLimiter
+  in family for IMD (~25% wider on synthetic SMPTE corpus); the
+  remaining ~7 dB null residual gap and the visible CPU↔GR
+  correlation in Ableton's CPU meter on heavy unlinked Clean
+  reduction are architectural (single-band 4× OS limiting). Lever for
+  parity is multiband detection (new ADR-0009 — promoted to active
+  backlog).
+
+**Deferred / placeholders:**
+- `ms_link_pct` ID stays in `ParameterIDs.h` as a deferred placeholder
+  for a future Slice 7b (M/S detection) if ever promoted from backlog.
+- Per-channel envelope SIMD optimisation OF the smoothing stage —
+  current SIMD covers the dominant inner ramp loop; smoothing could
+  be vectorized in a future micro-slice if needed.
+- Slice 7.1.5's Clean attack cap to 1.5 ms attempted and reverted —
+  character change exceeded expectation. Not in backlog as separate
+  item; subsumed by the multiband detection direction.
+
+**Followups in PLAN backlog:**
+- Slice 11b2 (Auto/Track + Learn + Bypass-with-match) promoted to
+  next active slice.
+- Multiband detection (new ADR-0009) — primary lever for the
+  remaining "open" gap vs Ozone IRC IV and the architectural CPU↔GR
+  correlation.
+- Slice 7b (M/S detection) — placeholder param retained; no active
+  demand.
+
+---
+
 ## 2026-05-29 — Slice 9: Limiter character + Clipper Drive + on/off
 
 **Status:** ✅ Closed. Product character modes, Clipper Drive, limiter

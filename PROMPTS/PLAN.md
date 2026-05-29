@@ -38,22 +38,24 @@ slice or split a follow-up slice.
 | 4  | True-peak detector + 4× oversampler on ceiling         | `mdsp_dsp/TruePeakDetector`, `Oversampler`  | TP mode toggle         | Zero TP overs at ceiling −1 dBTP across corpus.                |
 | 5  | Transient/sustain split (ADR-0005 decision)            | `mdsp_dsp/TransientSustainSplit`            | —                      | Clean 5 dB GR on drum loop + dense mix per §5 criteria.        |
 | 6  | Soft-knee sub-audible saturator                        | `mdsp_dsp/SoftKneeSaturator`                | —                      | THD+N delta within bounds at 7 dB GR push.                     |
-| 7  | **NEXT — Stereo / M-S link options**                   | `mdsp_dsp/StereoMSLink`                     | params + UI            | Bench A/B confirms link % continuum behaves monotonically.     |
+| 7  | ✅ **Shipped — Stereo Link % + 2ch GR meter + envelope SIMD** | ADR-0008; `LimiterEnvelope` SIMD ramp loop | `stereo_link_pct`, per-channel envelopes, 2ch GR meter, latched max readouts | Shipped 2026-05-29. Per-channel parallel envelopes with continuous Link % blend (frozen ID `stereo_link_pct`, default 100% = bit-exact fast-path). 2ch GR meter + latched-max readouts. NEON SIMD inner ramp loop (~4× speedup, resolves heavy-GR underrun). Constant latency 301/301. Bench Slice 3/4/5 PASS 13/13, 14/14, 25/25 unchanged. ADR-0008. M/S deferred. Multiband detection promoted as next architectural lever for "open" gap and CPU↔GR correlation parity with Ozone. |
 | 8  | Meters (GR + TP) to mdsp_ui                            | `mdsp_ui/GainReductionMeter`, `TruePeakMeter`| UI assembly           | Meters track snapshots accurately, no UI-thread DSP access.    |
 | 9  | ✅ **Shipped — Limiter character + Clipper Drive + on/off** | `LimiterEnvelope::Mode`; `dsp_bench` recal + Ozone reference driver | `limiter_active`, `clipper_drive_db`, expanded `character`, 4× OS limiter chain, TP envelope headroom | Shipped 2026-05-29. 3 Character modes, Clipper Drive stage, limiter on/off, 4× OS limiter chain, ispTrim removed, TP headroom in envelope. Bench Slice 3/4/5 PASS via treatment-B recalibration; Ozone IRC IV reference run documents the in-family character. ADR-0006 + ADR-0007. |
 | 10 | Maximizer UI shell (Ozone-inspired two-panel layout)   | —                                           | `ui/MainView`          | Look-lock: two-panel layout, drive Gain at 0 dB hard-left, placeholders for new controls. Audition the look. |
-| 11 | I/O gains + dual Gain-Match (auto-track + Gain⇄Ceiling)| (loudness match — likely product-side)      | new params + DSP + UI  | I/O Input/Output trims (independent) + Gain Match (Auto/Track + Gain⇄Ceiling link), positive-only drive. ADR-0007 written. **Split: 11a = ADR + params + DSP wiring (✅ shipped); 11b1 = Gain⇄Ceiling Link (control coupling only); 11b2 = Auto/Track + Learn (one-shot short-term snapshot, momentary tracking) + Bypass-with-match.** |
+| 11 | **NEXT — I/O gains + dual Gain-Match (Auto/Track + Learn)** | (loudness match — likely product-side)      | new params + DSP + UI  | I/O Input/Output trims (independent) + Gain Match (Auto/Track + Gain⇄Ceiling link), positive-only drive. ADR-0007 written. **Split: 11a = ADR + params + DSP wiring (✅ shipped); 11b1 = Gain⇄Ceiling Link (control coupling only, ✅ shipped); 11b2 = Auto/Track + Learn (one-shot short-term snapshot, momentary tracking) + Bypass-with-match — promoted next.** |
 
-Note: Slice 7 (stereo/M-S link) is next after Slice 9 close. Slice 6
-(saturator) remains in the backlog; ordering was adjusted to do meters
-(8), brickwall voicing (9), and the Maximizer UI/I-O model (10–11)
-ahead of it.
+Note: Slice 11b2 (Auto/Track + Learn + Bypass-with-match) is next
+after Slice 7 close. Slice 6 (saturator) remains in the backlog;
+ordering was adjusted to do meters (8), brickwall voicing (9), the
+Maximizer UI/I-O model (10–11), and stereo unlink (7) ahead of it.
 
 ## Backlog
 
 | Status | Title | Touches (HQ) | Touches (product repo) | Rationale |
 |--------|-------|--------------|------------------------|-----------|
-| Backlog | Multiband detection (detection-bus only, no audio-path crossover phase issues) | new ADR-0008 | new product params | Closes the ~7 dB null-residual gap and "open" perception gap vs Ozone IRC IV documented in Slice 9.6c reference run. Avoids ADR-0005's LR4 phase concerns by keeping the split detection-only. |
+| Backlog | Multiband detection (detection-bus only) | new ADR-0009 | new product params | Promoted to next architectural slice after Slice 7 close. Closes the remaining ~7 dB null-residual / "open" gap vs Ozone IRC IV (Slice 9.6c reference) AND addresses the visible CPU↔GR correlation surfaced during 7.1.5 (single-band 4× OS limiting puts all peak work in one envelope; multiband distributes across band-specific envelopes, each with lower per-band peak density). Detection-bus only to avoid LR4 audio-path phase concerns per ADR-0005's reasoning. |
+| Backlog | Slice 7b: M/S detection | ADR-0008 §Alternatives | `ms_link_pct` already declared in `ParameterIDs.h` | Placeholder ID retained. No active demand. |
+| Backlog | Envelope smoothing-stage SIMD | `mdsp_dsp::LimiterEnvelope` | none | The inner ramp loop is NEON-vectorized as of Slice 7.1.4.1. The per-sample smoothing cascade (s1/s2 + T/S s1s/s2s for Clean) remains scalar. If a future regression surfaces the smoothing as a hot path, vectorize. Low priority. |
 | Backlog | Envelope snap-event smoother (was proposed Slice 9.6b) | `mdsp_dsp::LimiterEnvelope` | none | Demoted from Slice 9 close per Ozone evidence: only ~2 percentage-point IMD lever vs the 4–7 percent gap to in-family numbers. Revisit if a different future motivation surfaces. |
 | Backlog | Optional SP-mode envelope headroom (parity with TP) | — | product `processBlock` | Slice 9 SP mode accepts small 1× SP overs from OS downsample ringing; TP mode bounds via 0.3 dB headroom. If users want bulletproof SP output, add a tiny headroom in SP too. Low priority. |
 
