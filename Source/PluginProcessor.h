@@ -50,7 +50,14 @@ public:
     const juce::AudioProcessorValueTreeState& getAPVTS() const noexcept { return apvts; }
 
     float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrLDb() const noexcept { return currentGrLDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrRDb() const noexcept { return currentGrRDb_.load (std::memory_order_relaxed); }
     float getCurrentClipDb() const noexcept { return currentClipDb_.load (std::memory_order_relaxed); }
+    float getMaxGrSinceResetDb() const noexcept { return maxGrSinceResetDb_.load (std::memory_order_relaxed); }
+    float getMaxClipSinceResetDb() const noexcept { return maxClipSinceResetDb_.load (std::memory_order_relaxed); }
+
+    void resetMaxGr() noexcept { maxGrSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
+    void resetMaxClip() noexcept { maxClipSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
     float getInputPeakRDb() const noexcept { return inputPeakRDb_.load (std::memory_order_relaxed); }
@@ -106,7 +113,11 @@ private:
     int  cachedCeilingMode_   = 0;
 
     std::atomic<float> currentGrDb_ { 0.0f };
+    std::atomic<float> currentGrLDb_ { 0.0f };
+    std::atomic<float> currentGrRDb_ { 0.0f };
     std::atomic<float> currentClipDb_ { 0.0f };
+    std::atomic<float> maxGrSinceResetDb_ { 0.0f };
+    std::atomic<float> maxClipSinceResetDb_ { 0.0f };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
     std::atomic<float> inputPeakRDb_ { -100.0f };

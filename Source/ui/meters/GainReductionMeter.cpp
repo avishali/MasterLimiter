@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -12,6 +13,12 @@ float normaliseGr (float grDb) noexcept
 {
     return juce::jlimit (0.0f, 1.0f, grDb / kMaxGrDb);
 }
+
+juce::Rectangle<float> makeTopDownFill (juce::Rectangle<float> bar, float grDb)
+{
+    const float fillH = normaliseGr (grDb) * bar.getHeight();
+    return bar.withHeight (fillH);
+}
 } // namespace
 
 GainReductionMeter::GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAudioProcessor& processor)
@@ -19,35 +26,65 @@ GainReductionMeter::GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAud
       processor_ (processor)
 {
     setOpaque (false);
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
 }
 
 void GainReductionMeter::sync (float dtSec)
 {
-    float raw = processor_.getCurrentGrDb();
-    if (! std::isfinite (raw))
-        raw = 0.0f;
+    float rawL = processor_.getCurrentGrLDb();
+    float rawR = processor_.getCurrentGrRDb();
+    float rawMax = processor_.getMaxGrSinceResetDb();
 
-    grDb_ = juce::jmax (0.0f, std::abs (raw));
+    if (! std::isfinite (rawL))
+        rawL = 0.0f;
+    if (! std::isfinite (rawR))
+        rawR = 0.0f;
+    if (! std::isfinite (rawMax))
+        rawMax = 0.0f;
 
     const float tau = 0.1f;
     const float a = 1.0f - std::exp (-dtSec / tau);
-    displayGrDb_ += (grDb_ - displayGrDb_) * a;
+    displayGrLDb_ += (juce::jmax (0.0f, std::abs (rawL)) - displayGrLDb_) * a;
+    displayGrRDb_ += (juce::jmax (0.0f, std::abs (rawR)) - displayGrRDb_) * a;
+    displayCurrentGrDb_ = std::max (displayGrLDb_, displayGrRDb_);
+    displayMaxGrDb_ = juce::jmax (0.0f, std::abs (rawMax));
 
     repaint();
 }
 
 void GainReductionMeter::resetPeakHolds() noexcept
 {
-    grDb_ = 0.0f;
-    displayGrDb_ = 0.0f;
+    displayGrLDb_ = 0.0f;
+    displayGrRDb_ = 0.0f;
+    displayCurrentGrDb_ = 0.0f;
+    displayMaxGrDb_ = 0.0f;
+    processor_.resetMaxGr();
 }
 
-juce::String GainReductionMeter::formatDb (float grDb)
+juce::String GainReductionMeter::formatDbBare (float grDb)
 {
     if (! std::isfinite (grDb))
-        return "0.0 dB";
+        return "—";
 
-    return juce::String (juce::jmax (0.0f, grDb), 1) + " dB";
+    const float value = juce::jmax (0.0f, grDb);
+    return value <= 0.05f ? juce::String ("—") : juce::String (value, 1);
+}
+
+void GainReductionMeter::resized()
+{
+    auto bounds = getLocalBounds();
+    readoutBounds_ = bounds.removeFromBottom (18);
+    meterBounds_ = bounds.reduced (4, 4);
+}
+
+void GainReductionMeter::mouseDown (const juce::MouseEvent& e)
+{
+    if (readoutBounds_.contains (e.getPosition()))
+    {
+        processor_.resetMaxGr();
+        displayMaxGrDb_ = 0.0f;
+        repaint (readoutBounds_);
+    }
 }
 
 void GainReductionMeter::paint (juce::Graphics& g)
@@ -56,61 +93,56 @@ void GainReductionMeter::paint (juce::Graphics& g)
     const auto& type = ui_.type();
     const auto& m = ui_.metrics();
 
-    auto bounds = getLocalBounds();
-
-    auto labelArea = bounds.removeFromTop (18);
-    auto valueArea = bounds.removeFromBottom (24);
-    auto meterArea = bounds.reduced (4, 4);
-
-    g.setColour (theme.textMuted.withAlpha (0.75f));
-    g.setFont (type.labelFont().withHeight (11.0f).boldened());
-    g.drawText ("GR", labelArea, juce::Justification::centred, true);
-
-    g.setColour (theme.textMuted.withAlpha (0.85f));
-    g.setFont (type.labelFont().withHeight (11.0f));
-    g.drawText (formatDb (displayGrDb_), valueArea, juce::Justification::centred, true);
-
-    const float x = static_cast<float> (meterArea.getX());
-    const float y = static_cast<float> (meterArea.getY());
-    const float w = static_cast<float> (meterArea.getWidth());
-    const float h = static_cast<float> (meterArea.getHeight());
+    auto fallbackBounds = getLocalBounds();
+    const auto fallbackReadout = fallbackBounds.removeFromBottom (18);
+    const auto fallbackMeter = fallbackBounds.reduced (4, 4);
+    const auto meterArea = meterBounds_.isEmpty() ? fallbackMeter : meterBounds_;
+    const auto readoutArea = readoutBounds_.isEmpty() ? fallbackReadout : readoutBounds_;
 
     g.setColour (theme.background.darker (0.18f));
     g.fillRoundedRectangle (meterArea.toFloat(), m.rMed);
     g.setColour (theme.grid.withAlpha (0.82f));
     g.drawRoundedRectangle (meterArea.toFloat().reduced (0.5f), m.rMed, m.strokeThin);
 
-    g.setFont (type.labelFont().withHeight (9.0f));
-    for (const auto tick : { 0.0f, 2.0f, 4.0f, 6.0f, 8.0f, 10.0f })
+    auto barArea = meterArea.reduced (7, 7);
+    const int gap = 3;
+    const int halfW = juce::jmax (1, (barArea.getWidth() - gap) / 2);
+    auto leftBar = barArea.removeFromLeft (halfW);
+    barArea.removeFromLeft (gap);
+    auto rightBar = barArea;
+
+    auto drawBar = [&] (juce::Rectangle<int> bar, float grDb)
     {
-        const float yy = y + normaliseGr (tick) * h;
-        g.setColour (theme.text.withAlpha (tick == 0.0f ? 0.42f : 0.27f));
-        g.drawHorizontalLine (juce::roundToInt (yy), x, x + w);
+        const auto slot = bar.toFloat();
+        g.setColour (theme.panel.withAlpha (0.82f));
+        g.fillRoundedRectangle (slot, m.rSmall);
 
-        const auto label = tick == 0.0f ? juce::String ("0") : "-" + juce::String (tick, 0);
-        g.setColour (theme.textMuted.withAlpha (0.48f));
-        g.drawText (label,
-                    juce::Rectangle<float> (x, yy - 5.0f, w, 10.0f),
-                    juce::Justification::centred);
-    }
+        const auto fill = makeTopDownFill (slot.reduced (1.0f), grDb);
+        if (fill.getHeight() > 0.5f)
+        {
+            g.setColour (theme.warning.withAlpha (0.84f));
+            g.fillRoundedRectangle (fill, m.rSmall);
+            g.setColour (theme.warning.brighter (0.22f).withAlpha (0.8f));
+            g.drawLine (fill.getX(), fill.getBottom(), fill.getRight(), fill.getBottom(), m.strokeThin);
+        }
 
-    const float barW = w - 18.0f;
-    const float barX = x + 9.0f;
-    const float fillH = normaliseGr (displayGrDb_) * h;
+        g.setColour (theme.grid.withAlpha (0.72f));
+        g.drawRoundedRectangle (slot.reduced (0.5f), m.rSmall, m.strokeThin);
+    };
 
-    const auto slot = juce::Rectangle<float> (barX, y, barW, h).reduced (1.0f, 1.0f);
-    g.setColour (theme.panel.withAlpha (0.8f));
-    g.fillRoundedRectangle (slot, m.rSmall);
+    drawBar (leftBar, displayGrLDb_);
+    drawBar (rightBar, displayGrRDb_);
 
-    if (fillH > 0.5f)
-    {
-        const auto fill = juce::Rectangle<float> (barX + 1.0f, y + 1.0f, barW - 2.0f, fillH);
-        g.setColour (theme.warning.withAlpha (0.84f));
-        g.fillRoundedRectangle (fill, m.rSmall);
-        g.setColour (theme.warning.brighter (0.22f).withAlpha (0.8f));
-        g.drawLine (fill.getX(), fill.getBottom(), fill.getRight(), fill.getBottom(), m.strokeThin);
-    }
+    juce::String readoutText;
+    if (displayCurrentGrDb_ <= 0.05f && displayMaxGrDb_ <= 0.05f)
+        readoutText = "— / —";
+    else
+        readoutText = formatDbBare (displayCurrentGrDb_) + " / " + formatDbBare (displayMaxGrDb_);
 
-    g.setColour (theme.grid.withAlpha (0.75f));
-    g.drawRoundedRectangle (slot, m.rSmall, m.strokeThin);
+    g.setColour (theme.textMuted.withAlpha (0.85f));
+    g.setFont (type.labelFont().withHeight (11.0f));
+    g.drawText (readoutText, readoutArea, juce::Justification::centred, true);
+
+    g.setColour (theme.grid.withAlpha (0.82f));
+    g.drawRoundedRectangle (readoutArea.toFloat().reduced (0.5f), m.rSmall, m.strokeThin);
 }

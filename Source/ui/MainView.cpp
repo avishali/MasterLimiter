@@ -15,6 +15,19 @@ juce::String formatDb1 (double v)
 {
     return juce::String (v, 1) + " dB";
 }
+
+juce::String formatPositiveBare (float v)
+{
+    if (! std::isfinite (v) || v <= 0.05f)
+        return "—";
+
+    return juce::String (v, 1);
+}
+
+juce::String formatClipReadout (float currentDb, float maxDb)
+{
+    return "Clip " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
+}
 } // namespace
 
 void MainView::TpReadoutSmoother::reset() noexcept
@@ -139,6 +152,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldCharacter_);
     addAndMakeVisible (sldStereoLink_);
     addAndMakeVisible (sldMsLink_);
+    lblClipperReadout_.setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    lblClipperReadout_.addMouseListener (this, false);
 
     btnGainCeilingLink_.setClickingTogglesState (true);
     btnLimiterActive_.setClickingTogglesState (true);
@@ -256,6 +271,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldGainDrive_.setTooltip ("Drive into the limiter in dB.");
     btnLimiterActive_.setTooltip ("Turns the limiter section on or off while preserving I/O trims.");
     sldClipperDrive_.setTooltip ("Pre-envelope clipper drive in dB.");
+    lblClipperReadout_.setTooltip ("Current / max clipper excess. Click to reset max.");
     btnGainCeilingLink_.setTooltip ("When enabled, Gain and Ceiling move inversely.");
     btnGainMatchAutoTrack_.setTooltip (kPlaceholderTooltip);
     btnLearnInputGain_.setTooltip (kPlaceholderTooltip);
@@ -344,6 +360,18 @@ void MainView::updateLimiterActiveState()
     btnLimiterActive_.setButtonText (active ? "Limiter On" : "Limiter Off");
     lastLimiterActive_ = active;
     repaint (maximizerPanelArea_);
+}
+
+void MainView::mouseDown (const juce::MouseEvent& e)
+{
+    const auto eventOnClipReadout = e.eventComponent == &lblClipperReadout_
+                                 || lblClipperReadout_.getBounds().contains (e.getEventRelativeTo (this).getPosition());
+    if (! eventOnClipReadout)
+        return;
+
+    processor_.resetMaxClip();
+    lblClipperReadout_.setText (formatClipReadout (processor_.getCurrentClipDb(), 0.0f), juce::dontSendNotification);
+    repaint (lblClipperReadout_.getBounds().expanded (12, 2));
 }
 
 void MainView::paint (juce::Graphics& g)
@@ -519,16 +547,16 @@ void MainView::syncMetersFromProcessor()
         updateLimiterActiveState();
 
     const float clipDb = processor_.getCurrentClipDb();
+    const float maxClipDb = processor_.getMaxClipSinceResetDb();
     if (clipDb > 0.0f)
     {
         clipLedLevel_ = 1.0f;
-        lblClipperReadout_.setText ("Clip: " + juce::String (clipDb, 1) + " dB", juce::dontSendNotification);
     }
     else
     {
         clipLedLevel_ *= std::exp (-dt / 0.2f);
-        lblClipperReadout_.setText ("Clip: —", juce::dontSendNotification);
     }
+    lblClipperReadout_.setText (formatClipReadout (clipDb, maxClipDb), juce::dontSendNotification);
     repaint (lblClipperReadout_.getBounds().expanded (12, 2));
 
     const auto tpTag = (ceilingIdx == 1 ? juce::String ("TP") : juce::String ("SP"));
@@ -549,6 +577,8 @@ void MainView::resetPeakHolds()
     meterIn_.resetPeakHolds();
     meterGr_.resetPeakHolds();
     meterOut_.resetPeakHolds();
+    processor_.resetMaxGr();
+    processor_.resetMaxClip();
     tpSmoother_.reset();
     lufsPanel_.refresh();
 }

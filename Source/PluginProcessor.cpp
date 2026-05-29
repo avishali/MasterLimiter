@@ -325,6 +325,9 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         {
             currentClipDb_.store (0.0f, std::memory_order_relaxed);
         }
+        const float frameClipDb = currentClipDb_.load (std::memory_order_relaxed);
+        if (frameClipDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
+            maxClipSinceResetDb_.store (frameClipDb, std::memory_order_relaxed);
 
         const float* const ch0 = osBlock.getChannelPointer ((size_t) 0);
         const float* const ch1 = nch > 1 ? osBlock.getChannelPointer ((size_t) 1) : ch0;
@@ -360,7 +363,10 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
                 }
             }
 
-            currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
+            const float gr = envelope_.getLastBlockMaxGrDb();
+            currentGrDb_.store (gr, std::memory_order_relaxed);
+            currentGrLDb_.store (gr, std::memory_order_relaxed);
+            currentGrRDb_.store (gr, std::memory_order_relaxed);
         }
         else
         {
@@ -402,15 +408,25 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
                 }
             }
 
-            currentGrDb_.store (std::max (envelope_.getLastBlockMaxGrDb(),
-                                          envelope_R_.getLastBlockMaxGrDb()),
-                                std::memory_order_relaxed);
+            const float grL = envelope_.getLastBlockMaxGrDb();
+            const float grR = envelope_R_.getLastBlockMaxGrDb();
+            currentGrLDb_.store (grL, std::memory_order_relaxed);
+            currentGrRDb_.store (grR, std::memory_order_relaxed);
+            currentGrDb_.store (std::max (grL, grR), std::memory_order_relaxed);
         }
+
+        const float frameMaxGr = std::max (currentGrLDb_.load (std::memory_order_relaxed),
+                                           currentGrRDb_.load (std::memory_order_relaxed));
+        if (frameMaxGr > maxGrSinceResetDb_.load (std::memory_order_relaxed))
+            maxGrSinceResetDb_.store (frameMaxGr, std::memory_order_relaxed);
+
         limiterOversampler_.processSamplesDown (block);
     }
     else
     {
         currentGrDb_.store (0.0f, std::memory_order_relaxed);
+        currentGrLDb_.store (0.0f, std::memory_order_relaxed);
+        currentGrRDb_.store (0.0f, std::memory_order_relaxed);
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
     }
 

@@ -15,15 +15,22 @@ public:
     void resetPeakHolds() noexcept;
 
     void paint (juce::Graphics& g) override;
+    void resized() override;
+    void mouseDown (const juce::MouseEvent& e) override;
 
 private:
-    static juce::String formatDb (float grDb);
+    static juce::String formatDbBare (float grDb);
 
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
 
-    float grDb_ { 0.0f };
-    float displayGrDb_ { 0.0f };
+    float displayGrLDb_ { 0.0f };
+    float displayGrRDb_ { 0.0f };
+    float displayCurrentGrDb_ { 0.0f };
+    float displayMaxGrDb_ { 0.0f };
+
+    juce::Rectangle<int> meterBounds_;
+    juce::Rectangle<int> readoutBounds_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GainReductionMeter)
 };
