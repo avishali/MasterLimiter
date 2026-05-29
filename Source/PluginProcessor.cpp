@@ -502,7 +502,7 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         loudness_.process (buffer);
     }
 
-    constexpr float kClickThreshold = 0.2f;
+    constexpr float kClickThreshold = 0.5f;
     float blockMaxDelta = 0.0f;
     float blockMaxAbs = 0.0f;
     bool blockHasClick = false;
