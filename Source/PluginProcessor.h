@@ -71,6 +71,7 @@ private:
     mdsp_dsp::LookaheadDelay<float> lookahead_;
     mdsp_dsp::PeakDetector peakDetector_;
     mdsp_dsp::LimiterEnvelope envelope_;
+    mdsp_dsp::LimiterEnvelope envelope_R_;
     juce::dsp::Oversampling<float> limiterOversampler_ {
         2,
         2,
@@ -81,6 +82,8 @@ private:
 
     juce::AudioBuffer<float> peakBuf_;
     juce::AudioBuffer<float> gainBuf_;
+    juce::AudioBuffer<float> peakBufR_;
+    juce::AudioBuffer<float> gainBufR_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
     juce::AudioParameterChoice* characterChoice_ = nullptr;
@@ -94,6 +97,7 @@ private:
     std::atomic<float>* ioInputRDb_ = nullptr;
     std::atomic<float>* ioOutputLDb_ = nullptr;
     std::atomic<float>* ioOutputRDb_ = nullptr;
+    std::atomic<float>* stereoLinkPct_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 

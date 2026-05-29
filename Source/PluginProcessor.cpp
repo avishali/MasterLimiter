@@ -50,6 +50,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("release_ms") != nullptr);
     jassert (apvts.getParameter ("release_sustain_ratio") != nullptr);
     jassert (apvts.getParameter ("gain_ceiling_link") != nullptr);
+    jassert (apvts.getParameter ("stereo_link_pct") != nullptr);
     jassert (apvts.getParameter ("character") != nullptr);
 
     apvts.addParameterListener (param::input_gain_db.data(), this);
@@ -85,9 +86,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     spec.lookaheadSamples = osLookaheadSamples;
     spec.maxBlockSize = osMaxBlockSize;
     envelope_.prepare (spec);
+    envelope_R_.prepare (spec);
 
     peakBuf_.setSize (1, osMaxBlockSize, false, true, true);
     gainBuf_.setSize (1, osMaxBlockSize, false, true, true);
+    peakBufR_.setSize (1, osMaxBlockSize, false, true, true);
+    gainBufR_.setSize (1, osMaxBlockSize, false, true, true);
 
     ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
     characterChoice_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("character"));
@@ -98,8 +102,10 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     limiterActive_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("limiter_active"));
     clipperDriveDb_ = apvts.getRawParameterValue ("clipper_drive_db");
+    stereoLinkPct_ = apvts.getRawParameterValue ("stereo_link_pct");
     jassert (limiterActive_ != nullptr);
     jassert (clipperDriveDb_ != nullptr);
+    jassert (stereoLinkPct_ != nullptr);
 
     releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
     jassert (releaseSustainRatio_ != nullptr);
@@ -124,6 +130,7 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     limiterOversampler_.reset();
     lookahead_.reset();
     envelope_.reset();
+    envelope_R_.reset();
 
     setLatencySamples (baseLatencySamples_);
 
@@ -249,7 +256,7 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         || ceilingMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
         || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || ioInputLDb_ == nullptr
         || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
-        || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
+        || stereoLinkPct_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -319,14 +326,8 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
             currentClipDb_.store (0.0f, std::memory_order_relaxed);
         }
 
-        auto* peak = peakBuf_.getWritePointer (0);
         const float* const ch0 = osBlock.getChannelPointer ((size_t) 0);
         const float* const ch1 = nch > 1 ? osBlock.getChannelPointer ((size_t) 1) : ch0;
-        const float* const channelPtrs[2] = { ch0, ch1 };
-
-        for (int i = 0; i < osN; ++i)
-            peak[i] = peakDetector_.process (channelPtrs, nch, i);
-
         const float ceilingLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
         const float thresholdLin = (modeIdx == 1) ? (ceilingLin * 0.965f) : ceilingLin;
         envelope_.setThresholdLinear (thresholdLin);
@@ -334,20 +335,77 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         envelope_.setReleaseSustainRatio (releaseSustainRatio_->get());
         envelope_.setMode (mapCharacterIndexToMode (characterChoice_->getIndex()));
 
-        auto* gain = gainBuf_.getWritePointer (0);
-        envelope_.process (peak, gain, osN);
+        const float linkPct = stereoLinkPct_->load (std::memory_order_relaxed);
+        const float link = juce::jlimit (0.0f, 1.0f, linkPct * 0.01f);
+        const bool fastPath = link >= 0.9995f;
 
-        for (int ch = 0; ch < nch; ++ch)
+        if (fastPath)
         {
-            auto* d = osBlock.getChannelPointer ((size_t) ch);
+            auto* peak = peakBuf_.getWritePointer (0);
+            const float* const channelPtrs[2] = { ch0, ch1 };
+
+            for (int i = 0; i < osN; ++i)
+                peak[i] = peakDetector_.process (channelPtrs, nch, i);
+
+            auto* gain = gainBuf_.getWritePointer (0);
+            envelope_.process (peak, gain, osN);
+
+            for (int ch = 0; ch < nch; ++ch)
+            {
+                auto* d = osBlock.getChannelPointer ((size_t) ch);
+                for (int i = 0; i < osN; ++i)
+                {
+                    const float delayed = lookahead_.pushPop (ch, d[i]);
+                    d[i] = delayed * gain[i];
+                }
+            }
+
+            currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
+        }
+        else
+        {
+            envelope_R_.setThresholdLinear (thresholdLin);
+            envelope_R_.setReleaseMs (readFloatParam (apvts, "release_ms"));
+            envelope_R_.setReleaseSustainRatio (releaseSustainRatio_->get());
+            envelope_R_.setMode (mapCharacterIndexToMode (characterChoice_->getIndex()));
+
+            auto* peakL = peakBuf_.getWritePointer (0);
+            auto* peakR = peakBufR_.getWritePointer (0);
             for (int i = 0; i < osN; ++i)
             {
-                const float delayed = lookahead_.pushPop (ch, d[i]);
-                d[i] = delayed * gain[i];
+                peakL[i] = std::abs (ch0[i]);
+                peakR[i] = std::abs (ch1[i]);
             }
-        }
 
-        currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
+            auto* gainL = gainBuf_.getWritePointer (0);
+            auto* gainR = gainBufR_.getWritePointer (0);
+            envelope_.process (peakL, gainL, osN);
+            envelope_R_.process (peakR, gainR, osN);
+
+            auto* dL = osBlock.getChannelPointer ((size_t) 0);
+            auto* dR = nch > 1 ? osBlock.getChannelPointer ((size_t) 1) : dL;
+            const float oneMinusLink = 1.0f - link;
+
+            for (int i = 0; i < osN; ++i)
+            {
+                const float gLinked = std::min (gainL[i], gainR[i]);
+                const float gOutL = link * gLinked + oneMinusLink * gainL[i];
+                const float gOutR = link * gLinked + oneMinusLink * gainR[i];
+
+                const float delayedL = lookahead_.pushPop (0, dL[i]);
+                dL[i] = delayedL * gOutL;
+
+                if (nch > 1)
+                {
+                    const float delayedR = lookahead_.pushPop (1, dR[i]);
+                    dR[i] = delayedR * gOutR;
+                }
+            }
+
+            currentGrDb_.store (std::max (envelope_.getLastBlockMaxGrDb(),
+                                          envelope_R_.getLastBlockMaxGrDb()),
+                                std::memory_order_relaxed);
+        }
         limiterOversampler_.processSamplesDown (block);
     }
     else

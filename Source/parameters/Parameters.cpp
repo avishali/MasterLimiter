@@ -137,7 +137,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         "Stereo Link",
         NormalisableRange<float> (0.0f, 100.0f, 0.1f),
         100.0f,
-        AudioParameterFloatAttributes().withLabel ("%")));
+        AudioParameterFloatAttributes()
+            .withLabel ("%")
+            .withStringFromValueFunction ([] (float v, int) { return juce::String (v, 0) + "%"; })));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (ms_link_pct, 1),

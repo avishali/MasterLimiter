@@ -90,7 +90,7 @@ private:
     juce::Label lblCeilingMode_ { {}, "SP / TP" };
     juce::ToggleButton btnCeilingMode_ { "SP" };
 
-    juce::Label lblStereoLink_ { {}, "Stereo Lk" };
+    juce::Label lblStereoLink_ { {}, "Link" };
     juce::Slider sldStereoLink_;
 
     juce::Label lblMsLink_ { {}, "M/S Lk" };

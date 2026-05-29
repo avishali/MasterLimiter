@@ -272,7 +272,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnReleaseAuto_.setTooltip ("When Auto is on, release time follows the program.");
     sldLookahead_.setTooltip ("Lookahead delay in milliseconds (higher catches peaks earlier).");
     btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
-    sldStereoLink_.setTooltip ("Stereo linking between channels (0–100%).");
+    sldStereoLink_.setTooltip ("Stereo Link amount: 100% fully linked, 0% independent L/R limiting.");
     sldMsLink_.setTooltip ("Mid/side stereo link amount (0–100%).");
     sldCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
 }
