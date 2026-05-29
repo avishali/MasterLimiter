@@ -38,16 +38,24 @@ slice or split a follow-up slice.
 | 4  | True-peak detector + 4× oversampler on ceiling         | `mdsp_dsp/TruePeakDetector`, `Oversampler`  | TP mode toggle         | Zero TP overs at ceiling −1 dBTP across corpus.                |
 | 5  | Transient/sustain split (ADR-0005 decision)            | `mdsp_dsp/TransientSustainSplit`            | —                      | Clean 5 dB GR on drum loop + dense mix per §5 criteria.        |
 | 6  | Soft-knee sub-audible saturator                        | `mdsp_dsp/SoftKneeSaturator`                | —                      | THD+N delta within bounds at 7 dB GR push.                     |
-| 7  | Stereo / M-S link options                              | `mdsp_dsp/StereoMSLink`                     | params + UI            | Bench A/B confirms link % continuum behaves monotonically.     |
+| 7  | **NEXT — Stereo / M-S link options**                   | `mdsp_dsp/StereoMSLink`                     | params + UI            | Bench A/B confirms link % continuum behaves monotonically.     |
 | 8  | Meters (GR + TP) to mdsp_ui                            | `mdsp_ui/GainReductionMeter`, `TruePeakMeter`| UI assembly           | Meters track snapshots accurately, no UI-thread DSP access.    |
-| 9  | Auto-release algorithm + preset pass + ship gate       | `LimiterEnvelope` (auto mode)               | presets                | Full §5 corpus passes at 5 dB GR. ADR-0006 written.            |
+| 9  | ✅ **Shipped — Limiter character + Clipper Drive + on/off** | `LimiterEnvelope::Mode`; `dsp_bench` recal + Ozone reference driver | `limiter_active`, `clipper_drive_db`, expanded `character`, 4× OS limiter chain, TP envelope headroom | Shipped 2026-05-29. 3 Character modes, Clipper Drive stage, limiter on/off, 4× OS limiter chain, ispTrim removed, TP headroom in envelope. Bench Slice 3/4/5 PASS via treatment-B recalibration; Ozone IRC IV reference run documents the in-family character. ADR-0006 + ADR-0007. |
 | 10 | Maximizer UI shell (Ozone-inspired two-panel layout)   | —                                           | `ui/MainView`          | Look-lock: two-panel layout, drive Gain at 0 dB hard-left, placeholders for new controls. Audition the look. |
 | 11 | I/O gains + dual Gain-Match (auto-track + Gain⇄Ceiling)| (loudness match — likely product-side)      | new params + DSP + UI  | I/O Input/Output trims (independent) + Gain Match (Auto/Track + Gain⇄Ceiling link), positive-only drive. ADR-0007 written. **Split: 11a = ADR + params + DSP wiring (✅ shipped); 11b1 = Gain⇄Ceiling Link (control coupling only); 11b2 = Auto/Track + Learn (one-shot short-term snapshot, momentary tracking) + Bypass-with-match.** |
 
-Note: Slices 6 (saturator) and 7 (stereo/M-S link) remain in the backlog;
-ordering was adjusted to do meters (8) and the Maximizer UI/I-O model
-(10–11) ahead of them. A separate Slice 9 covers the "compressor-like /
-too slow" brickwall voicing (ADR-0006).
+Note: Slice 7 (stereo/M-S link) is next after Slice 9 close. Slice 6
+(saturator) remains in the backlog; ordering was adjusted to do meters
+(8), brickwall voicing (9), and the Maximizer UI/I-O model (10–11)
+ahead of it.
+
+## Backlog
+
+| Status | Title | Touches (HQ) | Touches (product repo) | Rationale |
+|--------|-------|--------------|------------------------|-----------|
+| Backlog | Multiband detection (detection-bus only, no audio-path crossover phase issues) | new ADR-0008 | new product params | Closes the ~7 dB null-residual gap and "open" perception gap vs Ozone IRC IV documented in Slice 9.6c reference run. Avoids ADR-0005's LR4 phase concerns by keeping the split detection-only. |
+| Backlog | Envelope snap-event smoother (was proposed Slice 9.6b) | `mdsp_dsp::LimiterEnvelope` | none | Demoted from Slice 9 close per Ozone evidence: only ~2 percentage-point IMD lever vs the 4–7 percent gap to in-family numbers. Revisit if a different future motivation surfaces. |
+| Backlog | Optional SP-mode envelope headroom (parity with TP) | — | product `processBlock` | Slice 9 SP mode accepts small 1× SP overs from OS downsample ringing; TP mode bounds via 0.3 dB headroom. If users want bulletproof SP output, add a tiny headroom in SP too. Low priority. |
 
 ## Repository locations
 

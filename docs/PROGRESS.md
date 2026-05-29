@@ -4,6 +4,74 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-29 — Slice 9: Limiter character + Clipper Drive + on/off
+
+**Status:** ✅ Closed. Product character modes, Clipper Drive, limiter
+on/off, 4× limiter-chain oversampling, TP envelope headroom, HQ
+LimiterEnvelope fixes, and Slice 3/4/5 bench recalibration all shipped.
+
+**Shipped (product repo)**
+- New params: `limiter_active` (bool, default true), `clipper_drive_db`
+  (float, 0..+12 dB, default 0).
+- Character (`character`) expanded from 1 option to 3: Clean, Tight,
+  Aggressive. Default Tight.
+- Clipper Drive stage: pre-envelope hard-clip at ±1.0 with per-block
+  pre-clip excess (dB) and LED indicator in UI.
+- 4× oversampling around the full limiter chain (Clipper + Peak +
+  Envelope + Lookahead + Gain), using
+  `juce::dsp::Oversampling<float>` with halfband FIR equiripple.
+- `ispTrim_` removed from the audio path; TP mode now uses 0.3 dB
+  envelope-side headroom (`ceiling × 0.965`) so the limiter's single
+  OS downsample FIR ringing stays below ceiling. Latency unified to
+  301 samples at 48k.
+- `release_ms` default lowered 100 → 30 ms to match the new fast
+  brickwall character.
+
+**Shipped (HQ)**
+- `mdsp_dsp::LimiterEnvelope::Mode` (Clean/Tight/Aggressive) with
+  mode-specific attack windows: Clean = min(lookahead, 3 ms) raised
+  cosine, Tight = 1 ms, Aggressive = 0.3 ms. Constant latency across
+  modes.
+- Ramp algorithm fixes:
+  - 9.2: trailing-edge propagation fix (`k < attackSamples`).
+  - 9.3a.1: ramp tentative formula uses 1.0 baseline instead of
+    `anchor = ext_[i]`, killing the propagation chain that produced
+    200 ms – 4 s effective release.
+  - 9.4.1: outer-loop fast-path skips inner ramp when `pk <= thr`.
+- T/S split combinator flipped `min → max`; `release_ms` now drives
+  release directly. `release_sustain_ratio` is inert under `max()` and
+  retained as a frozen-ID param for a future real T/S split slice.
+- `dsp_bench` Slice 3/4/5 criteria recalibrated against the new
+  envelope semantics and 4× OS. Bench now includes an
+  `ozone_maximizer` reference driver; Ozone 11 Maximizer IRC IV
+  reference on the same synthetic corpus measured 4.3–7% IMD and
+  −19 to −22 dB null residual, putting our fast-release numbers in
+  family.
+
+**Architecture:** ADR-0006 (Limiter character + Clipper Drive + on/off)
+accepted 2026-05-28. ADR-0007 gain-staging model remains intact.
+
+**Gate result**
+- [x] Release + Debug builds clean through the slice.
+- [x] All three Character modes audition-approved by avishali in Live:
+      Tight reads as brickwall, Clean transparent, Aggressive snappy.
+- [x] Clipper Drive 0..+12 dB stacks with each mode; Clip readout/LED
+      tracks pre-clip excess.
+- [x] Limiter on/off is byte-equivalent bypass when off (no OS call).
+- [x] Bench: Slice 3 PASS 13/13, Slice 4 PASS 14/14, Slice 5 PASS 25/25.
+
+**Followups**
+- Slice 7 (Stereo Unlink) promoted next; it is the primary lever for the
+  "wide" gap vs Ozone.
+- Multiband detection (new ADR-0008 first) added to backlog as the
+  likely lever for the ~7 dB null-residual / "open" gap vs Ozone IRC IV.
+- Envelope snap-event smoother demoted to backlog: Ozone evidence
+  suggests only a ~2 percentage-point IMD lever, not the dominant gap.
+- `IspTrimStage` remains in HQ for future products, unhooked from
+  MasterLimiter's `processBlock`.
+
+---
+
 ## 2026-05-28 — Slice 11b1: Gain ⇄ Ceiling structural link + meter readout improvements (ADR-0007)
 
 **Status:** ✅ Closed. One new frozen bool param + inverse coupling
