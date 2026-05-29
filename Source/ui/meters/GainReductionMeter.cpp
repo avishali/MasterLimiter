@@ -64,10 +64,9 @@ void GainReductionMeter::resetPeakHolds() noexcept
 juce::String GainReductionMeter::formatDbBare (float grDb)
 {
     if (! std::isfinite (grDb))
-        return "-";
+        grDb = 0.0f;
 
-    const float value = juce::jmax (0.0f, grDb);
-    return value <= 0.05f ? juce::String ("-") : juce::String (value, 1);
+    return juce::String (juce::jmax (0.0f, grDb), 1);
 }
 
 void GainReductionMeter::resized()
@@ -133,11 +132,7 @@ void GainReductionMeter::paint (juce::Graphics& g)
     drawBar (leftBar, displayGrLDb_);
     drawBar (rightBar, displayGrRDb_);
 
-    juce::String readoutText;
-    if (displayCurrentGrDb_ <= 0.05f && displayMaxGrDb_ <= 0.05f)
-        readoutText = "- / -";
-    else
-        readoutText = formatDbBare (displayCurrentGrDb_) + " / " + formatDbBare (displayMaxGrDb_);
+    const auto readoutText = formatDbBare (displayCurrentGrDb_) + " / " + formatDbBare (displayMaxGrDb_);
 
     g.setColour (theme.textMuted.withAlpha (0.85f));
     g.setFont (type.labelFont().withHeight (11.0f));

@@ -64,6 +64,9 @@ public:
     int64_t getSectionMaxUsGainMul() const noexcept { return sectionMaxUsGainMul_.load (std::memory_order_relaxed); }
     int64_t getSectionMaxUsDownsample() const noexcept { return sectionMaxUsDownsample_.load (std::memory_order_relaxed); }
     int64_t getSectionMaxUsOutput() const noexcept { return sectionMaxUsOutput_.load (std::memory_order_relaxed); }
+    float getOutputMaxDeltaSeen() const noexcept { return outputMaxDeltaSeen_.load (std::memory_order_relaxed); }
+    float getOutputMaxAbsSeen() const noexcept { return outputMaxAbsSeen_.load (std::memory_order_relaxed); }
+    int64_t getOutputClickCount() const noexcept { return outputClickCount_.load (std::memory_order_relaxed); }
 
     void resetMaxGr() noexcept { maxGrSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
     void resetMaxClip() noexcept { maxClipSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
@@ -77,6 +80,12 @@ public:
         sectionMaxUsGainMul_.store (0, std::memory_order_relaxed);
         sectionMaxUsDownsample_.store (0, std::memory_order_relaxed);
         sectionMaxUsOutput_.store (0, std::memory_order_relaxed);
+    }
+    void resetOutputClickStats() noexcept
+    {
+        outputMaxDeltaSeen_.store (0.0f, std::memory_order_relaxed);
+        outputMaxAbsSeen_.store (0.0f, std::memory_order_relaxed);
+        outputClickCount_.store (0, std::memory_order_relaxed);
     }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
@@ -146,6 +155,9 @@ private:
     std::atomic<int64_t> sectionMaxUsGainMul_ { 0 };
     std::atomic<int64_t> sectionMaxUsDownsample_ { 0 };
     std::atomic<int64_t> sectionMaxUsOutput_ { 0 };
+    std::atomic<float> outputMaxDeltaSeen_ { 0.0f };
+    std::atomic<float> outputMaxAbsSeen_ { 0.0f };
+    std::atomic<int64_t> outputClickCount_ { 0 };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
     std::atomic<float> inputPeakRDb_ { -100.0f };

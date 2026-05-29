@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 #include "parameters/ParameterIDs.h"
 #include "parameters/Parameters.h"
@@ -37,6 +38,13 @@ int64_t elapsedUs (TimePoint start, TimePoint end) noexcept
 }
 
 void storeMaxUs (std::atomic<int64_t>& target, int64_t value) noexcept
+{
+    const auto prev = target.load (std::memory_order_relaxed);
+    if (value > prev)
+        target.store (value, std::memory_order_relaxed);
+}
+
+void storeMaxFloat (std::atomic<float>& target, float value) noexcept
 {
     const auto prev = target.load (std::memory_order_relaxed);
     if (value > prev)
@@ -493,6 +501,41 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
         loudness_.process (buffer);
     }
+
+    constexpr float kClickThreshold = 0.5f;
+    float blockMaxDelta = 0.0f;
+    float blockMaxAbs = 0.0f;
+    bool blockHasClick = false;
+
+    for (int ch = 0; ch < nch; ++ch)
+    {
+        const auto* d = buffer.getReadPointer (ch);
+        float prev = d[0];
+        blockMaxAbs = std::max (blockMaxAbs,
+                                std::isfinite (prev) ? std::abs (prev) : std::numeric_limits<float>::infinity());
+
+        for (int i = 1; i < n; ++i)
+        {
+            const float cur = d[i];
+            const float delta = (std::isfinite (cur) && std::isfinite (prev))
+                                    ? std::abs (cur - prev)
+                                    : std::numeric_limits<float>::infinity();
+            const float absCur = std::isfinite (cur) ? std::abs (cur) : std::numeric_limits<float>::infinity();
+
+            blockMaxDelta = std::max (blockMaxDelta, delta);
+            blockMaxAbs = std::max (blockMaxAbs, absCur);
+            if (delta > kClickThreshold)
+                blockHasClick = true;
+
+            prev = cur;
+        }
+    }
+
+    storeMaxFloat (outputMaxDeltaSeen_, blockMaxDelta);
+    storeMaxFloat (outputMaxAbsSeen_, blockMaxAbs);
+    if (blockHasClick)
+        outputClickCount_.fetch_add (1, std::memory_order_relaxed);
+
     const auto tOutput = Clock::now();
     storeMaxUs (audioBlockMaxUs_, elapsedUs (t0, tOutput));
     storeMaxUs (sectionMaxUsDrive_, elapsedUs (t0, tDrive));

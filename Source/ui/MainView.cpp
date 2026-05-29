@@ -18,10 +18,10 @@ juce::String formatDb1 (double v)
 
 juce::String formatPositiveBare (float v)
 {
-    if (! std::isfinite (v) || v <= 0.05f)
-        return "-";
+    if (! std::isfinite (v))
+        v = 0.0f;
 
-    return juce::String (v, 1);
+    return juce::String (juce::jmax (0.0f, v), 1);
 }
 
 juce::String formatClipReadout (float currentDb, float maxDb)
@@ -38,7 +38,10 @@ juce::String formatTimingReadout (const MasterLimiterAudioProcessor& p)
          + " / Env " + juce::String (p.getSectionMaxUsEnvelope())
          + " / GMul " + juce::String (p.getSectionMaxUsGainMul())
          + " / Dn " + juce::String (p.getSectionMaxUsDownsample())
-         + " / Out " + juce::String (p.getSectionMaxUsOutput()) + " us";
+         + " / Out " + juce::String (p.getSectionMaxUsOutput()) + " us"
+         + " | Clicks " + juce::String (p.getOutputClickCount())
+         + " / D " + juce::String (p.getOutputMaxDeltaSeen(), 2)
+         + " / Abs " + juce::String (p.getOutputMaxAbsSeen(), 2);
 }
 } // namespace
 
@@ -436,7 +439,7 @@ void MainView::paint (juce::Graphics& g)
 
     if (clipLedLevel_ > 0.001f)
     {
-        const auto led = lblClipperReadout_.getBounds().removeFromRight (12).withSizeKeepingCentre (8, 8).toFloat();
+        const auto led = lblClipperDrive_.getBounds().removeFromRight (12).withSizeKeepingCentre (8, 8).toFloat();
         g.setColour (theme.warning.withAlpha (juce::jlimit (0.0f, 1.0f, clipLedLevel_)));
         g.fillEllipse (led);
     }
