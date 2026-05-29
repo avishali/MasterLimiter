@@ -4,6 +4,71 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-29 — Slice 11b2.2: Bypass click fix (always-running chain + dry delay + crossfade)
+
+**Status:** ✅ Closed. Bypass-transition clicks/pops eliminated
+via three coordinated changes: the limiter chain now runs
+unconditionally so its envelope/lookahead state stays coherent
+across bypass toggles; a parallel `juce::dsp::DelayLine` carries
+the dry signal post-Input-Gain through exactly
+`baseLatencySamples_` samples of delay (live and dry are sample-
+aligned at the mix point); a `juce::LinearSmoothedValue` drives a
+5 ms sample-level crossfade between the live limiter output and
+the delay-aligned dry signal. No new params, no new state surface.
+Slice 3/4/5 bench PASS unchanged.
+
+**Architecture:** Extends ADR-0007 §Addendum 2026-05-29 — the
+matched-bypass contract from 11b2.1 is preserved; the routing
+mechanism is refactored to eliminate transition artefacts.
+
+**Deliverables (product repo)**
+- `Source/PluginProcessor.{h,cpp}` —
+  - `dryDelay_`: `juce::dsp::DelayLine<float, NoInterp>` with
+    max 4096 samples; `setDelay(baseLatencySamples_)` at prepare.
+  - `dryScratch_`: `juce::AudioBuffer<float>` sized to
+    `max(samplesPerBlock, 4096)`; holds the delayed dry signal
+    for the crossfade mix.
+  - `bypassFade_`: `juce::LinearSmoothedValue<float>` with 5 ms
+    ramp, ticked once per sample at the mix point.
+  - `dryCompGainDbSmoothed_` + `dryCompGainDbMirror_`: a SECOND
+    compensation smoother fed from `loudnessRef_` for the dry
+    path; lives in parallel with the live-path smoother so
+    neither drifts out of sync during fades.
+  - `processBlock` and `processBlockBypassed` become thin
+    forwarders into a unified `processCore (buffer, midi,
+    forceBypass)`.
+  - `processCore` chain: read bypass state → IO Input → push/pop
+    dry delay → Learn/ref analyzer → limiter chain (unchanged) →
+    loudnessTrack analyzer → both comp smoothers ticked → apply
+    live comp to buffer + dry comp to scratch → sample-level
+    crossfade → IO Output → output meters.
+  - Defensive mono-input handling: channel-1 delay line still
+    ticked with zero pushes to keep state coherent if the host
+    switches channel count mid-session.
+  - Removed the Slice 11b2.1 `processBlock → processBlockBypassed`
+    early-dispatch (replaced by unified `processCore`).
+
+**Gate result**
+- [x] Debug + Release builds clean. No new `Source/` warnings.
+- [x] Bench Slice 3/4/5 PASS 13/13, 14/14, 25/25 unchanged.
+      At defaults `bypassFade_` is locked at 0; crossfade reduces
+      to `live + 0 * (dry - live) = live` bit-exact; dry path
+      contributes nothing.
+- [x] avishali audition in Ableton: bypass toggles (in-UI and
+      automated `plugin_bypass`) produce no clicks/pops; dry
+      playback is time-aligned with live; long-duration bypass →
+      unbypass returns to live with no envelope-wakeup artefact;
+      Track on/off matching unchanged.
+- [x] Architect sign-off on diff scope + RT-safety.
+
+**Followups**
+- ADR-0010 (Clipper soft-knee + drive-attributable meter) opens
+  next per architect queue. Addresses the discontinuity at
+  Clipper Drive 0 → 0.1 and the meter conflation between user-
+  driven input headroom and drive-attributable clipping.
+- Slice 11 family (11a + 11b1 + 11b2 + 11b2.1 + 11b2.2) is now
+  closed; the maximizer Auto/Track + matched A/B workflow ships.
+
 ## 2026-05-29 — Slice 11b2.1: plugin_bypass param + matched-bypass hardening + Learn relocation + button feedback
 
 **Status:** ✅ Closed. One new frozen bool param (`plugin_bypass`)

@@ -89,7 +89,9 @@ private:
     void processLearnResetRequest();
     void updateLearnCapture (int numSamples);
     float updateCompensationGainDb (float liveLufs);
+    float updateDryCompensationGainDb (float liveDryLufs);
     void applyCompensationGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float compGainDb) const;
+    void processCore (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool forceBypass);
     void commitLearnedRef();
 
     juce::AudioProcessorValueTreeState apvts;
@@ -110,6 +112,9 @@ private:
     juce::AudioBuffer<float> gainBuf_;
     juce::AudioBuffer<float> peakBufR_;
     juce::AudioBuffer<float> gainBufR_;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay_ { 4096 };
+    juce::AudioBuffer<float> dryScratch_;
+    juce::LinearSmoothedValue<float> bypassFade_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
     juce::AudioParameterChoice* characterChoice_ = nullptr;
@@ -164,6 +169,8 @@ private:
     float compGainDbSmoothed_ = 0.0f;
     float compGainSmoothCoef_ = 0.0f;
     bool compActiveLastBlock_ = false;
+    float dryCompGainDbSmoothed_ = 0.0f;
+    std::atomic<float> dryCompGainDbMirror_ { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterLimiterAudioProcessor)
 };

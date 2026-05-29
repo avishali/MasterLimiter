@@ -164,6 +164,20 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     const double tauSec = 1.0;
     const double blocksPerSec = sampleRate / static_cast<double> (std::max (1, samplesPerBlock));
     compGainSmoothCoef_ = static_cast<float> (1.0 - std::exp (-1.0 / (tauSec * blocksPerSec)));
+
+    juce::dsp::ProcessSpec dryDelaySpec { sampleRate, static_cast<juce::uint32> (samplesPerBlock), 2 };
+    dryDelay_.prepare (dryDelaySpec);
+    dryDelay_.reset();
+    dryDelay_.setDelay (static_cast<float> (baseLatencySamples_));
+
+    dryScratch_.setSize (2, std::max (samplesPerBlock, 4096), false, false, true);
+    dryScratch_.clear();
+
+    bypassFade_.reset (sampleRate, 5.0e-3);
+    bypassFade_.setCurrentAndTargetValue (0.0f);
+
+    dryCompGainDbSmoothed_ = 0.0f;
+    dryCompGainDbMirror_.store (0.0f, std::memory_order_relaxed);
 }
 
 void MasterLimiterAudioProcessor::releaseResources()
@@ -356,6 +370,23 @@ float MasterLimiterAudioProcessor::updateCompensationGainDb (float liveLufs)
     return compGainDbSmoothed_;
 }
 
+float MasterLimiterAudioProcessor::updateDryCompensationGainDb (float liveDryLufs)
+{
+    const bool trackOn = gainMatchAuto_ != nullptr
+                      && gainMatchAuto_->load (std::memory_order_relaxed) > 0.5f;
+    const float ref = learnedRefLufs_.load (std::memory_order_relaxed);
+    const bool refOk = std::isfinite (ref);
+    const bool active = trackOn && refOk;
+
+    float target = 0.0f;
+    if (active && std::isfinite (liveDryLufs))
+        target = juce::jlimit (-12.0f, 12.0f, ref - liveDryLufs);
+
+    dryCompGainDbSmoothed_ += compGainSmoothCoef_ * (target - dryCompGainDbSmoothed_);
+    dryCompGainDbMirror_.store (dryCompGainDbSmoothed_, std::memory_order_relaxed);
+    return dryCompGainDbSmoothed_;
+}
+
 void MasterLimiterAudioProcessor::applyCompensationGain (juce::AudioBuffer<float>& buffer,
                                                          int numSamples,
                                                          int numChannels,
@@ -378,6 +409,11 @@ bool MasterLimiterAudioProcessor::isBusesLayoutSupported (const BusesLayout& lay
 
 void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    processCore (buffer, midi, false);
+}
+
+void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool forceBypass)
+{
     juce::ScopedNoDenormals noDenormals;
     juce::ignoreUnused (midi);
 
@@ -389,12 +425,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         || stereoLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
 
-    if (pluginBypass_->get())
-    {
-        processBlockBypassed (buffer, midi);
-        return;
-    }
-
     const int n = buffer.getNumSamples();
     if (n <= 0)
         return;
@@ -403,7 +433,37 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     if (nch <= 0)
         return;
 
+    if (dryScratch_.getNumSamples() < n)
+    {
+        jassertfalse;
+        return;
+    }
+
+    const bool wantBypass = forceBypass || pluginBypass_->get();
+    bypassFade_.setTargetValue (wantBypass ? 1.0f : 0.0f);
+
     applyIoInputGain (buffer, n, nch);
+
+    for (int ch = 0; ch < nch; ++ch)
+    {
+        const auto* src = buffer.getReadPointer (ch);
+        auto* dst = dryScratch_.getWritePointer (ch);
+        for (int i = 0; i < n; ++i)
+        {
+            dryDelay_.pushSample (ch, src[i]);
+            dst[i] = dryDelay_.popSample (ch);
+        }
+    }
+
+    if (nch == 1)
+    {
+        auto* dst = dryScratch_.getWritePointer (1);
+        for (int i = 0; i < n; ++i)
+        {
+            dryDelay_.pushSample (1, 0.0f);
+            dst[i] = dryDelay_.popSample (1);
+        }
+    }
 
     processLearnResetRequest();
     loudnessRef_.process (buffer);
@@ -567,7 +627,21 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     }
 
     loudnessTrack_.process (buffer);
-    applyCompensationGain (buffer, n, nch, updateCompensationGainDb (loudnessTrack_.getSnapshot().shortTermLufs));
+    const float liveCompDb = updateCompensationGainDb (loudnessTrack_.getSnapshot().shortTermLufs);
+    const float dryCompDb = updateDryCompensationGainDb (loudnessRef_.getSnapshot().shortTermLufs);
+    applyCompensationGain (buffer, n, nch, liveCompDb);
+    applyCompensationGain (dryScratch_, n, nch, dryCompDb);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const float fade = bypassFade_.getNextValue();
+        for (int ch = 0; ch < nch; ++ch)
+        {
+            const float live = buffer.getSample (ch, i);
+            const float dry = dryScratch_.getSample (ch, i);
+            buffer.setSample (ch, i, live + fade * (dry - live));
+        }
+    }
 
     applyIoOutputGain (buffer, n, nch);
 
@@ -586,30 +660,7 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
 void MasterLimiterAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-    juce::ScopedNoDenormals noDenormals;
-    juce::ignoreUnused (midi);
-
-    if (gainMatchAuto_ == nullptr || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr
-        || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr)
-        return;
-
-    const int n = buffer.getNumSamples();
-    if (n <= 0)
-        return;
-
-    const int nch = juce::jmin (2, buffer.getNumChannels());
-    if (nch <= 0)
-        return;
-
-    applyIoInputGain (buffer, n, nch);
-    loudnessRef_.process (buffer);
-
-    const bool trackOn = gainMatchAuto_->load (std::memory_order_relaxed) > 0.5f;
-    const float ref = learnedRefLufs_.load (std::memory_order_relaxed);
-    if (trackOn && std::isfinite (ref))
-        applyCompensationGain (buffer, n, nch, updateCompensationGainDb (loudnessRef_.getSnapshot().shortTermLufs));
-
-    applyIoOutputGain (buffer, n, nch);
+    processCore (buffer, midi, true);
 }
 
 juce::AudioProcessorParameter* MasterLimiterAudioProcessor::getBypassParameter() const
