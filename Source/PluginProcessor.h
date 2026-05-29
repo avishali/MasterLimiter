@@ -67,6 +67,17 @@ public:
     float getOutputMaxDeltaSeen() const noexcept { return outputMaxDeltaSeen_.load (std::memory_order_relaxed); }
     float getOutputMaxAbsSeen() const noexcept { return outputMaxAbsSeen_.load (std::memory_order_relaxed); }
     int64_t getOutputClickCount() const noexcept { return outputClickCount_.load (std::memory_order_relaxed); }
+    int64_t getLastClickBlkUs() const noexcept { return lastClickBlkUs_.load (std::memory_order_relaxed); }
+    int64_t getLastClickDrvUs() const noexcept { return lastClickDrvUs_.load (std::memory_order_relaxed); }
+    int64_t getLastClickUpUs() const noexcept { return lastClickUpUs_.load (std::memory_order_relaxed); }
+    int64_t getLastClickClpUs() const noexcept { return lastClickClpUs_.load (std::memory_order_relaxed); }
+    int64_t getLastClickEnvUs() const noexcept { return lastClickEnvUs_.load (std::memory_order_relaxed); }
+    int64_t getLastClickGMulUs() const noexcept { return lastClickGMulUs_.load (std::memory_order_relaxed); }
+    int64_t getLastClickDnUs() const noexcept { return lastClickDnUs_.load (std::memory_order_relaxed); }
+    int64_t getLastClickOutUs() const noexcept { return lastClickOutUs_.load (std::memory_order_relaxed); }
+    float getLastClickD() const noexcept { return lastClickD_.load (std::memory_order_relaxed); }
+    float getLastClickAbsIn() const noexcept { return lastClickAbsIn_.load (std::memory_order_relaxed); }
+    float getLastClickAbsOut() const noexcept { return lastClickAbsOut_.load (std::memory_order_relaxed); }
 
     void resetMaxGr() noexcept { maxGrSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
     void resetMaxClip() noexcept { maxClipSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
@@ -86,6 +97,21 @@ public:
         outputMaxDeltaSeen_.store (0.0f, std::memory_order_relaxed);
         outputMaxAbsSeen_.store (0.0f, std::memory_order_relaxed);
         outputClickCount_.store (0, std::memory_order_relaxed);
+        resetLastClickStats();
+    }
+    void resetLastClickStats() noexcept
+    {
+        lastClickBlkUs_.store (0, std::memory_order_relaxed);
+        lastClickDrvUs_.store (0, std::memory_order_relaxed);
+        lastClickUpUs_.store (0, std::memory_order_relaxed);
+        lastClickClpUs_.store (0, std::memory_order_relaxed);
+        lastClickEnvUs_.store (0, std::memory_order_relaxed);
+        lastClickGMulUs_.store (0, std::memory_order_relaxed);
+        lastClickDnUs_.store (0, std::memory_order_relaxed);
+        lastClickOutUs_.store (0, std::memory_order_relaxed);
+        lastClickD_.store (0.0f, std::memory_order_relaxed);
+        lastClickAbsIn_.store (0.0f, std::memory_order_relaxed);
+        lastClickAbsOut_.store (0.0f, std::memory_order_relaxed);
     }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
@@ -158,6 +184,17 @@ private:
     std::atomic<float> outputMaxDeltaSeen_ { 0.0f };
     std::atomic<float> outputMaxAbsSeen_ { 0.0f };
     std::atomic<int64_t> outputClickCount_ { 0 };
+    std::atomic<int64_t> lastClickBlkUs_ { 0 };
+    std::atomic<int64_t> lastClickDrvUs_ { 0 };
+    std::atomic<int64_t> lastClickUpUs_ { 0 };
+    std::atomic<int64_t> lastClickClpUs_ { 0 };
+    std::atomic<int64_t> lastClickEnvUs_ { 0 };
+    std::atomic<int64_t> lastClickGMulUs_ { 0 };
+    std::atomic<int64_t> lastClickDnUs_ { 0 };
+    std::atomic<int64_t> lastClickOutUs_ { 0 };
+    std::atomic<float> lastClickD_ { 0.0f };
+    std::atomic<float> lastClickAbsIn_ { 0.0f };
+    std::atomic<float> lastClickAbsOut_ { 0.0f };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
     std::atomic<float> inputPeakRDb_ { -100.0f };
