@@ -43,6 +43,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
 {
     jassert (apvts.getParameter ("input_gain_db") != nullptr);
     jassert (apvts.getParameter ("limiter_active") != nullptr);
+    jassert (apvts.getParameter ("plugin_bypass") != nullptr);
     jassert (apvts.getParameter ("clipper_drive_db") != nullptr);
     jassert (apvts.getParameter ("ceiling_db") != nullptr);
     jassert (apvts.getParameter ("io_input_l_db") != nullptr);
@@ -57,6 +58,9 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("gain_match_auto") != nullptr);
     jassert (apvts.getParameter ("stereo_link_pct") != nullptr);
     jassert (apvts.getParameter ("character") != nullptr);
+
+    pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
+    jassert (pluginBypass_ != nullptr);
 
     apvts.addParameterListener (param::input_gain_db.data(), this);
     apvts.addParameterListener (param::ceiling_db.data(), this);
@@ -107,10 +111,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     cacheGainCeilingLinkParameters();
 
     limiterActive_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("limiter_active"));
+    pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("plugin_bypass"));
     clipperDriveDb_ = apvts.getRawParameterValue ("clipper_drive_db");
     stereoLinkPct_ = apvts.getRawParameterValue ("stereo_link_pct");
     gainMatchAuto_ = apvts.getRawParameterValue ("gain_match_auto");
     jassert (limiterActive_ != nullptr);
+    jassert (pluginBypass_ != nullptr);
     jassert (clipperDriveDb_ != nullptr);
     jassert (stereoLinkPct_ != nullptr);
     jassert (gainMatchAuto_ != nullptr);
@@ -378,10 +384,16 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
         || ceilingMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
-        || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || ioInputLDb_ == nullptr
+        || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || ioInputLDb_ == nullptr
         || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
         || stereoLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
+
+    if (pluginBypass_->get())
+    {
+        processBlockBypassed (buffer, midi);
+        return;
+    }
 
     const int n = buffer.getNumSamples();
     if (n <= 0)
@@ -581,11 +593,6 @@ void MasterLimiterAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>
         || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr)
         return;
 
-    const bool trackOn = gainMatchAuto_->load (std::memory_order_relaxed) > 0.5f;
-    const float ref = learnedRefLufs_.load (std::memory_order_relaxed);
-    if (! trackOn || ! std::isfinite (ref))
-        return;
-
     const int n = buffer.getNumSamples();
     if (n <= 0)
         return;
@@ -596,8 +603,18 @@ void MasterLimiterAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>
 
     applyIoInputGain (buffer, n, nch);
     loudnessRef_.process (buffer);
-    applyCompensationGain (buffer, n, nch, updateCompensationGainDb (loudnessRef_.getSnapshot().shortTermLufs));
+
+    const bool trackOn = gainMatchAuto_->load (std::memory_order_relaxed) > 0.5f;
+    const float ref = learnedRefLufs_.load (std::memory_order_relaxed);
+    if (trackOn && std::isfinite (ref))
+        applyCompensationGain (buffer, n, nch, updateCompensationGainDb (loudnessRef_.getSnapshot().shortTermLufs));
+
     applyIoOutputGain (buffer, n, nch);
+}
+
+juce::AudioProcessorParameter* MasterLimiterAudioProcessor::getBypassParameter() const
+{
+    return pluginBypass_;
 }
 
 juce::AudioProcessorEditor* MasterLimiterAudioProcessor::createEditor()

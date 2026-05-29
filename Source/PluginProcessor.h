@@ -29,6 +29,7 @@ public:
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    juce::AudioProcessorParameter* getBypassParameter() const override;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override;
@@ -115,6 +116,7 @@ private:
     juce::AudioParameterFloat* inputGainDbParam_ = nullptr;
     juce::AudioParameterFloat* ceilingDbParam_ = nullptr;
     juce::AudioParameterBool* limiterActive_ = nullptr;
+    juce::AudioParameterBool* pluginBypass_ = nullptr;
     juce::AudioParameterBool* gainCeilingLink_ = nullptr;
     juce::AudioParameterFloat* releaseSustainRatio_ = nullptr;
     std::atomic<float>* clipperDriveDb_ = nullptr;

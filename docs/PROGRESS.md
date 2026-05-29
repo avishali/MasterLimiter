@@ -4,6 +4,69 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-29 — Slice 11b2.1: plugin_bypass param + matched-bypass hardening + Learn relocation + button feedback
+
+**Status:** ✅ Closed. One new frozen bool param (`plugin_bypass`)
+surfaced as the JUCE host bypass parameter via
+`getBypassParameter()`. Matched-bypass path hardened so static
+I/O Input + Output gain trims always survive bypass (the user's
+manual level alignment is preserved regardless of Auto/Track
+state). In-UI Bypass button wired with visual feedback (label
+flip + warning-colour fill). Learn group relocated adjacent to
+Auto/Track + comp readout so they read as one feature group.
+Slice 3/4/5 bench PASS unchanged.
+
+**Audition note — Ableton device LED:** Ableton's green Device
+Activator LED at the top of the device frame is the host's
+track-level device enable; it hard-disables the plugin entirely
+and is NOT bound to VST3 bypass parameters in this DAW. The
+plugin's `plugin_bypass` param IS reachable via Ableton's
+parameter list / Configure mode / automation lanes, and the in-UI
+Bypass button is the canonical matched-A/B control. This is a
+known host-side limitation, not a wiring issue on our end.
+
+**Deliverables (product repo)**
+- `Source/parameters/ParameterIDs.h` — one new FROZEN ID:
+  `plugin_bypass`.
+- `Source/parameters/Parameters.cpp` — `AudioParameterBool
+  plugin_bypass`, default `false`.
+- `Source/PluginProcessor.{h,cpp}` —
+  - `getBypassParameter()` override returns the cached
+    `pluginBypass_`. JUCE's VST3 wrapper flags this parameter as
+    `kIsBypass` for hosts that honour it.
+  - `processBlock` early-dispatches to `processBlockBypassed`
+    when `plugin_bypass` is on, belt-and-braces against JUCE
+    wrapper differences.
+  - `processBlockBypassed` refactored: always applies IO Input →
+    `loudnessRef_` → conditional matched-bypass compensation → IO
+    Output. Smoother state continuity preserved across live ↔
+    bypass.
+- `Source/ui/MainView.{h,cpp}` —
+  - `btnBypass_` attached to `plugin_bypass` via
+    `ButtonAttachment`.
+  - `updateBypassButtonState()` helper flips label `Bypass ↔
+    Bypassed` and fills with theme warning colour when active;
+    called from both `onClick` and `syncMetersFromProcessor` so
+    host-driven changes update the visual.
+  - Learn button + LUFS label relocated to
+    `(314, 514, 84, 30)` / `(402, 514, 96, 30)`, adjacent to the
+    Auto/Track toggle + comp readout.
+
+**Gate result**
+- [x] Debug + Release builds clean. No new `Source/` warnings.
+- [x] Bench Slice 3/4/5 PASS 13/13, 14/14, 25/25 unchanged.
+- [x] avishali audition in Ableton: in-UI Bypass produces matched
+      A/B (dry plays at IO-trim level with optional LUFS comp);
+      label/colour feedback visible; Learn group reads as one
+      group with Auto/Track.
+- [x] Architect sign-off on diff scope + RT-safety.
+
+**Followups**
+- Slice 11b2.2 follows immediately: fixes the bypass-transition
+  click caused by the level + timing discontinuity at the
+  live ↔ dry boundary (always-running limiter chain + dry delay
+  line + sample-level crossfade).
+
 ## 2026-05-29 — Slice 11b2: Auto/Track + Learn + Bypass-with-match (ADR-0007 Addendum)
 
 **Status:** ✅ Closed. One new frozen bool param (`gain_match_auto`)

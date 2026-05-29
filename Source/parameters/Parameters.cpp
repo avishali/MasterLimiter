@@ -30,6 +30,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         true,
         AudioParameterBoolAttributes()));
 
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (plugin_bypass, 1),
+        "Bypass",
+        false,
+        AudioParameterBoolAttributes()));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (clipper_drive_db, 1),
         "Clipper Drive",

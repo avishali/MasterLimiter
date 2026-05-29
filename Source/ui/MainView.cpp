@@ -230,6 +230,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     attGainDrive_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::input_gain_db), sldGainDrive_);
     attLimiterActive_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::limiter_active), btnLimiterActive_);
+    attPluginBypass_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::plugin_bypass), btnBypass_);
     attClipperDrive_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::clipper_drive_db), sldClipperDrive_);
     attCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ceiling_db), sldCeiling_);
     attGainCeilingLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_ceiling_link), btnGainCeilingLink_);
@@ -297,6 +298,10 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     {
         updateLimiterActiveState();
     };
+    btnBypass_.onClick = [this]
+    {
+        updateBypassButtonState();
+    };
 
     sldIoInputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
     sldIoInputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimR_, sldIoInputTrimL_, btnIoInputLink_); };
@@ -317,6 +322,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     };
     updateIoTrimReadouts();
     updateLimiterActiveState();
+    updateBypassButtonState();
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         updateCeilingModeButton (c->getIndex());
 
@@ -334,7 +340,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldIoOutputTrimL_.setTooltip ("Left output trim after the ceiling stage.");
     sldIoOutputTrimR_.setTooltip ("Right output trim after the ceiling stage.");
     btnIoOutputLink_.setTooltip ("When enabled, moving one Output fader mirrors the other.");
-    btnBypass_.setTooltip (kPlaceholderTooltip);
+    btnBypass_.setTooltip ("Plugin bypass. When on, the limiter is bypassed but I/O trims and Gain-Match still apply.");
     sldCeiling_.setTooltip ("Output ceiling in dBFS.");
     sldRelease_.setTooltip ("Limiter release time in milliseconds.");
     sldReleaseSustain_.setTooltip ("Multiplier on release time for sustained peaks (1–10×).");
@@ -422,6 +428,18 @@ void MainView::updateLimiterActiveState()
     btnLimiterActive_.setButtonText (active ? "Limiter On" : "Limiter Off");
     lastLimiterActive_ = active;
     repaint (maximizerPanelArea_);
+}
+
+void MainView::updateBypassButtonState()
+{
+    const auto& theme = ui_.theme();
+    const bool bypassed = btnBypass_.getToggleState();
+    btnBypass_.setButtonText (bypassed ? "Bypassed" : "Bypass");
+    if (bypassed)
+        btnBypass_.setColour (juce::TextButton::buttonColourId, theme.warning.withAlpha (0.85f));
+    else
+        btnBypass_.removeColour (juce::TextButton::buttonColourId);
+    repaint (btnBypass_.getBounds().expanded (4, 4));
 }
 
 void MainView::updateLearnStateDisplay()
@@ -602,8 +620,9 @@ void MainView::resized()
     btnGainMatchAutoTrack_.setBounds (34, 514, 126, 30);
     lblGainMatchNote_.setBounds (170, 514, 76, 30);
     compGainBar_.setBounds (254, 526, 48, 8);
-    btnLearnInputGain_.setBounds (830, 102, 54, 22);
-    lblLearnInputLufs_.setBounds (894, 102, 92, 22);
+    // Slice 11b2.1: Learn sits with Auto/Track so the LUFS feature reads as one group.
+    btnLearnInputGain_.setBounds (314, 514, 84, 30);
+    lblLearnInputLufs_.setBounds (402, 514, 96, 30);
 
     meterGr_.setBounds (674, 104, 54, 354);
 
@@ -654,6 +673,7 @@ void MainView::syncMetersFromProcessor()
     lufsPanel_.refresh();
     updateLearnStateDisplay();
     updateCompensationReadout();
+    updateBypassButtonState();
 
     int ceilingIdx = 0;
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))

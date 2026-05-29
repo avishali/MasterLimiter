@@ -48,6 +48,7 @@ private:
     void updateIoTrimReadouts();
     void updateCeilingModeButton (int ceilingIdx);
     void updateLimiterActiveState();
+    void updateBypassButtonState();
     void updateLearnStateDisplay();
     void updateCompensationReadout();
 
@@ -149,6 +150,7 @@ private:
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attGainDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attLimiterActive_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attPluginBypass_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attClipperDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainCeilingLink_;
