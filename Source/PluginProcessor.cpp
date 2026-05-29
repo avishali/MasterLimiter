@@ -2,10 +2,7 @@
 #include "PluginEditor.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
-#include <cstdint>
-#include <limits>
 
 #include "parameters/ParameterIDs.h"
 #include "parameters/Parameters.h"
@@ -27,28 +24,6 @@ mdsp_dsp::LimiterEnvelope::Mode mapCharacterIndexToMode (int index) noexcept
         case 2:  return mdsp_dsp::LimiterEnvelope::Mode::Aggressive;
         default: return mdsp_dsp::LimiterEnvelope::Mode::Tight;
     }
-}
-
-using Clock = std::chrono::steady_clock;
-using TimePoint = Clock::time_point;
-
-int64_t elapsedUs (TimePoint start, TimePoint end) noexcept
-{
-    return std::chrono::duration_cast<std::chrono::microseconds> (end - start).count();
-}
-
-void storeMaxUs (std::atomic<int64_t>& target, int64_t value) noexcept
-{
-    const auto prev = target.load (std::memory_order_relaxed);
-    if (value > prev)
-        target.store (value, std::memory_order_relaxed);
-}
-
-void storeMaxFloat (std::atomic<float>& target, float value) noexcept
-{
-    const auto prev = target.load (std::memory_order_relaxed);
-    if (value > prev)
-        target.store (value, std::memory_order_relaxed);
 }
 } // namespace
 
@@ -275,7 +250,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 {
     juce::ScopedNoDenormals noDenormals;
     juce::ignoreUnused (midi);
-    const auto t0 = Clock::now();
 
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
@@ -293,18 +267,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     if (nch <= 0)
         return;
 
-    float blockInputAbs = 0.0f;
-    for (int ch = 0; ch < nch; ++ch)
-    {
-        const auto* d = buffer.getReadPointer (ch);
-        for (int i = 0; i < n; ++i)
-        {
-            const float a = std::isfinite (d[i]) ? std::abs (d[i]) : std::numeric_limits<float>::infinity();
-            if (a > blockInputAbs)
-                blockInputAbs = a;
-        }
-    }
-
     const float ioInputLGain = juce::Decibels::decibelsToGain (ioInputLDb_->load (std::memory_order_relaxed));
     const float ioInputRGain = juce::Decibels::decibelsToGain (ioInputRDb_->load (std::memory_order_relaxed));
     buffer.applyGain (0, 0, n, ioInputLGain);
@@ -319,12 +281,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     }
 
     const int modeIdx = ceilingMode_->getIndex();
-    auto tDrive = Clock::now();
-    auto tUpsample = tDrive;
-    auto tClipperPeak = tDrive;
-    auto tEnvelope = tDrive;
-    auto tGainMul = tDrive;
-    auto tDownsample = tDrive;
 
     if (modeIdx != cachedCeilingMode_)
     {
@@ -338,12 +294,10 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         const float inGainLin = juce::Decibels::decibelsToGain (inputGainDbParam_->get());
         for (int ch = 0; ch < nch; ++ch)
             buffer.applyGain (ch, 0, n, inGainLin);
-        tDrive = Clock::now();
 
         juce::dsp::AudioBlock<float> block (buffer);
         auto osBlock = limiterOversampler_.processSamplesUp (block);
         const int osN = (int) osBlock.getNumSamples();
-        tUpsample = Clock::now();
 
         const float clipperDriveDb = clipperDriveDb_->load (std::memory_order_relaxed);
         if (clipperDriveDb > 0.0f)
@@ -395,11 +349,9 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
             for (int i = 0; i < osN; ++i)
                 peak[i] = peakDetector_.process (channelPtrs, nch, i);
-            tClipperPeak = Clock::now();
 
             auto* gain = gainBuf_.getWritePointer (0);
             envelope_.process (peak, gain, osN);
-            tEnvelope = Clock::now();
 
             for (int ch = 0; ch < nch; ++ch)
             {
@@ -410,7 +362,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
                     d[i] = delayed * gain[i];
                 }
             }
-            tGainMul = Clock::now();
 
             const float gr = envelope_.getLastBlockMaxGrDb();
             currentGrDb_.store (gr, std::memory_order_relaxed);
@@ -431,13 +382,11 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
                 peakL[i] = std::abs (ch0[i]);
                 peakR[i] = std::abs (ch1[i]);
             }
-            tClipperPeak = Clock::now();
 
             auto* gainL = gainBuf_.getWritePointer (0);
             auto* gainR = gainBufR_.getWritePointer (0);
             envelope_.process (peakL, gainL, osN);
             envelope_R_.process (peakR, gainR, osN);
-            tEnvelope = Clock::now();
 
             auto* dL = osBlock.getChannelPointer ((size_t) 0);
             auto* dR = nch > 1 ? osBlock.getChannelPointer ((size_t) 1) : dL;
@@ -458,7 +407,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
                     dR[i] = delayedR * gOutR;
                 }
             }
-            tGainMul = Clock::now();
 
             const float grL = envelope_.getLastBlockMaxGrDb();
             const float grR = envelope_R_.getLastBlockMaxGrDb();
@@ -473,7 +421,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
             maxGrSinceResetDb_.store (frameMaxGr, std::memory_order_relaxed);
 
         limiterOversampler_.processSamplesDown (block);
-        tDownsample = Clock::now();
     }
     else
     {
@@ -481,7 +428,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         currentGrLDb_.store (0.0f, std::memory_order_relaxed);
         currentGrRDb_.store (0.0f, std::memory_order_relaxed);
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
-        tDrive = tUpsample = tClipperPeak = tEnvelope = tGainMul = tDownsample = Clock::now();
     }
 
     const float ioOutputLGain = juce::Decibels::decibelsToGain (ioOutputLDb_->load (std::memory_order_relaxed));
@@ -501,64 +447,6 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
         loudness_.process (buffer);
     }
-
-    constexpr float kClickThreshold = 0.5f;
-    float blockMaxDelta = 0.0f;
-    float blockMaxAbs = 0.0f;
-    bool blockHasClick = false;
-
-    for (int ch = 0; ch < nch; ++ch)
-    {
-        const auto* d = buffer.getReadPointer (ch);
-        float prev = d[0];
-        blockMaxAbs = std::max (blockMaxAbs,
-                                std::isfinite (prev) ? std::abs (prev) : std::numeric_limits<float>::infinity());
-
-        for (int i = 1; i < n; ++i)
-        {
-            const float cur = d[i];
-            const float delta = (std::isfinite (cur) && std::isfinite (prev))
-                                    ? std::abs (cur - prev)
-                                    : std::numeric_limits<float>::infinity();
-            const float absCur = std::isfinite (cur) ? std::abs (cur) : std::numeric_limits<float>::infinity();
-
-            blockMaxDelta = std::max (blockMaxDelta, delta);
-            blockMaxAbs = std::max (blockMaxAbs, absCur);
-            if (delta > kClickThreshold)
-                blockHasClick = true;
-
-            prev = cur;
-        }
-    }
-
-    const auto tOutput = Clock::now();
-    storeMaxFloat (outputMaxDeltaSeen_, blockMaxDelta);
-    storeMaxFloat (outputMaxAbsSeen_, blockMaxAbs);
-    if (blockHasClick)
-    {
-        outputClickCount_.fetch_add (1, std::memory_order_relaxed);
-
-        lastClickBlkUs_.store (elapsedUs (t0, tOutput), std::memory_order_relaxed);
-        lastClickDrvUs_.store (elapsedUs (t0, tDrive), std::memory_order_relaxed);
-        lastClickUpUs_.store (elapsedUs (tDrive, tUpsample), std::memory_order_relaxed);
-        lastClickClpUs_.store (elapsedUs (tUpsample, tClipperPeak), std::memory_order_relaxed);
-        lastClickEnvUs_.store (elapsedUs (tClipperPeak, tEnvelope), std::memory_order_relaxed);
-        lastClickGMulUs_.store (elapsedUs (tEnvelope, tGainMul), std::memory_order_relaxed);
-        lastClickDnUs_.store (elapsedUs (tGainMul, tDownsample), std::memory_order_relaxed);
-        lastClickOutUs_.store (elapsedUs (tDownsample, tOutput), std::memory_order_relaxed);
-        lastClickD_.store (blockMaxDelta, std::memory_order_relaxed);
-        lastClickAbsIn_.store (blockInputAbs, std::memory_order_relaxed);
-        lastClickAbsOut_.store (blockMaxAbs, std::memory_order_relaxed);
-    }
-
-    storeMaxUs (audioBlockMaxUs_, elapsedUs (t0, tOutput));
-    storeMaxUs (sectionMaxUsDrive_, elapsedUs (t0, tDrive));
-    storeMaxUs (sectionMaxUsUpsample_, elapsedUs (tDrive, tUpsample));
-    storeMaxUs (sectionMaxUsClipperPeak_, elapsedUs (tUpsample, tClipperPeak));
-    storeMaxUs (sectionMaxUsEnvelope_, elapsedUs (tClipperPeak, tEnvelope));
-    storeMaxUs (sectionMaxUsGainMul_, elapsedUs (tEnvelope, tGainMul));
-    storeMaxUs (sectionMaxUsDownsample_, elapsedUs (tGainMul, tDownsample));
-    storeMaxUs (sectionMaxUsOutput_, elapsedUs (tDownsample, tOutput));
 }
 
 juce::AudioProcessorEditor* MasterLimiterAudioProcessor::createEditor()

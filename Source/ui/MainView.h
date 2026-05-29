@@ -62,7 +62,6 @@ private:
 
     juce::Label header_ { {}, "MasterLimiter" };
     juce::Label headerMode_ { {}, "v0.2 - Maximizer" };
-    juce::Label headerClick_ {};
 
     juce::Label lblGainDrive_ { {}, "Gain" };
     juce::Slider sldGainDrive_;

@@ -28,36 +28,6 @@ juce::String formatClipReadout (float currentDb, float maxDb)
 {
     return "Clip " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
 }
-
-juce::String formatTimingReadout (const MasterLimiterAudioProcessor& p)
-{
-    return "Blk " + juce::String (p.getAudioBlockMaxUs())
-         + " | Drv " + juce::String (p.getSectionMaxUsDrive())
-         + " / Up " + juce::String (p.getSectionMaxUsUpsample())
-         + " / Clp " + juce::String (p.getSectionMaxUsClipperPeak())
-         + " / Env " + juce::String (p.getSectionMaxUsEnvelope())
-         + " / GMul " + juce::String (p.getSectionMaxUsGainMul())
-         + " / Dn " + juce::String (p.getSectionMaxUsDownsample())
-         + " / Out " + juce::String (p.getSectionMaxUsOutput()) + " us"
-         + " | Clicks " + juce::String (p.getOutputClickCount())
-         + " / D " + juce::String (p.getOutputMaxDeltaSeen(), 2)
-         + " / Abs " + juce::String (p.getOutputMaxAbsSeen(), 2);
-}
-
-juce::String formatLastClickReadout (const MasterLimiterAudioProcessor& p)
-{
-    return "LastClick: Blk=" + juce::String (p.getLastClickBlkUs())
-         + " Drv=" + juce::String (p.getLastClickDrvUs())
-         + " Up=" + juce::String (p.getLastClickUpUs())
-         + " Clp=" + juce::String (p.getLastClickClpUs())
-         + " Env=" + juce::String (p.getLastClickEnvUs())
-         + " GMul=" + juce::String (p.getLastClickGMulUs())
-         + " Dn=" + juce::String (p.getLastClickDnUs())
-         + " Out=" + juce::String (p.getLastClickOutUs())
-         + " | D=" + juce::String (p.getLastClickD(), 2)
-         + " AbsIn=" + juce::String (p.getLastClickAbsIn(), 2)
-         + " AbsOut=" + juce::String (p.getLastClickAbsOut(), 2);
-}
 } // namespace
 
 void MainView::TpReadoutSmoother::reset() noexcept
@@ -121,12 +91,6 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     headerMode_.setFont (ui_.type().labelFont().withHeight (10.0f));
     headerMode_.setColour (juce::Label::textColourId, theme.textMuted);
     addAndMakeVisible (headerMode_);
-
-    headerClick_.setJustificationType (juce::Justification::centredLeft);
-    headerClick_.setFont (ui_.type().labelFont().withHeight (9.0f));
-    headerClick_.setColour (juce::Label::textColourId, theme.warning.withAlpha (0.86f));
-    headerClick_.setVisible (false);
-    addAndMakeVisible (headerClick_);
 
     auto setupLabel = [&] (juce::Label& l)
     {
@@ -483,8 +447,7 @@ void MainView::resized()
     footerArea_ = {};
 
     header_.setBounds (24, 8, 150, 34);
-    headerMode_.setBounds (184, 8, 790, 18);
-    headerClick_.setBounds (184, 27, 790, 16);
+    headerMode_.setBounds (184, 12, 790, 24);
     btnBypass_.setBounds (982, 12, 92, 28);
     btnLimiterActive_.setBounds (190, 94, 116, 24);
 
@@ -574,10 +537,6 @@ void MainView::syncMetersFromProcessor()
     meterGr_.sync (dt);
     meterOut_.sync (sr, dt);
     lufsPanel_.refresh();
-    headerMode_.setText (formatTimingReadout (processor_), juce::dontSendNotification);
-    const auto clickCount = processor_.getOutputClickCount();
-    headerClick_.setVisible (clickCount > 0);
-    headerClick_.setText (clickCount > 0 ? formatLastClickReadout (processor_) : juce::String(), juce::dontSendNotification);
 
     int ceilingIdx = 0;
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
