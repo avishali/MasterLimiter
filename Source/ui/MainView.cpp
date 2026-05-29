@@ -187,6 +187,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     addAndMakeVisible (sldGainDrive_);
     addAndMakeVisible (sldClipperDrive_);
+    cmbClipperMode_.addItemList (juce::StringArray { "Hard", "Soft" }, 1);
+    cmbClipperMode_.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (cmbClipperMode_);
     addAndMakeVisible (sldCeiling_);
     addAndMakeVisible (sldRelease_);
     addAndMakeVisible (sldReleaseSustain_);
@@ -232,6 +235,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attLimiterActive_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::limiter_active), btnLimiterActive_);
     attPluginBypass_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::plugin_bypass), btnBypass_);
     attClipperDrive_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::clipper_drive_db), sldClipperDrive_);
+    attClipperMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::clipper_mode), cmbClipperMode_);
     attCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ceiling_db), sldCeiling_);
     attGainCeilingLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_ceiling_link), btnGainCeilingLink_);
     attRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_ms), sldRelease_);
@@ -328,8 +332,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     sldGainDrive_.setTooltip ("Drive into the limiter in dB.");
     btnLimiterActive_.setTooltip ("Turns the limiter section on or off while preserving I/O trims.");
-    sldClipperDrive_.setTooltip ("Pre-envelope clipper drive in dB.");
-    lblClipperReadout_.setTooltip ("Current / max clipper excess. Click to reset max.");
+    sldClipperDrive_.setTooltip ("Clipper threshold (dB). 0 dB = inert; lower to engage the clipper on peaks above the threshold. Body level is preserved; only peaks are reduced.");
+    cmbClipperMode_.setTooltip ("Clipper curve: Hard (Slice 9 character) or Soft (smooth-knee saturation).");
+    lblClipperReadout_.setTooltip ("Clipper curve compression depth (current / max), dB. Click to reset max.");
     btnGainCeilingLink_.setTooltip ("When enabled, Gain and Ceiling move inversely.");
     btnGainMatchAutoTrack_.setTooltip ("Continuously matches limiter output loudness to the learned reference.");
     btnLearnInputGain_.setTooltip ("Click to learn a 3 s LUFS reference. Right-click to clear it.");
@@ -612,9 +617,10 @@ void MainView::resized()
     sldStereoLink_.setBounds (402, knobY + 18, knobW, knobH);
     lblMsLink_.setBounds (492, knobY, knobW, 18);
     sldMsLink_.setBounds (492, knobY + 18, knobW, knobH);
-    lblClipperDrive_.setBounds (582, knobY, knobW, 18);
-    sldClipperDrive_.setBounds (582, knobY + 18, knobW, knobH - 18);
-    lblClipperReadout_.setBounds (582, knobY + 82, knobW, 18);
+    lblClipperDrive_.setBounds (495, 116, 140, 18);
+    sldClipperDrive_.setBounds (495, 134, 140, 120);
+    cmbClipperMode_.setBounds (515, 260, 100, 22);
+    lblClipperReadout_.setBounds (495, 286, 140, 18);
 
     gainMatchLabelArea_ = { 34, 492, 464, 18 };
     btnGainMatchAutoTrack_.setBounds (34, 514, 126, 30);
@@ -654,6 +660,7 @@ void MainView::resized()
     lblIoOutputReadout_.toFront (false);
     btnLimiterActive_.toFront (false);
     btnBypass_.toFront (false);
+    cmbClipperMode_.toFront (false);
     compGainBar_.toFront (false);
 
     meterStripArea_ = meterGr_.getBounds().getUnion (meterIn_.getBounds())

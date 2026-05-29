@@ -2,6 +2,117 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 12: Clipper gain-staging + Hard/Soft modes + threshold semantics + drive-attributable meter (ADR-0010)
+
+**Status:** ✅ Closed. One new frozen `AudioParameterChoice`
+(`clipper_mode`: `Hard`/`Soft`, default `Hard`). One range
+change on the existing frozen `clipper_drive_db`
+(`[0, +12] dB` → `[−12, 0] dB`, default `0.0`). Visible name
+updated `"Clipper Drive"` → `"Clipper"`. Chain refactor: Drive
+(`input_gain_db`) moved AFTER the clipper inside the 4× OS
+region so the clipper input is post-IO-Input only — Drive and
+Ceiling no longer modulate the clipper. The `if (clipper_drive_db
+> 0)` gate is removed; the clipper math always runs. Slice 3/4/5
+bench PASS unchanged.
+
+**Architecture:** [ADR-0010](../third_party/melechdsp-hq/docs/DECISIONS/ADR-0010-masterlimiter-clipper-soft-knee.md)
+— gain-staging, mode toggle, curve shape contract, threshold
+semantics (§1b added mid-slice), drive-attributable meter,
+revised §3 (original Soft formula bug fixed; replaced with
+`tanh`-knee at `k = 0.891`).
+
+**Deliverables (product repo)**
+- `Source/parameters/ParameterIDs.h` — one new FROZEN ID:
+  `clipper_mode`.
+- `Source/parameters/Parameters.cpp` —
+  - `AudioParameterChoice clipper_mode`, options
+    `["Hard", "Soft"]`, default index `0`.
+  - `clipper_drive_db` range flipped: `[−12, 0] dB`, default
+    `0.0`, visible name `"Clipper"`, label `" dB"`.
+- `Source/PluginProcessor.{h,cpp}` —
+  - Cached `clipperMode_` pointer (`AudioParameterChoice*`).
+  - Removed pre-OS `applyGain (inGainLin)` Drive stage.
+  - Inside the OS region, after `processSamplesUp`:
+    - Per-sample clipper loop with `clipperDriveGain =
+      decibelsToGain(−clipperDriveDb)`.
+    - **Hard branch**: `if (ax > 1.0) y = copysign(1.0, x)`.
+      Bit-identical to Slice 9 `clamp(±1.0)`.
+    - **Soft branch**: `tanh`-knee at `kSoftKnee = 0.891f` ≈
+      −1 dBFS; for `ax > kSoftKnee`, `y = copysign(k + (1−k)
+      · tanh((ax−k)/(1−k)), x)`. C¹ at knee, asymptotic to
+      ±1.0.
+    - **Drive-attributable meter**: accumulate
+      `attDb = gainToDecibels(|y| / |x|)` over the OS block
+      using the pre-divide `y` so meter numerics stay
+      audition-stable; `clipReadDb = −min_i(attDb)`. Replaces
+      the Slice 9 "excess above ±1.0" formula.
+    - **Threshold-style post-curve divide**: `y /= clipperDriveGain`
+      AFTER meter accumulation, BEFORE writing `d[i]`. At
+      default `g = 1.0` → bit-exact identity.
+  - Drive (`input_gain_db`) multiplied per-sample on the OS
+    block AFTER the clipper, BEFORE the existing peak detect /
+    envelope / lookahead / OS↓.
+- `Source/ui/MainView.{h,cpp}` —
+  - `juce::ComboBox cmbClipperMode_` + `ComboBoxAttachment` to
+    `clipper_mode`. Items `["Hard", "Soft"]` populated with
+    item IDs `1..2`.
+  - Clipper UI relocated to sit between Ceiling (right edge
+    x = 456) and GR meter (left edge x = 674) on the primary-
+    controls row:
+    - `lblClipperDrive_.setBounds (495, 116, 140, 18)`.
+    - `sldClipperDrive_.setBounds (495, 134, 140, 120)` —
+      intermediate size between Gain/Ceiling (156×136) and
+      Stereo/MS Link sliders (80×80).
+    - `cmbClipperMode_.setBounds (515, 260, 100, 22)`.
+    - `lblClipperReadout_.setBounds (495, 286, 140, 18)`.
+  - Old clipper position at `x = 582` in the lower detail
+    row is vacated.
+  - Tooltip updated to reflect the threshold semantic.
+
+**Mid-slice revisions to ADR-0010**
+- **§3 (Soft curve)** revised on architect review: the original
+  draft formula `y = sign(x) · (1 − exp(−(|x|−1)) + clamp_floor)`
+  was geometrically impossible (knee at ±1.0 cannot be both C¹
+  AND asymptote to ±1.0). The corrected curve is the `tanh`-knee
+  at `k = 0.891` with the properties locked above.
+- **§1b (threshold semantics)** added mid-slice after avishali
+  audition flagged that the original ADR-0010 math conflated
+  "clipping amount" with "gain". The threshold-style
+  self-compensating math (`g = decibelsToGain(−drive)`, `y =
+  curve(x·g) / g`) preserves body level and reduces peaks to
+  the threshold; the range flip on `clipper_drive_db` reflects
+  this.
+
+**Gate result**
+- [x] Debug + Release builds clean. No new `Source/` warnings.
+- [x] Bench Slice 3/4/5 PASS 13/13, 14/14, 25/25 unchanged at
+      defaults (Hard + drive 0 + signals below ±1.0 → identity
+      through both branches; post-curve divide by `g = 1.0` is
+      a no-op).
+- [x] avishali audition in Ableton: workflow (set input → set
+      clipper → tune Drive + Ceiling) works as intended; clipper
+      meter no longer moves when Drive changes; threshold
+      semantic preserves body level; Hard mode matches Slice 9
+      character; Soft mode smooth (no wavefolder pop at knee);
+      Slice 11b1 Link re-auditioned and approved post-chain-
+      change; Auto/Track + matched bypass unchanged; session
+      persistence verified.
+- [x] Architect sign-off on diff scope + RT-safety (per-sample
+      `std::tanh` runs only on above-knee Soft samples; default
+      mastering material has none).
+
+**Followups**
+- Slice 13 (LUFS calibration) promoted to active. `mdsp_dsp::LoudnessAnalyzer`
+  reads ~1 LU higher than WLM / Insight 2 on the same source —
+  investigate K-weighting coefs, BS.1770 reference constant, or
+  per-channel weight scaling. HQ-side fix; no ADR planned.
+- ADR-0009 (multiband detection) remains in the backlog as the
+  next architectural lever.
+- The Slice 9 `clipper_drive_db` interpretation changed (boost-
+  with-gain → threshold-with-level-stability + range flip). No
+  shipped sessions exist (pre-1.0); APVTS clamps any local dev
+  state silently on load.
+
 ---
 
 ## 2026-05-29 — Slice 11b2.2: Bypass click fix (always-running chain + dry delay + crossfade)

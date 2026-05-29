@@ -125,6 +125,7 @@ private:
     juce::AudioParameterBool* gainCeilingLink_ = nullptr;
     juce::AudioParameterFloat* releaseSustainRatio_ = nullptr;
     std::atomic<float>* clipperDriveDb_ = nullptr;
+    juce::AudioParameterChoice* clipperMode_ = nullptr;
     std::atomic<float>* ioInputLDb_ = nullptr;
     std::atomic<float>* ioInputRDb_ = nullptr;
     std::atomic<float>* ioOutputLDb_ = nullptr;

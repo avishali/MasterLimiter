@@ -45,6 +45,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("limiter_active") != nullptr);
     jassert (apvts.getParameter ("plugin_bypass") != nullptr);
     jassert (apvts.getParameter ("clipper_drive_db") != nullptr);
+    jassert (apvts.getParameter ("clipper_mode") != nullptr);
     jassert (apvts.getParameter ("ceiling_db") != nullptr);
     jassert (apvts.getParameter ("io_input_l_db") != nullptr);
     jassert (apvts.getParameter ("io_input_r_db") != nullptr);
@@ -105,8 +106,10 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
     characterChoice_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("character"));
+    clipperMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("clipper_mode"));
     jassert (ceilingMode_ != nullptr);
     jassert (characterChoice_ != nullptr);
+    jassert (clipperMode_ != nullptr);
 
     cacheGainCeilingLinkParameters();
 
@@ -420,8 +423,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
         || ceilingMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
-        || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || ioInputLDb_ == nullptr
-        || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
+        || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || clipperMode_ == nullptr
+        || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
         || stereoLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
 
@@ -487,43 +490,66 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (limiterActive_->get())
     {
-        const float inGainLin = juce::Decibels::decibelsToGain (inputGainDbParam_->get());
-        for (int ch = 0; ch < nch; ++ch)
-            buffer.applyGain (ch, 0, n, inGainLin);
-
         juce::dsp::AudioBlock<float> block (buffer);
         auto osBlock = limiterOversampler_.processSamplesUp (block);
         const int osN = (int) osBlock.getNumSamples();
 
         const float clipperDriveDb = clipperDriveDb_->load (std::memory_order_relaxed);
-        if (clipperDriveDb > 0.0f)
+        const float clipperDriveGain = juce::Decibels::decibelsToGain (-clipperDriveDb);
+        const int clipperModeIdx = clipperMode_->getIndex();
+        float maxAttenuationDb = 0.0f;
+
+        for (int ch = 0; ch < nch; ++ch)
         {
-            const float driveGain = juce::Decibels::decibelsToGain (clipperDriveDb);
-            float maxPreClipAbs = 0.0f;
-            for (int ch = 0; ch < nch; ++ch)
+            auto* d = osBlock.getChannelPointer ((size_t) ch);
+            for (int i = 0; i < osN; ++i)
             {
-                auto* d = osBlock.getChannelPointer ((size_t) ch);
-                for (int i = 0; i < osN; ++i)
+                const float x = d[i] * clipperDriveGain;
+                const float ax = std::abs (x);
+                float y = x;
+
+                if (clipperModeIdx == 0)
                 {
-                    const float scaled = d[i] * driveGain;
-                    const float a = std::abs (scaled);
-                    if (a > maxPreClipAbs)
-                        maxPreClipAbs = a;
-                    d[i] = juce::jlimit (-1.0f, 1.0f, scaled);
+                    if (ax > 1.0f)
+                        y = std::copysign (1.0f, x);
                 }
+                else
+                {
+                    constexpr float kSoftKnee = 0.891f;
+                    if (ax > kSoftKnee)
+                    {
+                        const float over = (ax - kSoftKnee) / (1.0f - kSoftKnee);
+                        y = std::copysign (kSoftKnee + (1.0f - kSoftKnee) * std::tanh (over), x);
+                    }
+                }
+
+                if (ax > 1.0e-6f)
+                {
+                    const float ay = std::abs (y);
+                    const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
+                    if (attDb < maxAttenuationDb)
+                        maxAttenuationDb = attDb;
+                }
+
+                if (clipperDriveGain > 0.0f)
+                    y /= clipperDriveGain;
+
+                d[i] = y;
             }
-            currentClipDb_.store (maxPreClipAbs > 1.0f
-                                      ? juce::Decibels::gainToDecibels (maxPreClipAbs)
-                                      : 0.0f,
-                                  std::memory_order_relaxed);
         }
-        else
+
+        const float clipReadDb = -maxAttenuationDb;
+        currentClipDb_.store (clipReadDb, std::memory_order_relaxed);
+        if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
+            maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
+
+        const float inGainLin = juce::Decibels::decibelsToGain (inputGainDbParam_->get());
+        for (int ch = 0; ch < nch; ++ch)
         {
-            currentClipDb_.store (0.0f, std::memory_order_relaxed);
+            auto* d = osBlock.getChannelPointer ((size_t) ch);
+            for (int i = 0; i < osN; ++i)
+                d[i] *= inGainLin;
         }
-        const float frameClipDb = currentClipDb_.load (std::memory_order_relaxed);
-        if (frameClipDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
-            maxClipSinceResetDb_.store (frameClipDb, std::memory_order_relaxed);
 
         const float* const ch0 = osBlock.getChannelPointer ((size_t) 0);
         const float* const ch1 = nch > 1 ? osBlock.getChannelPointer ((size_t) 1) : ch0;

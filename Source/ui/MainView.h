@@ -87,6 +87,7 @@ private:
     juce::ToggleButton btnLimiterActive_ { "Limiter" };
 
     juce::Label lblClipperDrive_ { {}, "Clipper" };
+    juce::ComboBox cmbClipperMode_ { "Clipper Mode" };
     juce::Slider sldClipperDrive_;
     juce::Label lblClipperReadout_ { {}, "Clip 0.0 / 0.0" };
 
@@ -152,6 +153,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attLimiterActive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attPluginBypass_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attClipperDrive_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attClipperMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainCeilingLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRelease_;

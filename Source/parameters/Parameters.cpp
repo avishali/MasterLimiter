@@ -38,10 +38,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (clipper_drive_db, 1),
-        "Clipper Drive",
-        NormalisableRange<float> (0.0f, 12.0f, 0.01f),
+        "Clipper",
+        NormalisableRange<float> (-12.0f, 0.0f, 0.01f),
         0.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterChoice> (
+        pid (clipper_mode, 1),
+        "Clipper Mode",
+        StringArray { "Hard", "Soft" },
+        0,
+        AudioParameterChoiceAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (ceiling_db, 1),
