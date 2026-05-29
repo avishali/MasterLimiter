@@ -71,7 +71,7 @@ private:
 
     juce::Label lblClipperDrive_ { {}, "Clipper" };
     juce::Slider sldClipperDrive_;
-    juce::Label lblClipperReadout_ { {}, "Clip: —" };
+    juce::Label lblClipperReadout_ { {}, "Clip - / -" };
 
     juce::Label lblCeiling_ { {}, "Output Level" };
     juce::Slider sldCeiling_;

@@ -19,7 +19,7 @@ juce::String formatDb1 (double v)
 juce::String formatPositiveBare (float v)
 {
     if (! std::isfinite (v) || v <= 0.05f)
-        return "—";
+        return "-";
 
     return juce::String (v, 1);
 }
@@ -27,6 +27,18 @@ juce::String formatPositiveBare (float v)
 juce::String formatClipReadout (float currentDb, float maxDb)
 {
     return "Clip " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
+}
+
+juce::String formatTimingReadout (const MasterLimiterAudioProcessor& p)
+{
+    return "Blk " + juce::String (p.getAudioBlockMaxUs())
+         + " | Drv " + juce::String (p.getSectionMaxUsDrive())
+         + " / Up " + juce::String (p.getSectionMaxUsUpsample())
+         + " / Clp " + juce::String (p.getSectionMaxUsClipperPeak())
+         + " / Env " + juce::String (p.getSectionMaxUsEnvelope())
+         + " / GMul " + juce::String (p.getSectionMaxUsGainMul())
+         + " / Dn " + juce::String (p.getSectionMaxUsDownsample())
+         + " / Out " + juce::String (p.getSectionMaxUsOutput()) + " us";
 }
 } // namespace
 
@@ -88,7 +100,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (header_);
 
     headerMode_.setJustificationType (juce::Justification::centredLeft);
-    headerMode_.setFont (ui_.type().labelFont().withHeight (12.0f));
+    headerMode_.setFont (ui_.type().labelFont().withHeight (10.0f));
     headerMode_.setColour (juce::Label::textColourId, theme.textMuted);
     addAndMakeVisible (headerMode_);
 
@@ -447,9 +459,9 @@ void MainView::resized()
     footerArea_ = {};
 
     header_.setBounds (24, 8, 150, 34);
-    headerMode_.setBounds (184, 12, 170, 28);
+    headerMode_.setBounds (184, 12, 770, 28);
     btnBypass_.setBounds (982, 12, 92, 28);
-    btnLimiterActive_.setBounds (612, 82, 116, 24);
+    btnLimiterActive_.setBounds (190, 94, 116, 24);
 
     lblGainDrive_.setBounds (48, 116, 140, 18);
     sldGainDrive_.setBounds (40, 134, 156, 136);
@@ -537,6 +549,7 @@ void MainView::syncMetersFromProcessor()
     meterGr_.sync (dt);
     meterOut_.sync (sr, dt);
     lufsPanel_.refresh();
+    headerMode_.setText (formatTimingReadout (processor_), juce::dontSendNotification);
 
     int ceilingIdx = 0;
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))

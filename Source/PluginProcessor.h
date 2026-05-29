@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
@@ -55,9 +56,28 @@ public:
     float getCurrentClipDb() const noexcept { return currentClipDb_.load (std::memory_order_relaxed); }
     float getMaxGrSinceResetDb() const noexcept { return maxGrSinceResetDb_.load (std::memory_order_relaxed); }
     float getMaxClipSinceResetDb() const noexcept { return maxClipSinceResetDb_.load (std::memory_order_relaxed); }
+    int64_t getAudioBlockMaxUs() const noexcept { return audioBlockMaxUs_.load (std::memory_order_relaxed); }
+    int64_t getSectionMaxUsDrive() const noexcept { return sectionMaxUsDrive_.load (std::memory_order_relaxed); }
+    int64_t getSectionMaxUsUpsample() const noexcept { return sectionMaxUsUpsample_.load (std::memory_order_relaxed); }
+    int64_t getSectionMaxUsClipperPeak() const noexcept { return sectionMaxUsClipperPeak_.load (std::memory_order_relaxed); }
+    int64_t getSectionMaxUsEnvelope() const noexcept { return sectionMaxUsEnvelope_.load (std::memory_order_relaxed); }
+    int64_t getSectionMaxUsGainMul() const noexcept { return sectionMaxUsGainMul_.load (std::memory_order_relaxed); }
+    int64_t getSectionMaxUsDownsample() const noexcept { return sectionMaxUsDownsample_.load (std::memory_order_relaxed); }
+    int64_t getSectionMaxUsOutput() const noexcept { return sectionMaxUsOutput_.load (std::memory_order_relaxed); }
 
     void resetMaxGr() noexcept { maxGrSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
     void resetMaxClip() noexcept { maxClipSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
+    void resetAudioBlockMaxUs() noexcept
+    {
+        audioBlockMaxUs_.store (0, std::memory_order_relaxed);
+        sectionMaxUsDrive_.store (0, std::memory_order_relaxed);
+        sectionMaxUsUpsample_.store (0, std::memory_order_relaxed);
+        sectionMaxUsClipperPeak_.store (0, std::memory_order_relaxed);
+        sectionMaxUsEnvelope_.store (0, std::memory_order_relaxed);
+        sectionMaxUsGainMul_.store (0, std::memory_order_relaxed);
+        sectionMaxUsDownsample_.store (0, std::memory_order_relaxed);
+        sectionMaxUsOutput_.store (0, std::memory_order_relaxed);
+    }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
     float getInputPeakRDb() const noexcept { return inputPeakRDb_.load (std::memory_order_relaxed); }
@@ -118,6 +138,14 @@ private:
     std::atomic<float> currentClipDb_ { 0.0f };
     std::atomic<float> maxGrSinceResetDb_ { 0.0f };
     std::atomic<float> maxClipSinceResetDb_ { 0.0f };
+    std::atomic<int64_t> audioBlockMaxUs_ { 0 };
+    std::atomic<int64_t> sectionMaxUsDrive_ { 0 };
+    std::atomic<int64_t> sectionMaxUsUpsample_ { 0 };
+    std::atomic<int64_t> sectionMaxUsClipperPeak_ { 0 };
+    std::atomic<int64_t> sectionMaxUsEnvelope_ { 0 };
+    std::atomic<int64_t> sectionMaxUsGainMul_ { 0 };
+    std::atomic<int64_t> sectionMaxUsDownsample_ { 0 };
+    std::atomic<int64_t> sectionMaxUsOutput_ { 0 };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
     std::atomic<float> inputPeakRDb_ { -100.0f };
