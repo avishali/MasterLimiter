@@ -86,12 +86,6 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     spec.maxBlockSize = osMaxBlockSize;
     envelope_.prepare (spec);
 
-    mdsp_dsp::IspTrimStage::Spec tspec;
-    tspec.sampleRate    = sampleRate;
-    tspec.numChannels   = 2;
-    tspec.maxBlockSize  = samplesPerBlock;
-    ispTrim_.prepare (tspec);
-
     peakBuf_.setSize (1, osMaxBlockSize, false, true, true);
     gainBuf_.setSize (1, osMaxBlockSize, false, true, true);
 
@@ -125,16 +119,13 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (ioOutputLink_ != nullptr);
 
     baseLatencySamples_ = baseLookaheadSamples + limiterOsLatencySamples_;
-    osLatencySamples_   = ispTrim_.getLatencyInSamples();
     cachedCeilingMode_  = ceilingMode_->getIndex();
 
     limiterOversampler_.reset();
     lookahead_.reset();
     envelope_.reset();
-    ispTrim_.reset();
 
-    setLatencySamples (cachedCeilingMode_ == 1 ? (baseLatencySamples_ + osLatencySamples_)
-                                               : baseLatencySamples_);
+    setLatencySamples (baseLatencySamples_);
 
     loudness_.prepare (sampleRate, samplesPerBlock);
     loudness_.reset();
@@ -286,10 +277,8 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
     if (modeIdx != cachedCeilingMode_)
     {
-        const int newLatency = (modeIdx == 1) ? (baseLatencySamples_ + osLatencySamples_)
-                                              : baseLatencySamples_;
-        setLatencySamples (newLatency);
-        ispTrim_.reset();
+        // Latency is the same in SP and TP after 9.6 OS consolidation.
+        setLatencySamples (baseLatencySamples_);
         cachedCeilingMode_ = modeIdx;
     }
 
@@ -338,7 +327,8 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         for (int i = 0; i < osN; ++i)
             peak[i] = peakDetector_.process (channelPtrs, nch, i);
 
-        const float thresholdLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
+        const float ceilingLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
+        const float thresholdLin = (modeIdx == 1) ? (ceilingLin * 0.965f) : ceilingLin;
         envelope_.setThresholdLinear (thresholdLin);
         envelope_.setReleaseMs (readFloatParam (apvts, "release_ms"));
         envelope_.setReleaseSustainRatio (releaseSustainRatio_->get());
@@ -359,22 +349,10 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
         currentGrDb_.store (envelope_.getLastBlockMaxGrDb(), std::memory_order_relaxed);
         limiterOversampler_.processSamplesDown (block);
-
-        if (modeIdx == 1)
-        {
-            ispTrim_.setCeilingLinear (thresholdLin);
-            ispTrim_.process (buffer);
-            currentTpTrimDb_.store (ispTrim_.getLastBlockMaxTpDbReduction(), std::memory_order_relaxed);
-        }
-        else
-        {
-            currentTpTrimDb_.store (0.0f, std::memory_order_relaxed);
-        }
     }
     else
     {
         currentGrDb_.store (0.0f, std::memory_order_relaxed);
-        currentTpTrimDb_.store (0.0f, std::memory_order_relaxed);
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
     }
 

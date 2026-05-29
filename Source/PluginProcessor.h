@@ -5,7 +5,6 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
-#include <mdsp_dsp/dynamics/IspTrimStage.h>
 #include <mdsp_dsp/dynamics/LimiterEnvelope.h>
 #include <mdsp_dsp/dynamics/LookaheadDelay.h>
 #include <mdsp_dsp/dynamics/PeakDetector.h>
@@ -51,7 +50,6 @@ public:
     const juce::AudioProcessorValueTreeState& getAPVTS() const noexcept { return apvts; }
 
     float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
-    float getCurrentTpTrimDb() const noexcept { return currentTpTrimDb_.load (std::memory_order_relaxed); }
     float getCurrentClipDb() const noexcept { return currentClipDb_.load (std::memory_order_relaxed); }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
@@ -73,7 +71,6 @@ private:
     mdsp_dsp::LookaheadDelay<float> lookahead_;
     mdsp_dsp::PeakDetector peakDetector_;
     mdsp_dsp::LimiterEnvelope envelope_;
-    mdsp_dsp::IspTrimStage ispTrim_;
     juce::dsp::Oversampling<float> limiterOversampler_ {
         2,
         2,
@@ -102,11 +99,9 @@ private:
 
     int  baseLatencySamples_ = 0;
     int  limiterOsLatencySamples_ = 0;
-    int  osLatencySamples_   = 0;
     int  cachedCeilingMode_   = 0;
 
     std::atomic<float> currentGrDb_ { 0.0f };
-    std::atomic<float> currentTpTrimDb_ { 0.0f };
     std::atomic<float> currentClipDb_ { 0.0f };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
