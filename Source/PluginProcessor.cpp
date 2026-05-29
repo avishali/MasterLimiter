@@ -3,12 +3,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "parameters/ParameterIDs.h"
 #include "parameters/Parameters.h"
 
 namespace
 {
+constexpr const char* kStateWrapperType = "MasterLimiterState";
+constexpr const char* kLearnedRefLufsProperty = "learned_ref_lufs";
+
 float readFloatParam (juce::AudioProcessorValueTreeState& apvts, const char* paramId)
 {
     auto* p = apvts.getParameter (paramId);
@@ -50,6 +54,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("release_ms") != nullptr);
     jassert (apvts.getParameter ("release_sustain_ratio") != nullptr);
     jassert (apvts.getParameter ("gain_ceiling_link") != nullptr);
+    jassert (apvts.getParameter ("gain_match_auto") != nullptr);
     jassert (apvts.getParameter ("stereo_link_pct") != nullptr);
     jassert (apvts.getParameter ("character") != nullptr);
 
@@ -60,6 +65,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
 
 MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
 {
+    cancelPendingUpdate();
     apvts.removeParameterListener (param::input_gain_db.data(), this);
     apvts.removeParameterListener (param::ceiling_db.data(), this);
     apvts.removeParameterListener (param::gain_ceiling_link.data(), this);
@@ -103,9 +109,11 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     limiterActive_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("limiter_active"));
     clipperDriveDb_ = apvts.getRawParameterValue ("clipper_drive_db");
     stereoLinkPct_ = apvts.getRawParameterValue ("stereo_link_pct");
+    gainMatchAuto_ = apvts.getRawParameterValue ("gain_match_auto");
     jassert (limiterActive_ != nullptr);
     jassert (clipperDriveDb_ != nullptr);
     jassert (stereoLinkPct_ != nullptr);
+    jassert (gainMatchAuto_ != nullptr);
 
     releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
     jassert (releaseSustainRatio_ != nullptr);
@@ -136,6 +144,20 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     loudness_.prepare (sampleRate, samplesPerBlock);
     loudness_.reset();
+    loudnessRef_.prepare (sampleRate, samplesPerBlock);
+    loudnessRef_.reset();
+    loudnessTrack_.prepare (sampleRate, samplesPerBlock);
+    loudnessTrack_.reset();
+
+    learnWindowSamples_ = static_cast<int> (std::llround (sampleRate * 3.0));
+    armedSamplesElapsed_ = 0;
+    compGainDbSmoothed_ = 0.0f;
+    compGainDbMirror_.store (0.0f, std::memory_order_relaxed);
+    compActiveLastBlock_ = false;
+
+    const double tauSec = 1.0;
+    const double blocksPerSec = sampleRate / static_cast<double> (std::max (1, samplesPerBlock));
+    compGainSmoothCoef_ = static_cast<float> (1.0 - std::exp (-1.0 / (tauSec * blocksPerSec)));
 }
 
 void MasterLimiterAudioProcessor::releaseResources()
@@ -237,6 +259,108 @@ void MasterLimiterAudioProcessor::parameterChanged (const juce::String& paramete
     couplingInProgress_.store (false, std::memory_order_relaxed);
 }
 
+void MasterLimiterAudioProcessor::armLearnReference() noexcept
+{
+    learnResetRequest_.store (true, std::memory_order_release);
+    learnState_.store (static_cast<int> (LearnState::Armed), std::memory_order_release);
+}
+
+void MasterLimiterAudioProcessor::clearLearnedReference()
+{
+    learnedRefLufs_.store (-std::numeric_limits<float>::infinity(), std::memory_order_release);
+    learnState_.store (static_cast<int> (LearnState::Idle), std::memory_order_release);
+    learnResetRequest_.store (true, std::memory_order_release);
+    triggerAsyncUpdate();
+}
+
+void MasterLimiterAudioProcessor::handleAsyncUpdate()
+{
+    commitLearnedRef();
+}
+
+void MasterLimiterAudioProcessor::commitLearnedRef()
+{
+    updateHostDisplay();
+}
+
+void MasterLimiterAudioProcessor::applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const
+{
+    const float ioInputLGain = juce::Decibels::decibelsToGain (ioInputLDb_->load (std::memory_order_relaxed));
+    const float ioInputRGain = juce::Decibels::decibelsToGain (ioInputRDb_->load (std::memory_order_relaxed));
+    buffer.applyGain (0, 0, numSamples, ioInputLGain);
+    if (numChannels > 1)
+        buffer.applyGain (1, 0, numSamples, ioInputRGain);
+}
+
+void MasterLimiterAudioProcessor::applyIoOutputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const
+{
+    const float ioOutputLGain = juce::Decibels::decibelsToGain (ioOutputLDb_->load (std::memory_order_relaxed));
+    const float ioOutputRGain = juce::Decibels::decibelsToGain (ioOutputRDb_->load (std::memory_order_relaxed));
+    buffer.applyGain (0, 0, numSamples, ioOutputLGain);
+    if (numChannels > 1)
+        buffer.applyGain (1, 0, numSamples, ioOutputRGain);
+}
+
+void MasterLimiterAudioProcessor::processLearnResetRequest()
+{
+    if (! learnResetRequest_.exchange (false, std::memory_order_acq_rel))
+        return;
+
+    loudnessRef_.reset();
+    armedSamplesElapsed_ = 0;
+}
+
+void MasterLimiterAudioProcessor::updateLearnCapture (int numSamples)
+{
+    if (learnState_.load (std::memory_order_acquire) != static_cast<int> (LearnState::Armed))
+        return;
+
+    armedSamplesElapsed_ += numSamples;
+    if (armedSamplesElapsed_ < learnWindowSamples_)
+        return;
+
+    const float shortTerm = loudnessRef_.getSnapshot().shortTermLufs;
+    if (! std::isfinite (shortTerm) || shortTerm <= -99.9f)
+        return;
+
+    learnedRefLufs_.store (shortTerm, std::memory_order_release);
+    learnState_.store (static_cast<int> (LearnState::Captured), std::memory_order_release);
+    triggerAsyncUpdate();
+}
+
+float MasterLimiterAudioProcessor::updateCompensationGainDb (float liveLufs)
+{
+    const bool trackOn = gainMatchAuto_ != nullptr
+                      && gainMatchAuto_->load (std::memory_order_relaxed) > 0.5f;
+    const float ref = learnedRefLufs_.load (std::memory_order_relaxed);
+    const bool refOk = std::isfinite (ref);
+    const bool active = trackOn && refOk;
+
+    if (active && ! compActiveLastBlock_)
+        compGainDbSmoothed_ = 0.0f;
+
+    compActiveLastBlock_ = active;
+
+    float target = 0.0f;
+    if (active && std::isfinite (liveLufs))
+        target = juce::jlimit (-12.0f, 12.0f, ref - liveLufs);
+
+    compGainDbSmoothed_ += compGainSmoothCoef_ * (target - compGainDbSmoothed_);
+    compGainDbMirror_.store (compGainDbSmoothed_, std::memory_order_relaxed);
+    return compGainDbSmoothed_;
+}
+
+void MasterLimiterAudioProcessor::applyCompensationGain (juce::AudioBuffer<float>& buffer,
+                                                         int numSamples,
+                                                         int numChannels,
+                                                         float compGainDb) const
+{
+    const float compLin = juce::Decibels::decibelsToGain (compGainDb);
+    buffer.applyGain (0, 0, numSamples, compLin);
+    if (numChannels > 1)
+        buffer.applyGain (1, 0, numSamples, compLin);
+}
+
 bool MasterLimiterAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     if (layouts.inputBuses.size() != 1 || layouts.outputBuses.size() != 1)
@@ -256,7 +380,7 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         || ceilingMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
         || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || ioInputLDb_ == nullptr
         || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
-        || stereoLinkPct_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
+        || stereoLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -267,11 +391,11 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     if (nch <= 0)
         return;
 
-    const float ioInputLGain = juce::Decibels::decibelsToGain (ioInputLDb_->load (std::memory_order_relaxed));
-    const float ioInputRGain = juce::Decibels::decibelsToGain (ioInputRDb_->load (std::memory_order_relaxed));
-    buffer.applyGain (0, 0, n, ioInputLGain);
-    if (nch > 1)
-        buffer.applyGain (1, 0, n, ioInputRGain);
+    applyIoInputGain (buffer, n, nch);
+
+    processLearnResetRequest();
+    loudnessRef_.process (buffer);
+    updateLearnCapture (n);
 
     {
         const float pL = buffer.getMagnitude (0, 0, n);
@@ -430,11 +554,10 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
     }
 
-    const float ioOutputLGain = juce::Decibels::decibelsToGain (ioOutputLDb_->load (std::memory_order_relaxed));
-    const float ioOutputRGain = juce::Decibels::decibelsToGain (ioOutputRDb_->load (std::memory_order_relaxed));
-    buffer.applyGain (0, 0, n, ioOutputLGain);
-    if (nch > 1)
-        buffer.applyGain (1, 0, n, ioOutputRGain);
+    loudnessTrack_.process (buffer);
+    applyCompensationGain (buffer, n, nch, updateCompensationGainDb (loudnessTrack_.getSnapshot().shortTermLufs));
+
+    applyIoOutputGain (buffer, n, nch);
 
     {
         const float pL = buffer.getMagnitude (0, 0, n);
@@ -447,6 +570,34 @@ void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 
         loudness_.process (buffer);
     }
+}
+
+void MasterLimiterAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+{
+    juce::ScopedNoDenormals noDenormals;
+    juce::ignoreUnused (midi);
+
+    if (gainMatchAuto_ == nullptr || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr
+        || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr)
+        return;
+
+    const bool trackOn = gainMatchAuto_->load (std::memory_order_relaxed) > 0.5f;
+    const float ref = learnedRefLufs_.load (std::memory_order_relaxed);
+    if (! trackOn || ! std::isfinite (ref))
+        return;
+
+    const int n = buffer.getNumSamples();
+    if (n <= 0)
+        return;
+
+    const int nch = juce::jmin (2, buffer.getNumChannels());
+    if (nch <= 0)
+        return;
+
+    applyIoInputGain (buffer, n, nch);
+    loudnessRef_.process (buffer);
+    applyCompensationGain (buffer, n, nch, updateCompensationGainDb (loudnessRef_.getSnapshot().shortTermLufs));
+    applyIoOutputGain (buffer, n, nch);
 }
 
 juce::AudioProcessorEditor* MasterLimiterAudioProcessor::createEditor()
@@ -509,8 +660,15 @@ void MasterLimiterAudioProcessor::changeProgramName (int, const juce::String&)
 
 void MasterLimiterAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    const auto state = apvts.copyState();
-    const std::unique_ptr<juce::XmlElement> xml (state.createXml());
+    auto state = apvts.copyState();
+    juce::ValueTree wrapper (kStateWrapperType);
+    const float learnedRef = learnedRefLufs_.load (std::memory_order_relaxed);
+    if (std::isfinite (learnedRef))
+        wrapper.setProperty (kLearnedRefLufsProperty, learnedRef, nullptr);
+    // Wrap APVTS state so the hidden Learn reference stays off the automation surface.
+    wrapper.addChild (state, -1, nullptr);
+
+    const std::unique_ptr<juce::XmlElement> xml (wrapper.createXml());
     copyXmlToBinary (*xml, destData);
 }
 
@@ -520,7 +678,35 @@ void MasterLimiterAudioProcessor::setStateInformation (const void* data, int siz
     {
         const auto vt = juce::ValueTree::fromXml (*xml);
         if (vt.isValid())
-            apvts.replaceState (vt);
+        {
+            const float noRef = -std::numeric_limits<float>::infinity();
+            float loadedRef = noRef;
+
+            if (vt.hasType (kStateWrapperType))
+            {
+                if (vt.hasProperty (kLearnedRefLufsProperty))
+                    loadedRef = static_cast<float> (vt.getProperty (kLearnedRefLufsProperty));
+
+                auto apvtsState = vt.getChildWithName (apvts.state.getType());
+                if (apvtsState.isValid())
+                    apvts.replaceState (apvtsState);
+            }
+            else
+            {
+                if (vt.hasProperty (kLearnedRefLufsProperty))
+                    loadedRef = static_cast<float> (vt.getProperty (kLearnedRefLufsProperty));
+
+                apvts.replaceState (vt);
+            }
+
+            if (! std::isfinite (loadedRef))
+                loadedRef = noRef;
+
+            learnedRefLufs_.store (loadedRef, std::memory_order_release);
+            learnState_.store (std::isfinite (loadedRef) ? static_cast<int> (LearnState::Captured)
+                                                         : static_cast<int> (LearnState::Idle),
+                               std::memory_order_release);
+        }
     }
 }
 

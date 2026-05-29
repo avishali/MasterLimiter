@@ -4,6 +4,72 @@ Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
 ---
 
+## 2026-05-29 — Slice 11b2: Auto/Track + Learn + Bypass-with-match (ADR-0007 Addendum)
+
+**Status:** ✅ Closed. One new frozen bool param (`gain_match_auto`)
+plus one hidden `ValueTree` state property (`learned_ref_lufs`).
+Two new `mdsp_dsp::LoudnessAnalyzer` instances at the spec'd
+measurement points. Learn arm-and-capture (3 s short-term LUFS
+snapshot), Track loop (short-term LUFS error → smoothed compensation
+gain, ±12 dB clamp, ~1 s τ), and matched `processBlockBypassed`
+(dry path loudness-matched to learned reference). Slice 3/4/5 bench
+PASS unchanged.
+
+**Architecture:** ADR-0007 §Addendum 2026-05-29 (Slice 11b2 specifics).
+
+**Deliverables (product repo)**
+- `Source/parameters/ParameterIDs.h` — one new FROZEN ID:
+  `gain_match_auto`.
+- `Source/parameters/Parameters.cpp` — `AudioParameterBool
+  gain_match_auto`, default `false` (bench at defaults is byte-
+  identical).
+- `Source/PluginProcessor.{h,cpp}` —
+  - `enum class LearnState { Idle, Armed, Captured }`.
+  - Two new analyzer instances: `loudnessRef_` (post-Input-Gain,
+    pre-Drive) and `loudnessTrack_` (post-Limiter, pre-Output-Gain).
+  - Hidden `learned_ref_lufs` as `std::atomic<float>`, persisted
+    via wrapper `MasterLimiterState` ValueTree in
+    `getStateInformation`/`setStateInformation` (legacy state without
+    the wrapper still loads cleanly).
+  - Learn arm-and-capture state machine; `AsyncUpdater` commits
+    via `updateHostDisplay()` on capture.
+  - Track loop: `err = clamp(ref − live, ±12)`, one-pole smoother
+    at τ ≈ 1 s, engage-ramp edge detection (`compActiveLastBlock_`).
+  - Compensation gain stage between limiter chain output and I/O
+    Output Gain.
+  - `processBlockBypassed` override: matched dry-path loudness
+    compensation (dry → Input Gain → `loudnessRef_` → comp gain →
+    Output Gain) when `gain_match_auto && std::isfinite(ref)`;
+    otherwise hard bypass.
+- `Source/ui/MainView.{h,cpp}` —
+  - Auto/Track toggle attached to `gain_match_auto`.
+  - Learn button states: `Idle` / `Armed` (pulsing) / `Captured`
+    (`Learned −X.X LUFS`); right-click clears.
+  - Compensation readout: small dB label + tiny bipolar
+    indicator bar (`CompensationBar` component) reading the atomic
+    mirror.
+
+**Gate result**
+- [x] Debug + Release builds clean. No new `Source/` warnings.
+- [x] Bench Slice 3/4/5 PASS 13/13, 14/14, 25/25 unchanged at
+      defaults (`gain_match_auto = false`, no reference → comp
+      gain held at exact 0 dB → identity).
+- [x] avishali audition in Ableton: Learn → Track → matched
+      output level; reference persists across save/reload; clamps
+      hold under extreme drive.
+- [x] Architect sign-off on diff scope + RT-safety (analyzers
+      read-only, `AsyncUpdater` is the documented RT-safe path
+      back to the message thread, atomics with relaxed ordering
+      on the hot path).
+
+**Followups**
+- Slice 11b2.1 follows immediately: surfaces `plugin_bypass` as a
+  proper VST3 bypass parameter and hardens the matched-bypass
+  path so static I/O trims survive bypass.
+- Slice 11b2.2 follows: fixes bypass-transition clicks via an
+  always-running limiter chain + dry delay line + sample-level
+  crossfade.
+
 ## Slice 7 — Stereo Link % + 2ch GR meter + envelope SIMD (2026-05-29)
 
 **Shipped (final state across the 7.x family):**

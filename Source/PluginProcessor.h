@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <limits>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
@@ -10,13 +11,14 @@
 #include <mdsp_dsp/dynamics/PeakDetector.h>
 #include <mdsp_dsp/loudness/LoudnessAnalyzer.h>
 
-#include "parameters/Parameters.h"
-
 //==============================================================================
 class MasterLimiterAudioProcessor : public juce::AudioProcessor,
-                                    private juce::AudioProcessorValueTreeState::Listener
+                                    private juce::AudioProcessorValueTreeState::Listener,
+                                    private juce::AsyncUpdater
 {
 public:
+    enum class LearnState : int { Idle = 0, Armed = 1, Captured = 2 };
+
     MasterLimiterAudioProcessor();
     ~MasterLimiterAudioProcessor() override;
 
@@ -26,6 +28,7 @@ public:
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
 
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override;
@@ -68,10 +71,25 @@ public:
     mdsp_dsp::LoudnessAnalyzer& getLoudnessAnalyzer() noexcept { return loudness_; }
     const mdsp_dsp::LoudnessAnalyzer& getLoudnessAnalyzer() const noexcept { return loudness_; }
 
+    LearnState getLearnState() const noexcept { return static_cast<LearnState> (learnState_.load (std::memory_order_relaxed)); }
+    float getLearnedRefLufs() const noexcept { return learnedRefLufs_.load (std::memory_order_relaxed); }
+    float getCompGainDb() const noexcept { return compGainDbMirror_.load (std::memory_order_relaxed); }
+
+    void armLearnReference() noexcept;
+    void clearLearnedReference();
+
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void handleAsyncUpdate() override;
     void cacheGainCeilingLinkParameters();
     void refreshGainCeilingLinkBaseline();
+    void applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const;
+    void applyIoOutputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const;
+    void processLearnResetRequest();
+    void updateLearnCapture (int numSamples);
+    float updateCompensationGainDb (float liveLufs);
+    void applyCompensationGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float compGainDb) const;
+    void commitLearnedRef();
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -105,6 +123,7 @@ private:
     std::atomic<float>* ioOutputLDb_ = nullptr;
     std::atomic<float>* ioOutputRDb_ = nullptr;
     std::atomic<float>* stereoLinkPct_ = nullptr;
+    std::atomic<float>* gainMatchAuto_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 
@@ -130,6 +149,19 @@ private:
     std::atomic<bool> couplingInProgress_ { false };
 
     mdsp_dsp::LoudnessAnalyzer loudness_;
+    mdsp_dsp::LoudnessAnalyzer loudnessRef_;
+    mdsp_dsp::LoudnessAnalyzer loudnessTrack_;
+
+    std::atomic<float> learnedRefLufs_ { -std::numeric_limits<float>::infinity() };
+    std::atomic<int> learnState_ { static_cast<int> (LearnState::Idle) };
+    std::atomic<bool> learnResetRequest_ { false };
+    int armedSamplesElapsed_ = 0;
+    int learnWindowSamples_ = 0;
+
+    std::atomic<float> compGainDbMirror_ { 0.0f };
+    float compGainDbSmoothed_ = 0.0f;
+    float compGainSmoothCoef_ = 0.0f;
+    bool compActiveLastBlock_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterLimiterAudioProcessor)
 };

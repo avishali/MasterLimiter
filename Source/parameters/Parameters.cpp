@@ -50,6 +50,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         false,
         AudioParameterBoolAttributes()));
 
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (gain_match_auto, 1),
+        "Auto / Track",
+        false,
+        AudioParameterBoolAttributes()));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (io_input_l_db, 1),
         "I/O Input L",

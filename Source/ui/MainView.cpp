@@ -16,6 +16,14 @@ juce::String formatDb1 (double v)
     return juce::String (v, 1) + " dB";
 }
 
+juce::String formatSignedDb1 (float v)
+{
+    if (! std::isfinite (v))
+        v = 0.0f;
+
+    return juce::String (v >= 0.0f ? "+" : "") + juce::String (v, 1) + " dB";
+}
+
 juce::String formatPositiveBare (float v)
 {
     if (! std::isfinite (v))
@@ -29,6 +37,44 @@ juce::String formatClipReadout (float currentDb, float maxDb)
     return "Clip " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
 }
 } // namespace
+
+void MainView::CompensationBar::setColours (juce::Colour negative, juce::Colour positive, juce::Colour track) noexcept
+{
+    negative_ = negative;
+    positive_ = positive;
+    track_ = track;
+}
+
+void MainView::CompensationBar::paint (juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat();
+    if (bounds.isEmpty())
+        return;
+
+    const auto track = bounds.withHeight (4.0f).withCentre (bounds.getCentre());
+    g.setColour (track_);
+    g.fillRoundedRectangle (track, 2.0f);
+
+    const float v = processor_ != nullptr ? juce::jlimit (-12.0f, 12.0f, processor_->getCompGainDb()) : 0.0f;
+    const float centre = track.getCentreX();
+    const float half = track.getWidth() * 0.5f;
+    const float pixels = half * (std::abs (v) / 12.0f);
+
+    if (pixels > 0.5f)
+    {
+        auto fill = track;
+        if (v < 0.0f)
+            fill.setBounds (centre - pixels, track.getY(), pixels, track.getHeight());
+        else
+            fill.setBounds (centre, track.getY(), pixels, track.getHeight());
+
+        g.setColour (v < 0.0f ? negative_ : positive_);
+        g.fillRoundedRectangle (fill, 2.0f);
+    }
+
+    g.setColour (juce::Colours::white.withAlpha (0.35f));
+    g.fillRect (juce::Rectangle<float> { centre - 0.5f, track.getY() - 1.0f, 1.0f, track.getHeight() + 2.0f });
+}
 
 void MainView::TpReadoutSmoother::reset() noexcept
 {
@@ -165,9 +211,14 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnIoOutputLink_.setButtonText ("L/R");
     btnIoOutputLink_.setToggleState (true, juce::dontSendNotification);
     btnBypass_.setClickingTogglesState (true);
+    compGainBar_.setProcessor (&processor_);
+    compGainBar_.setColours (theme.warning.withAlpha (0.85f),
+                             theme.accent.withAlpha (0.9f),
+                             theme.grid.withAlpha (0.65f));
     addAndMakeVisible (btnGainCeilingLink_);
     addAndMakeVisible (btnLimiterActive_);
     addAndMakeVisible (btnGainMatchAutoTrack_);
+    addAndMakeVisible (compGainBar_);
     addAndMakeVisible (btnLearnInputGain_);
     addAndMakeVisible (sldIoInputTrimL_);
     addAndMakeVisible (sldIoInputTrimR_);
@@ -189,6 +240,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::stereo_link_pct), sldStereoLink_);
     attMsLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ms_link_pct), sldMsLink_);
     attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::character), sldCharacter_);
+    attGainMatchAutoTrack_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_match_auto), btnGainMatchAutoTrack_);
     attIoInputTrimL_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_input_l_db), sldIoInputTrimL_);
     attIoInputTrimR_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_input_r_db), sldIoInputTrimR_);
     attIoInputLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::io_input_link), btnIoInputLink_);
@@ -273,8 +325,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldClipperDrive_.setTooltip ("Pre-envelope clipper drive in dB.");
     lblClipperReadout_.setTooltip ("Current / max clipper excess. Click to reset max.");
     btnGainCeilingLink_.setTooltip ("When enabled, Gain and Ceiling move inversely.");
-    btnGainMatchAutoTrack_.setTooltip (kPlaceholderTooltip);
-    btnLearnInputGain_.setTooltip (kPlaceholderTooltip);
+    btnGainMatchAutoTrack_.setTooltip ("Continuously matches limiter output loudness to the learned reference.");
+    btnLearnInputGain_.setTooltip ("Click to learn a 3 s LUFS reference. Right-click to clear it.");
+    btnLearnInputGain_.addMouseListener (this, false);
     sldIoInputTrimL_.setTooltip ("Left input trim before the drive stage.");
     sldIoInputTrimR_.setTooltip ("Right input trim before the drive stage.");
     btnIoInputLink_.setTooltip ("When enabled, moving one Input fader mirrors the other.");
@@ -291,6 +344,15 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldStereoLink_.setTooltip ("Stereo Link amount: 100% fully linked, 0% independent L/R limiting.");
     sldMsLink_.setTooltip ("Mid/side stereo link amount (0–100%).");
     sldCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
+
+    btnLearnInputGain_.onClick = [this]
+    {
+        processor_.armLearnReference();
+        updateLearnStateDisplay();
+    };
+
+    updateLearnStateDisplay();
+    updateCompensationReadout();
 }
 
 MainView::~MainView() = default;
@@ -362,8 +424,60 @@ void MainView::updateLimiterActiveState()
     repaint (maximizerPanelArea_);
 }
 
+void MainView::updateLearnStateDisplay()
+{
+    const auto& theme = ui_.theme();
+    const float ref = processor_.getLearnedRefLufs();
+    const bool hasRef = std::isfinite (ref);
+
+    switch (processor_.getLearnState())
+    {
+        case MasterLimiterAudioProcessor::LearnState::Armed:
+        {
+            const auto tick = juce::Time::getMillisecondCounter() % 1000u;
+            const float phase = static_cast<float> (tick) / 1000.0f;
+            const float alpha = 0.35f + 0.35f * (0.5f + 0.5f * std::sin (phase * juce::MathConstants<float>::twoPi));
+            btnLearnInputGain_.setButtonText ("Listening...");
+            btnLearnInputGain_.setColour (juce::TextButton::buttonColourId, theme.accent.withAlpha (alpha));
+            lblLearnInputLufs_.setText ("Listening...", juce::dontSendNotification);
+            break;
+        }
+
+        case MasterLimiterAudioProcessor::LearnState::Captured:
+            btnLearnInputGain_.setButtonText ("Learned");
+            btnLearnInputGain_.setColour (juce::TextButton::buttonColourId, theme.accent.withAlpha (0.55f));
+            lblLearnInputLufs_.setText (hasRef ? (juce::String (ref, 1) + " LUFS") : "No ref", juce::dontSendNotification);
+            break;
+
+        case MasterLimiterAudioProcessor::LearnState::Idle:
+        default:
+            btnLearnInputGain_.setButtonText ("Learn");
+            btnLearnInputGain_.removeColour (juce::TextButton::buttonColourId);
+            lblLearnInputLufs_.setText (hasRef ? (juce::String (ref, 1) + " LUFS") : "No ref", juce::dontSendNotification);
+            break;
+    }
+
+    repaint (btnLearnInputGain_.getBounds().getUnion (lblLearnInputLufs_.getBounds()).expanded (8, 2));
+}
+
+void MainView::updateCompensationReadout()
+{
+    lblGainMatchNote_.setText (formatSignedDb1 (processor_.getCompGainDb()), juce::dontSendNotification);
+    compGainBar_.repaint();
+}
+
 void MainView::mouseDown (const juce::MouseEvent& e)
 {
+    const auto eventOnLearn = e.eventComponent == &btnLearnInputGain_
+                           || btnLearnInputGain_.getBounds().contains (e.getEventRelativeTo (this).getPosition());
+    if (eventOnLearn && e.mods.isRightButtonDown())
+    {
+        processor_.clearLearnedReference();
+        updateLearnStateDisplay();
+        updateCompensationReadout();
+        return;
+    }
+
     const auto eventOnClipReadout = e.eventComponent == &lblClipperReadout_
                                  || lblClipperReadout_.getBounds().contains (e.getEventRelativeTo (this).getPosition());
     if (! eventOnClipReadout)
@@ -484,14 +598,14 @@ void MainView::resized()
     sldClipperDrive_.setBounds (582, knobY + 18, knobW, knobH - 18);
     lblClipperReadout_.setBounds (582, knobY + 82, knobW, 18);
 
-    gainMatchLabelArea_ = { 34, 492, 150, 18 };
+    gainMatchLabelArea_ = { 34, 492, 464, 18 };
     btnGainMatchAutoTrack_.setBounds (34, 514, 126, 30);
-    lblGainMatchNote_.setBounds (170, 514, 220, 30);
-
-    meterGr_.setBounds (674, 104, 54, 354);
-
+    lblGainMatchNote_.setBounds (170, 514, 76, 30);
+    compGainBar_.setBounds (254, 526, 48, 8);
     btnLearnInputGain_.setBounds (830, 102, 54, 22);
     lblLearnInputLufs_.setBounds (894, 102, 92, 22);
+
+    meterGr_.setBounds (674, 104, 54, 354);
 
     meterIn_.setBounds (790, 154, 116, 314);
     meterOut_.setBounds (934, 154, 116, 314);
@@ -521,6 +635,7 @@ void MainView::resized()
     lblIoOutputReadout_.toFront (false);
     btnLimiterActive_.toFront (false);
     btnBypass_.toFront (false);
+    compGainBar_.toFront (false);
 
     meterStripArea_ = meterGr_.getBounds().getUnion (meterIn_.getBounds())
                                       .getUnion (meterOut_.getBounds())
@@ -537,6 +652,8 @@ void MainView::syncMetersFromProcessor()
     meterGr_.sync (dt);
     meterOut_.sync (sr, dt);
     lufsPanel_.refresh();
+    updateLearnStateDisplay();
+    updateCompensationReadout();
 
     int ceilingIdx = 0;
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))

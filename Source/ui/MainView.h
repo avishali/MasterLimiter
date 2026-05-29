@@ -48,6 +48,22 @@ private:
     void updateIoTrimReadouts();
     void updateCeilingModeButton (int ceilingIdx);
     void updateLimiterActiveState();
+    void updateLearnStateDisplay();
+    void updateCompensationReadout();
+
+    class CompensationBar : public juce::Component
+    {
+    public:
+        void setProcessor (MasterLimiterAudioProcessor* processor) noexcept { processor_ = processor; }
+        void setColours (juce::Colour negative, juce::Colour positive, juce::Colour track) noexcept;
+        void paint (juce::Graphics& g) override;
+
+    private:
+        MasterLimiterAudioProcessor* processor_ = nullptr;
+        juce::Colour negative_ { 0xffb45a5a };
+        juce::Colour positive_ { 0xff56c7b7 };
+        juce::Colour track_ { 0x33ffffff };
+    };
 
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
@@ -101,10 +117,11 @@ private:
     juce::Slider sldCharacter_;
 
     juce::ToggleButton btnGainMatchAutoTrack_ { "Auto / Track" };
-    juce::Label lblGainMatchNote_ { {}, "measured LUFS match" };
+    juce::Label lblGainMatchNote_ { {}, "+0.0 dB" };
+    CompensationBar compGainBar_;
 
     juce::TextButton btnLearnInputGain_ { "Learn" };
-    juce::Label lblLearnInputLufs_ { {}, "-11.0 LUFS" };
+    juce::Label lblLearnInputLufs_ { {}, "No ref" };
     juce::Label lblIoInputTrim_ { {}, "Input" };
     juce::Slider sldIoInputTrimL_;
     juce::Slider sldIoInputTrimR_;
@@ -142,6 +159,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attStereoLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMsLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCharacter_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimR_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attIoInputLink_;
