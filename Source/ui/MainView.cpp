@@ -36,6 +36,7 @@ juce::String formatClipReadout (float currentDb, float maxDb)
 {
     return "Clip " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
 }
+
 } // namespace
 
 void MainView::CompensationBar::setColours (juce::Colour negative, juce::Colour positive, juce::Colour track) noexcept
@@ -124,7 +125,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
       meterIn_ (ui_, processor, MeterGroupComponent::BusKind::Input),
       meterGr_ (ui_, processor),
       meterOut_ (ui_, processor, MeterGroupComponent::BusKind::Output),
-      lufsPanel_ (ui_, processor)
+      lufsPanel_ (ui_, processor),
+      clipBallistics_ (master_limiter_ui::makeClipBallisticsState())
 {
     const auto& theme = ui_.theme();
 
@@ -530,7 +532,9 @@ void MainView::mouseDown (const juce::MouseEvent& e)
         return;
 
     processor_.resetMaxClip();
-    lblClipperReadout_.setText (formatClipReadout (processor_.getCurrentClipDb(), 0.0f), juce::dontSendNotification);
+    master_limiter_ui::resetClipBallistics (*clipBallistics_);
+    clipLedLevel_ = 0.0f;
+    lblClipperReadout_.setText (formatClipReadout (master_limiter_ui::getClipReadoutCurrent (*clipBallistics_), 0.0f), juce::dontSendNotification);
     repaint (lblClipperReadout_.getBounds().expanded (12, 2));
 }
 
@@ -735,15 +739,9 @@ void MainView::syncMetersFromProcessor()
 
     const float clipDb = processor_.getCurrentClipDb();
     const float maxClipDb = processor_.getMaxClipSinceResetDb();
-    if (clipDb > 0.0f)
-    {
-        clipLedLevel_ = 1.0f;
-    }
-    else
-    {
-        clipLedLevel_ *= std::exp (-dt / 0.2f);
-    }
-    lblClipperReadout_.setText (formatClipReadout (clipDb, maxClipDb), juce::dontSendNotification);
+    master_limiter_ui::processClipReadout (*clipBallistics_, clipDb, dt);
+    clipLedLevel_ = master_limiter_ui::processClipLed (*clipBallistics_, clipDb > 0.0f, dt);
+    lblClipperReadout_.setText (formatClipReadout (master_limiter_ui::getClipReadoutCurrent (*clipBallistics_), maxClipDb), juce::dontSendNotification);
     repaint (lblClipperReadout_.getBounds().expanded (12, 2));
 
     const auto tpTag = (ceilingIdx == 1 ? juce::String ("TP") : juce::String ("SP"));
@@ -767,5 +765,7 @@ void MainView::resetPeakHolds()
     processor_.resetMaxGr();
     processor_.resetMaxClip();
     tpSmoother_.reset();
+    master_limiter_ui::resetClipBallistics (*clipBallistics_);
+    clipLedLevel_ = 0.0f;
     lufsPanel_.refresh();
 }
