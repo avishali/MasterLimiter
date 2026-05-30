@@ -2,6 +2,39 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Auto-release (ADR-0011)
+
+**Status:** ✅ Shipped. Program-dependent release with three modes; mode
+fine-tuning deferred post-beta.
+
+**Deliverables**
+- New frozen `auto_release_mode` Choice (`Transparent`/`Balanced`/`Reactive`,
+  default `Transparent`); existing `release_auto` bool now functional.
+- `LimiterEnvelope` program-dependent release: per-mode precomputed fast/slow
+  release coefficients blended per-sample by a sustain factor (no per-sample
+  `exp`); applied to all four envelopes. Off by default → Slice 3/4/5
+  bit-identical.
+- UI: Auto toggle greys the manual Release knob; mode selector active when on.
+- Note: Auto on holds reduction longer through sustained passages → more
+  *sustained* GR on the meter (peak depth unchanged) — expected anti-pump
+  behaviour. **Per-mode constant fine-tuning deferred to post-beta.**
+- The earlier "first-touch pop" did not reproduce after a clean rebuild
+  off current `main` (stale-build artifact); on watch during beta.
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] M/S ceiling-overs bench: `PASS 2/2` (`SP 0`, `TP 0`).
+
+**Followups**
+- Backlog: auto-release mode fine-tuning post-beta.
+- Slice 16 is next: UI/UX interaction polish, including hiding Lookahead + T/S.
+
+---
+
 ## 2026-05-30 — Slice 7b.2: M/S ceiling fix
 
 **Status:** ✅ Closed. Hotfix to the shipped 7b M/S mode; avishali

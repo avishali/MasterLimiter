@@ -50,24 +50,25 @@ slice or split a follow-up slice.
 | 14 | ✅ **Shipped — 2-band multiband limiting + Color control (ADR-0009)** | ADR-0009 + `dsp_bench` cross-band IMD / pumping diagnostics / default criteria recal | 2-band LR4 limiter in 4× OS region; serial two-lookahead ceiling; `band_color` param + Color knob; total-GR meter | Shipped 2026-05-30. Two-band LR4 @ 120 Hz with 2 dB band headroom makes the bands primary and the existing limiter a final wideband brickwall. Serial two-lookahead topology guarantees the ceiling; latency 301 → 541 samples. New frozen `band_color` (`0..100 %`, default 50 %) maps Glued/Balanced/Open to band-link 0.5→0.0 and is smoothed per sample. GR meter now reports total band × wideband reduction. Bench Slice 3/4/5 PASS 13/13, 14/14, 25/25 at default Color after ADR-0009 treatment-B recalibration. Audition approved: de-pumping competitive with Ozone, slightly brighter. |
 | 15 | ✅ **Shipped — Meter ballistics (GR + Clip)** | — | GR + Clip meter ballistics | Shipped 2026-05-30. GR meter now uses instant attack / ~300 ms release and per-channel peak-hold (~1 s hold, ~12 dB/s falloff). Clip readout is smoothed and the LED holds/fades instead of flickering. Reuses HQ `mdsp_ui::meters::MeterBallistics` + `PeakHoldModel`; no product-local duplicate helper. UI-only; no audio/param/bench change. |
 | 15b | ✅ **Shipped — I/O meter features** | `mdsp_ui::meters::MeterScaleMode::Top48Db` | RMS snapshots + I/O meters | Shipped 2026-05-30. I/O meters now have read-only RMS measurement with always-visible peak+RMS numerics, light-blue sample-peak bars, optional RMS-colour overlay via shared default-OFF `RMS` toggle, shared range +/- stepping Full → 48 → 24 → 12 → 6 dB, click-to-reset peak holds, one shared centre dB scale, instant-attack / ~40 dB/s display release, and -120 dB measurement floor so bars empty at silence. I/O trim faders use the darker #1D1D37 handle tone. GR release tightened 300 → 50 ms. Meters are now complete: GR ballistics + full Ozone-style I/O meter. Slice 3/4/5 PASS unchanged. |
-| Auto | **ACTIVE NEXT — Auto-release** | ADR when slice starts | program-dependent release | Program-dependent release with 3 modes. Work is in progress on `slice-auto-release` and must be rebased onto the new `main` to inherit Slice 7b.2. Open items: first-touch pop and 3-mode tuning before close. |
-| 16 | UI/UX interaction | — | UI interaction polish | Type-in parameter values / double-click edit, tooltips, label clarity, final layout + resize polish, Color knob placement lock, and product tidy for clip-ballistics file placement (move out of `GainReductionMeter.cpp`). |
+| Auto | ✅ **Shipped — Auto-release (ADR-0011)** | ADR-0011; `LimiterEnvelope` auto-release modes | `release_auto`, `auto_release_mode`, UI enable/disable wiring | Shipped 2026-05-30. New frozen `auto_release_mode` Choice (`Transparent`/`Balanced`/`Reactive`, default Transparent); existing `release_auto` bool now functional. `LimiterEnvelope` uses per-mode precomputed fast/slow release coefficients blended per-sample by sustain factor, with no per-sample `exp`, applied to all four envelopes. Auto OFF remains the default and Slice 3/4/5 PASS unchanged. UI greys the manual Release knob when Auto is on and enables the mode selector. Per-mode constant fine-tuning deferred post-beta. |
+| 16 | **ACTIVE NEXT — UI/UX interaction** | — | UI interaction polish | Type-in parameter values / double-click edit, tooltips, label clarity, final layout + resize polish, Color knob placement lock, hide Lookahead + T/S, and product tidy for clip-ballistics file placement (move out of `GainReductionMeter.cpp`). |
 | 17 | **Beta prep — packaging/default state** | — | packaging + defaults | Parameter smoothing + default-state audit, factory preset(s), and visible version stamp for avishali's beta tester build. |
 | Doc | **User manual / instructions** | docs | — | Architect-authored manual after Slices 15-16 freeze the control surface. |
 
-Note: Slice 7b.2 closed 2026-05-30 and M/S mode now includes the
-decoded-L/R ceiling hotfix. The active next slice is Auto-release
-(program-dependent release, 3 modes), rebased onto the new `main`,
-followed by Slice 16 UI/UX interaction polish, Slice 17
-packaging/default-state audit, then the architect-authored user manual.
-STFT "Max Transparency" remains the backlog path to fuller Ozone parity
-if real-world use demands it. Slice 6 (saturator) remains backlogged.
+Note: Auto-release shipped 2026-05-30 (ADR-0011). The dead-control sweep
+has turned M/S and auto-release into real features; Lookahead + T/S still
+need to be hidden in Slice 16. The active next slice is Slice 16 UI/UX
+interaction polish, followed by Slice 17 packaging/default-state audit,
+then the architect-authored user manual. STFT "Max Transparency" remains
+the backlog path to fuller Ozone parity if real-world use demands it.
+Slice 6 (saturator) remains backlogged.
 
 ## Backlog
 
 | Status | Title | Touches (HQ) | Touches (product repo) | Rationale |
 |--------|-------|--------------|------------------------|-----------|
 | Backlog | STFT "Max Transparency" multiband / spectral path | ADR-0009 R4 / Alternatives | TBD | Fuller Ozone-parity path if real-world use demands more transparency than the shipped 2-band Color design. Kept out of Slice 14 because the audition-approved 2-band design is simpler, deterministic, and beta-ready. |
+| Backlog | Auto-release mode fine-tuning | `mdsp_dsp::LimiterEnvelope` | auto-release mode constants | Transparent/Balanced/Reactive constants are approved for beta; final per-mode tuning deferred post-beta. |
 | Backlog | Final inter-sample-peak-safe ceiling stage | TBD | final post-chain ceiling guard | Transparent final ceiling stage covering M/S decode overshoot, clipper inter-sample peaks, and post-gain overs. Slice 7b.2 fixes the shipped M/S overshoot directly; this remains future polish for one unified final guard. |
 | Backlog | HQ: consolidate dual `mdsp_ui` meter systems | `mdsp_ui/meters/MeterTypes.h`, `MeterRenderState.h` | none | `MeterTypes.h` and `MeterRenderState.h` both define `mdsp_ui::meters::MeterRenderState`, colliding in any translation unit including both. Slice 15 needed a firewall around the HQ ballistics headers; post-beta HQ cleanup should merge the old/new meter contracts. |
 | Backlog | Product tidy: move clip-ballistics free functions | — | `GainReductionMeter.cpp` / new product-side clip-ballistics file | Slice 15 keeps the HQ-header firewall by hosting clip-ballistics functions in `GainReductionMeter.cpp`. Fold a dedicated file into Slice 16 if the UI interaction slice is already touching these files. |
