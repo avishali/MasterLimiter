@@ -96,6 +96,31 @@ juce::String MeterGroupComponent::GrNumericSmoother::formatDb (float g) noexcept
     return juce::String (g, 1) + " dB";
 }
 
+void MeterGroupComponent::DisplayLevelSmoother::reset (float peak, float rms) noexcept
+{
+    peakDb = std::isfinite (peak) ? peak : -200.0f;
+    rmsDb = std::isfinite (rms) ? rms : -200.0f;
+}
+
+void MeterGroupComponent::DisplayLevelSmoother::tick (float peak, float rms, float dtSec) noexcept
+{
+    auto smooth = [] (float raw, float current, float dt) noexcept
+    {
+        if (! std::isfinite (raw))
+            raw = -200.0f;
+        if (! std::isfinite (current) || current <= -199.0f)
+            return raw;
+        if (raw >= current)
+            return raw;
+
+        constexpr float releaseDbPerSec = 20.0f;
+        return juce::jmax (raw, current - releaseDbPerSec * juce::jmax (0.0f, dt));
+    };
+
+    peakDb = smooth (peak, peakDb, dtSec);
+    rmsDb = smooth (rms, rmsDb, dtSec);
+}
+
 MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
                                           MasterLimiterAudioProcessor& processor,
                                           BusKind kind)
@@ -124,6 +149,10 @@ MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
         meter1_ = std::make_unique<MeterComponent> (ui_, channelLabel (channelCount_, 1));
         meter0_->setKind (MeterComponent::Kind::Level);
         meter1_->setKind (MeterComponent::Kind::Level);
+        meter0_->setDrawInternalScale (false);
+        meter1_->setDrawInternalScale (false);
+        meter0_->setShowRms (showRms_);
+        meter1_->setShowRms (showRms_);
         meter0_->setPeakResetCallback (&MeterGroupComponent::peakResetThunk, this);
         meter1_->setPeakResetCallback (&MeterGroupComponent::peakResetThunk, this);
         meter0_->setClipResetCallback (&MeterGroupComponent::peakResetThunk, this);
@@ -131,10 +160,10 @@ MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
         addAndMakeVisible (*meter0_);
         addAndMakeVisible (*meter1_);
 
-        provider0_.setScaleMode (ScaleMode::Top24Db);
-        provider1_.setScaleMode (ScaleMode::Top24Db);
-        provider0_.setDisplayMode (DisplayMode::Peak);
-        provider1_.setDisplayMode (DisplayMode::Peak);
+        provider0_.setScaleMode (scaleMode_);
+        provider1_.setScaleMode (scaleMode_);
+        provider0_.setDisplayMode (DisplayMode::Rms);
+        provider1_.setDisplayMode (DisplayMode::Rms);
         provider0_.setHoldEnabled (true);
         provider1_.setHoldEnabled (true);
         pushLevelRenderStates();
@@ -157,14 +186,18 @@ void MeterGroupComponent::handlePeakReset() noexcept
 
     const float lPeak = (kind_ == BusKind::Input) ? processor_.getInputPeakLDb() : processor_.getOutputPeakLDb();
     const float rPeak = (kind_ == BusKind::Input) ? processor_.getInputPeakRDb() : processor_.getOutputPeakRDb();
-    provider0_.updateFromValues (lPeak, lPeak, false, false);
-    provider1_.updateFromValues (rPeak, rPeak, false, false);
+    const float lRms = (kind_ == BusKind::Input) ? processor_.getInputRmsLDb() : processor_.getOutputRmsLDb();
+    const float rRms = (kind_ == BusKind::Input) ? processor_.getInputRmsRDb() : processor_.getOutputRmsRDb();
+    provider0_.updateFromValues (lPeak, lRms, false, false);
+    provider1_.updateFromValues (rPeak, rRms, false, false);
     provider0_.resetPeakHold();
     provider1_.resetPeakHold();
     peakSmooth0_.reset();
     peakSmooth1_.reset();
-    maxPeakLDb_ = -200.0f;
-    maxPeakRDb_ = -200.0f;
+    rmsSmooth0_.reset();
+    rmsSmooth1_.reset();
+    displaySmooth0_.reset (lPeak, lRms);
+    displaySmooth1_.reset (rPeak, rRms);
     pushLevelRenderStates();
 }
 
@@ -179,6 +212,35 @@ int MeterGroupComponent::getPreferredWidth() const noexcept
 void MeterGroupComponent::resetPeakHolds() noexcept
 {
     handlePeakReset();
+}
+
+void MeterGroupComponent::setScaleMode (ScaleMode mode) noexcept
+{
+    scaleMode_ = mode;
+    provider0_.setScaleMode (mode);
+    provider1_.setScaleMode (mode);
+    pushLevelRenderStates();
+    repaint();
+}
+
+void MeterGroupComponent::setShowRms (bool shouldShow) noexcept
+{
+    showRms_ = shouldShow;
+    if (meter0_ != nullptr)
+        meter0_->setShowRms (showRms_);
+    if (meter1_ != nullptr)
+        meter1_->setShowRms (showRms_);
+    repaint();
+}
+
+juce::Rectangle<int> MeterGroupComponent::getScaleReferenceBoundsInParent() const noexcept
+{
+    if (meter0_ == nullptr)
+        return {};
+
+    return meter0_->getMeterArea()
+        .translated (meter0_->getX(), meter0_->getY())
+        .translated (getX(), getY());
 }
 
 void MeterGroupComponent::pushLevelRenderStates()
@@ -222,32 +284,33 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
 
     const float lPeak = (kind_ == BusKind::Input) ? processor_.getInputPeakLDb() : processor_.getOutputPeakLDb();
     const float rPeak = (kind_ == BusKind::Input) ? processor_.getInputPeakRDb() : processor_.getOutputPeakRDb();
+    const float lRms = (kind_ == BusKind::Input) ? processor_.getInputRmsLDb() : processor_.getOutputRmsLDb();
+    const float rRms = (kind_ == BusKind::Input) ? processor_.getInputRmsRDb() : processor_.getOutputRmsRDb();
 
     peakSmooth0_.tick (lPeak, dtSec, holdTicks);
     peakSmooth1_.tick (rPeak, dtSec, holdTicks);
-
-    if (std::isfinite (lPeak))
-        maxPeakLDb_ = juce::jmax (maxPeakLDb_, lPeak);
-    if (std::isfinite (rPeak))
-        maxPeakRDb_ = juce::jmax (maxPeakRDb_, rPeak);
+    rmsSmooth0_.tick (lRms, dtSec, holdTicks);
+    rmsSmooth1_.tick (rRms, dtSec, holdTicks);
+    displaySmooth0_.tick (lPeak, lRms, dtSec);
+    displaySmooth1_.tick (rPeak, rRms, dtSec);
 
     constexpr float kClipThresholdDb = 0.0f;  // digital full-scale
     const bool clippedL = renderState0_.clipLatched || (std::isfinite (lPeak) && lPeak >= kClipThresholdDb);
     const bool clippedR = renderState1_.clipLatched || (std::isfinite (rPeak) && rPeak >= kClipThresholdDb);
 
-    provider0_.updateFromValues (lPeak, lPeak, clippedL, false);
-    provider1_.updateFromValues (rPeak, rPeak, clippedR, false);
+    provider0_.updateFromValues (displaySmooth0_.peakDb, displaySmooth0_.rmsDb, clippedL, false);
+    provider1_.updateFromValues (displaySmooth1_.peakDb, displaySmooth1_.rmsDb, clippedR, false);
     pushLevelRenderStates();
 
     const auto lCurrentText = formatDbBare (peakSmooth0_.duty);
     const auto rCurrentText = formatDbBare (peakSmooth1_.duty);
-    const auto lMaxText = formatDbBare (maxPeakLDb_);
-    const auto rMaxText = formatDbBare (maxPeakRDb_);
+    const auto lRmsText = formatDbBare (rmsSmooth0_.duty);
+    const auto rRmsText = formatDbBare (rmsSmooth1_.duty);
 
     if (meter0_ != nullptr)
-        meter0_->setNumericReadoutOverride (true, lCurrentText, lMaxText);
+        meter0_->setNumericReadoutOverride (true, lCurrentText, lRmsText);
     if (meter1_ != nullptr)
-        meter1_->setNumericReadoutOverride (true, rCurrentText, rMaxText);
+        meter1_->setNumericReadoutOverride (true, rCurrentText, rRmsText);
 }
 
 void MeterGroupComponent::paint (juce::Graphics& g)

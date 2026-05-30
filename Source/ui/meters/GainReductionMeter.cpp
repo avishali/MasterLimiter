@@ -16,7 +16,7 @@ mdsp_ui::meters::MeterBallisticsConfig makeGrBallisticsConfig() noexcept
 {
     mdsp_ui::meters::MeterBallisticsConfig config;
     config.attackMs = 1.0f;
-    config.releaseMs = 300.0f;
+    config.releaseMs = 50.0f;
     config.holdMs = 1000.0f;
     config.holdFalloffDbPerSec = 12.0f;
     return config;

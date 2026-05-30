@@ -69,8 +69,12 @@ public:
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
     float getInputPeakRDb() const noexcept { return inputPeakRDb_.load (std::memory_order_relaxed); }
+    float getInputRmsLDb() const noexcept { return inputRmsLDb_.load (std::memory_order_relaxed); }
+    float getInputRmsRDb() const noexcept { return inputRmsRDb_.load (std::memory_order_relaxed); }
     float getOutputPeakLDb() const noexcept { return outputPeakLDb_.load (std::memory_order_relaxed); }
     float getOutputPeakRDb() const noexcept { return outputPeakRDb_.load (std::memory_order_relaxed); }
+    float getOutputRmsLDb() const noexcept { return outputRmsLDb_.load (std::memory_order_relaxed); }
+    float getOutputRmsRDb() const noexcept { return outputRmsRDb_.load (std::memory_order_relaxed); }
     float getOutputTpDb() const noexcept { return outputTpDb_.load (std::memory_order_relaxed); }
 
     mdsp_dsp::LoudnessAnalyzer& getLoudnessAnalyzer() noexcept { return loudness_; }
@@ -172,8 +176,12 @@ private:
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
     std::atomic<float> inputPeakRDb_ { -100.0f };
+    std::atomic<float> inputRmsLDb_ { -100.0f };
+    std::atomic<float> inputRmsRDb_ { -100.0f };
     std::atomic<float> outputPeakLDb_ { -100.0f };
     std::atomic<float> outputPeakRDb_ { -100.0f };
+    std::atomic<float> outputRmsLDb_ { -100.0f };
+    std::atomic<float> outputRmsRDb_ { -100.0f };
     std::atomic<float> outputTpDb_ { -100.0f };
     std::atomic<float> lastLinkedInputGainDb_ { 0.0f };
     std::atomic<float> lastLinkedCeilingDb_ { -1.0f };
@@ -196,6 +204,11 @@ private:
     bool compActiveLastBlock_ = false;
     float dryCompGainDbSmoothed_ = 0.0f;
     std::atomic<float> dryCompGainDbMirror_ { 0.0f };
+    float msInL_ = 0.0f;
+    float msInR_ = 0.0f;
+    float msOutL_ = 0.0f;
+    float msOutR_ = 0.0f;
+    float meterRmsMsCoeff_ = 1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterLimiterAudioProcessor)
 };

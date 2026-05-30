@@ -26,6 +26,9 @@ public:
     void setRenderState (const MeterRenderState& state);
 
     void setRangeDb (float minDb, float maxDb) noexcept;
+    void setDrawInternalScale (bool shouldDraw) noexcept;
+    void setShowRms (bool shouldShow) noexcept;
+    juce::Rectangle<int> getMeterArea() const noexcept { return meterArea_; }
 
     void setGrDb (float db) noexcept;
     void setStereoGrDb (float l, float r) noexcept;
@@ -58,6 +61,8 @@ private:
     float grMinDb_ { 0.0f };
     float grMaxDb_ { 20.0f };
     bool grSingleBar_ { true };
+    bool drawInternalScale_ { true };
+    bool showRms_ { false };
 
     juce::String label_;
     juce::String numericTextPeak_ { "-inf" };

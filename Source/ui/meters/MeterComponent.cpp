@@ -58,6 +58,24 @@ void MeterComponent::setRangeDb (float minDb, float maxDb) noexcept
     grMaxDb_ = juce::jmax (minDb + 0.001f, maxDb);
 }
 
+void MeterComponent::setDrawInternalScale (bool shouldDraw) noexcept
+{
+    if (drawInternalScale_ == shouldDraw)
+        return;
+
+    drawInternalScale_ = shouldDraw;
+    repaint();
+}
+
+void MeterComponent::setShowRms (bool shouldShow) noexcept
+{
+    if (showRms_ == shouldShow)
+        return;
+
+    showRms_ = shouldShow;
+    repaint();
+}
+
 void MeterComponent::setGrDb (float db) noexcept
 {
     setStereoGrDb (db, db);
@@ -103,6 +121,15 @@ void MeterComponent::setPeakResetCallback (Callback cb, void* ctx) noexcept
 
 float MeterComponent::dbToNormForScale (float db, mdsp_ui::meters::MeterScaleMode mode) noexcept
 {
+    if (mode == mdsp_ui::meters::MeterScaleMode::Top48Db)
+    {
+        const float clamped = juce::jlimit (-48.0f, 6.0f, std::isfinite (db) ? db : -48.0f);
+        if (clamped <= 0.0f)
+            return 0.9f * (clamped + 48.0f) / 48.0f;
+
+        return 0.9f + 0.1f * (clamped / 6.0f);
+    }
+
     return mdsp_ui::meters::MeterRenderStateProvider::normaliseDb (db, mode);
 }
 
@@ -296,75 +323,50 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     const float xLeft = static_cast<float> (meterArea_.getX());
     const float xRight = static_cast<float> (meterArea_.getRight());
     const float width = static_cast<float> (meterArea_.getWidth());
+    const auto peakColour = theme.accent.brighter (0.55f);
 
-    const float mainNorm = (renderState_.displayMode == mdsp_ui::meters::MeterDisplayMode::Peak)
-                               ? renderState_.peakNorm
-                               : renderState_.rmsNorm;
+    const float fillNorm = showRms_ ? renderState_.rmsNorm : renderState_.peakNorm;
+    const float rmsH = fillNorm * h;
+    const float rmsTop = yMax - rmsH;
+    const bool hasRmsSignal = fillNorm > 0.002f;
 
-    const float mainH = mainNorm * h;
-    const float mainTop = yMax - mainH;
-    const bool hasMainSignal = mainNorm > 0.002f;
-
-    if (hasMainSignal && mainH > 0.5f)
+    if (hasRmsSignal && rmsH > 0.5f)
     {
-        auto mainRect = meterArea_.withTop (static_cast<int> (std::round (mainTop)));
-        const auto mainRectF = mainRect.toFloat();
+        auto rmsRect = meterArea_.withTop (static_cast<int> (std::round (rmsTop)));
+        const auto rmsRectF = rmsRect.toFloat();
 
-        juce::ColourGradient signalGlow (theme.accent.withAlpha (0.34f),
+        juce::ColourGradient signalGlow (theme.accent.withAlpha (0.36f),
                                          xLeft + (width * 0.5f),
-                                         mainTop,
-                                         theme.accent.withAlpha (0.05f),
+                                         rmsTop,
+                                         theme.accent.withAlpha (0.08f),
                                          xLeft + (width * 0.5f),
                                          yMax,
                                          false);
         g.setGradientFill (signalGlow);
-        g.fillRoundedRectangle (mainRectF.expanded (1.0f, 0.0f), m.rSmall);
+        g.fillRoundedRectangle (rmsRectF.expanded (1.0f, 0.0f), m.rSmall);
 
-        g.setColour (theme.accent.withAlpha (0.85f));
-        g.fillRoundedRectangle (mainRectF, m.rSmall);
-
-        g.setColour (theme.accent.brighter (0.22f).withAlpha (0.72f));
-        g.drawLine (xLeft + 1.0f,
-                    mainTop + 0.5f,
-                    xRight - 1.0f,
-                    mainTop + 0.5f,
-                    m.strokeThin);
+        g.setColour ((showRms_ ? theme.accent : peakColour).withAlpha (0.88f));
+        g.fillRoundedRectangle (rmsRectF, m.rSmall);
     }
 
     const float peakTop = yMax - (renderState_.peakNorm * h);
-
-    if (renderState_.displayMode == mdsp_ui::meters::MeterDisplayMode::Rms)
+    if (showRms_ && renderState_.peakNorm > renderState_.rmsNorm && renderState_.peakNorm > 0.002f)
     {
-        if (renderState_.peakNorm > renderState_.rmsNorm && renderState_.peakNorm > 0.002f)
-        {
-            g.setColour (theme.accent.withAlpha (0.3f));
-            g.fillRect (xLeft + 2.0f,
-                        peakTop,
-                        width - 4.0f,
-                        mainTop - peakTop);
-        }
-
-        if (renderState_.peakNorm > 0.002f)
-        {
-            g.setColour (theme.seriesPeak.withAlpha (0.95f));
-            g.drawLine (xLeft + m.strokeThick,
-                        peakTop,
-                        xRight - m.strokeThick,
-                        peakTop,
-                        m.strokeMed);
-        }
+        g.setColour (peakColour.withAlpha (0.24f));
+        g.fillRect (xLeft + 2.0f,
+                    peakTop,
+                    width - 4.0f,
+                    juce::jmax (1.0f, rmsTop - peakTop));
     }
-    else
+
+    if (renderState_.peakNorm > 0.002f)
     {
-        if (hasMainSignal)
-        {
-            g.setColour (theme.seriesPeak.withAlpha (0.95f));
-            g.drawLine (xLeft + m.strokeThick,
-                        mainTop,
-                        xRight - m.strokeThick,
-                        mainTop,
-                        m.strokeMed);
-        }
+        g.setColour (peakColour.withAlpha (0.95f));
+        g.drawLine (xLeft + m.strokeThick,
+                    peakTop,
+                    xRight - m.strokeThick,
+                    peakTop,
+                    m.strokeMed);
     }
 
     if (renderState_.maxPeakNorm > 0.001f)
@@ -378,117 +380,120 @@ void MeterComponent::paintLevel (juce::Graphics& g)
                     1.5f);
     }
 
-    g.setFont (ui_.type().labelFont().withHeight (kDbScaleFontHeight));
-
-    if (renderState_.scaleMode == mdsp_ui::meters::MeterScaleMode::Top24Db)
+    if (drawInternalScale_)
     {
-        for (int i = 0; i <= 18; ++i)
-        {
-            const float db = -static_cast<float> (i);
-            const float norm = dbToNormForScale (db, renderState_.scaleMode);
-            const float y = yMax - (norm * h);
-            const bool isZero = (i == 0);
-            g.setColour (isZero ? theme.text.withAlpha (0.50f) : theme.text.withAlpha (0.26f));
-            g.drawLine (xLeft, y, xRight, y, isZero ? kDbScaleLine0Db : kDbScaleLineDense);
+        g.setFont (ui_.type().labelFont().withHeight (kDbScaleFontHeight));
 
-            if ((i % 3) == 0)
+        if (renderState_.scaleMode == mdsp_ui::meters::MeterScaleMode::Top24Db)
+        {
+            for (int i = 0; i <= 18; ++i)
             {
-                const char* label = nullptr;
-                switch (i)
+                const float db = -static_cast<float> (i);
+                const float norm = dbToNormForScale (db, renderState_.scaleMode);
+                const float y = yMax - (norm * h);
+                const bool isZero = (i == 0);
+                g.setColour (isZero ? theme.text.withAlpha (0.50f) : theme.text.withAlpha (0.26f));
+                g.drawLine (xLeft, y, xRight, y, isZero ? kDbScaleLine0Db : kDbScaleLineDense);
+
+                if ((i % 3) == 0)
                 {
-                    case 0: label = "0"; break;
-                    case 3: label = "-3"; break;
-                    case 6: label = "-6"; break;
-                    case 9: label = "-9"; break;
-                    case 12: label = "-12"; break;
-                    case 15: label = "-15"; break;
-                    case 18: label = "-18"; break;
-                    default: break;
+                    const char* label = nullptr;
+                    switch (i)
+                    {
+                        case 0: label = "0"; break;
+                        case 3: label = "-3"; break;
+                        case 6: label = "-6"; break;
+                        case 9: label = "-9"; break;
+                        case 12: label = "-12"; break;
+                        case 15: label = "-15"; break;
+                        case 18: label = "-18"; break;
+                        default: break;
+                    }
+                    if (label != nullptr)
+                    {
+                        g.setColour (theme.text.withAlpha (0.44f));
+                        g.drawText (label,
+                                    juce::Rectangle<float> (xLeft, y - 5.0f, width, 10.0f),
+                                    juce::Justification::centred);
+                    }
                 }
+            }
+        }
+        else if (renderState_.scaleMode == mdsp_ui::meters::MeterScaleMode::Top12Db)
+        {
+            for (int i = 0; i <= 12; ++i)
+            {
+                const float db = -static_cast<float> (i) * 0.5f;
+                const float norm = dbToNormForScale (db, renderState_.scaleMode);
+                const float y = yMax - (norm * h);
+                const bool isZero = (i == 0);
+                g.setColour (isZero ? theme.text.withAlpha (0.50f) : theme.text.withAlpha (0.26f));
+                g.drawLine (xLeft, y, xRight, y, isZero ? kDbScaleLine0Db : kDbScaleLineDense);
+
+                if ((i % 2) == 0)
+                {
+                    const char* label = nullptr;
+                    switch (i)
+                    {
+                        case 0: label = "0"; break;
+                        case 2: label = "-1"; break;
+                        case 4: label = "-2"; break;
+                        case 6: label = "-3"; break;
+                        case 8: label = "-4"; break;
+                        case 10: label = "-5"; break;
+                        case 12: label = "-6"; break;
+                        default: break;
+                    }
+                    if (label != nullptr)
+                    {
+                        g.setColour (theme.text.withAlpha (0.44f));
+                        g.drawText (label,
+                                    juce::Rectangle<float> (xLeft, y - 5.0f, width, 10.0f),
+                                    juce::Justification::centred);
+                    }
+                }
+            }
+        }
+        else
+        {
+            static constexpr float kTicksFull[] = { 6.0f, 0.0f, -6.0f, -12.0f, -24.0f, -48.0f, -72.0f, -96.0f, -120.0f };
+            for (const auto db : kTicksFull)
+            {
+                const float norm = dbToNormForScale (db, renderState_.scaleMode);
+                const float y = yMax - (norm * h);
+                const float lineW = nearTick (db, 0.0f) ? kDbScaleLine0Db : kDbScaleLineThin;
+                if (nearTick (db, 0.0f))
+                {
+                    g.setColour (theme.text.withAlpha (0.55f));
+                    g.drawLine (xLeft, y, xRight, y, lineW);
+                }
+                else if (db > 0.0f)
+                {
+                    g.setColour (theme.danger.withAlpha (0.85f));
+                    g.drawLine (xLeft, y, xRight, y, lineW);
+                }
+                else
+                {
+                    g.setColour (theme.text.withAlpha (0.32f));
+                    g.drawLine (xLeft, y, xRight, y, lineW);
+                }
+
+                const char* label = nullptr;
+                if (nearTick (db, 6.0f)) label = "+6";
+                else if (nearTick (db, 0.0f)) label = "0";
+                else if (nearTick (db, -6.0f)) label = "-6";
+                else if (nearTick (db, -12.0f)) label = "-12";
+                else if (nearTick (db, -24.0f)) label = "-24";
+                else if (nearTick (db, -48.0f)) label = "-48";
+                else if (nearTick (db, -96.0f)) label = "-96";
+
                 if (label != nullptr)
                 {
-                    g.setColour (theme.text.withAlpha (0.44f));
+                    g.setColour (db >= 0.0f ? theme.danger.withAlpha (0.72f) : theme.text.withAlpha (0.46f));
                     g.drawText (label,
                                 juce::Rectangle<float> (xLeft, y - 5.0f, width, 10.0f),
                                 juce::Justification::centred);
                 }
-            }
-        }
-    }
-    else if (renderState_.scaleMode == mdsp_ui::meters::MeterScaleMode::Top12Db)
-    {
-        for (int i = 0; i <= 12; ++i)
-        {
-            const float db = -static_cast<float> (i) * 0.5f;
-            const float norm = dbToNormForScale (db, renderState_.scaleMode);
-            const float y = yMax - (norm * h);
-            const bool isZero = (i == 0);
-            g.setColour (isZero ? theme.text.withAlpha (0.50f) : theme.text.withAlpha (0.26f));
-            g.drawLine (xLeft, y, xRight, y, isZero ? kDbScaleLine0Db : kDbScaleLineDense);
-
-            if ((i % 2) == 0)
-            {
-                const char* label = nullptr;
-                switch (i)
-                {
-                    case 0: label = "0"; break;
-                    case 2: label = "-1"; break;
-                    case 4: label = "-2"; break;
-                    case 6: label = "-3"; break;
-                    case 8: label = "-4"; break;
-                    case 10: label = "-5"; break;
-                    case 12: label = "-6"; break;
-                    default: break;
-                }
-                if (label != nullptr)
-                {
-                    g.setColour (theme.text.withAlpha (0.44f));
-                    g.drawText (label,
-                                juce::Rectangle<float> (xLeft, y - 5.0f, width, 10.0f),
-                                juce::Justification::centred);
-                }
-            }
-        }
-    }
-    else
-    {
-        static constexpr float kTicksFull[] = { 6.0f, 0.0f, -6.0f, -12.0f, -24.0f, -48.0f, -72.0f, -96.0f, -120.0f };
-        for (const auto db : kTicksFull)
-        {
-            const float norm = dbToNormForScale (db, renderState_.scaleMode);
-            const float y = yMax - (norm * h);
-            const float lineW = nearTick (db, 0.0f) ? kDbScaleLine0Db : kDbScaleLineThin;
-            if (nearTick (db, 0.0f))
-            {
-                g.setColour (theme.text.withAlpha (0.55f));
-                g.drawLine (xLeft, y, xRight, y, lineW);
-            }
-            else if (db > 0.0f)
-            {
-                g.setColour (theme.danger.withAlpha (0.85f));
-                g.drawLine (xLeft, y, xRight, y, lineW);
-            }
-            else
-            {
-                g.setColour (theme.text.withAlpha (0.32f));
-                g.drawLine (xLeft, y, xRight, y, lineW);
-            }
-
-            const char* label = nullptr;
-            if (nearTick (db, 6.0f)) label = "+6";
-            else if (nearTick (db, 0.0f)) label = "0";
-            else if (nearTick (db, -6.0f)) label = "-6";
-            else if (nearTick (db, -12.0f)) label = "-12";
-            else if (nearTick (db, -24.0f)) label = "-24";
-            else if (nearTick (db, -48.0f)) label = "-48";
-            else if (nearTick (db, -96.0f)) label = "-96";
-
-            if (label != nullptr)
-            {
-                g.setColour (db >= 0.0f ? theme.danger.withAlpha (0.72f) : theme.text.withAlpha (0.46f));
-                g.drawText (label,
-                            juce::Rectangle<float> (xLeft, y - 5.0f, width, 10.0f),
-                            juce::Justification::centred);
             }
         }
     }
@@ -514,15 +519,22 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     const juce::String peakLine = numericOverrideActive_ ? numericOverridePeak_ : numericTextPeak_;
     const juce::String rmsLine = numericOverrideActive_ ? numericOverrideRms_ : numericTextRms_;
 
-    auto numBounds = numericArea_;
-    auto peakBounds = numBounds.removeFromTop (numBounds.getHeight() / 2);
-    auto rmsBounds = numBounds;
+    g.setColour (peakColour.withAlpha (0.9f));
+    if (! showRms_)
+    {
+        g.drawText (peakLine, numericArea_, juce::Justification::centred);
+    }
+    else
+    {
+        auto numBounds = numericArea_;
+        auto peakBounds = numBounds.removeFromTop (numBounds.getHeight() / 2);
+        auto rmsBounds = numBounds;
 
-    g.setColour (theme.seriesPeak.withAlpha (0.9f));
-    g.drawText (peakLine, peakBounds, juce::Justification::centred);
+        g.drawText (peakLine, peakBounds, juce::Justification::centred);
 
-    g.setColour (theme.text.withAlpha (0.68f));
-    g.drawText (rmsLine, rmsBounds, juce::Justification::centred);
+        g.setColour (theme.text.withAlpha (0.68f));
+        g.drawText (rmsLine, rmsBounds, juce::Justification::centred);
+    }
 
     if (renderState_.bypassed)
     {

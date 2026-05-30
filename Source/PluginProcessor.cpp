@@ -34,6 +34,28 @@ mdsp_dsp::LimiterEnvelope::Mode mapCharacterIndexToMode (int index) noexcept
         default: return mdsp_dsp::LimiterEnvelope::Mode::Tight;
     }
 }
+
+float meanSquareForChannel (const juce::AudioBuffer<float>& buffer, int channel, int numSamples) noexcept
+{
+    if (channel < 0 || channel >= buffer.getNumChannels() || numSamples <= 0)
+        return 0.0f;
+
+    const auto* data = buffer.getReadPointer (channel);
+    double sum = 0.0;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const double sample = static_cast<double> (data[i]);
+        sum += sample * sample;
+    }
+
+    return static_cast<float> (sum / static_cast<double> (numSamples));
+}
+
+float rmsDbFromMeanSquare (float meanSquare) noexcept
+{
+    return juce::Decibels::gainToDecibels (std::sqrt (juce::jmax (0.0f, meanSquare)), -100.0f);
+}
 } // namespace
 
 //==============================================================================
@@ -215,6 +237,13 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     dryCompGainDbSmoothed_ = 0.0f;
     dryCompGainDbMirror_.store (0.0f, std::memory_order_relaxed);
+
+    msInL_ = 0.0f;
+    msInR_ = 0.0f;
+    msOutL_ = 0.0f;
+    msOutR_ = 0.0f;
+    constexpr double meterRmsTauSec = 0.3;
+    meterRmsMsCoeff_ = static_cast<float> (1.0 - std::exp (-static_cast<double> (std::max (1, samplesPerBlock)) / (sampleRate * meterRmsTauSec)));
 }
 
 void MasterLimiterAudioProcessor::releaseResources()
@@ -511,6 +540,13 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         const float pR = (nch > 1) ? buffer.getMagnitude (1, 0, n) : pL;
         inputPeakLDb_.store (juce::Decibels::gainToDecibels (pL, -100.0f), std::memory_order_relaxed);
         inputPeakRDb_.store (juce::Decibels::gainToDecibels (pR, -100.0f), std::memory_order_relaxed);
+
+        const float msL = meanSquareForChannel (buffer, 0, n);
+        const float msR = (nch > 1) ? meanSquareForChannel (buffer, 1, n) : msL;
+        msInL_ += meterRmsMsCoeff_ * (msL - msInL_);
+        msInR_ += meterRmsMsCoeff_ * (msR - msInR_);
+        inputRmsLDb_.store (rmsDbFromMeanSquare (msInL_), std::memory_order_relaxed);
+        inputRmsRDb_.store (rmsDbFromMeanSquare (msInR_), std::memory_order_relaxed);
     }
 
     const int modeIdx = ceilingMode_->getIndex();
@@ -801,6 +837,13 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         outputPeakLDb_.store (outLdb, std::memory_order_relaxed);
         outputPeakRDb_.store (outRdb, std::memory_order_relaxed);
         outputTpDb_.store (std::max (outLdb, outRdb), std::memory_order_relaxed);
+
+        const float msL = meanSquareForChannel (buffer, 0, n);
+        const float msR = (nch > 1) ? meanSquareForChannel (buffer, 1, n) : msL;
+        msOutL_ += meterRmsMsCoeff_ * (msL - msOutL_);
+        msOutR_ += meterRmsMsCoeff_ * (msR - msOutR_);
+        outputRmsLDb_.store (rmsDbFromMeanSquare (msOutL_), std::memory_order_relaxed);
+        outputRmsRDb_.store (rmsDbFromMeanSquare (msOutR_), std::memory_order_relaxed);
 
         loudness_.process (buffer);
     }

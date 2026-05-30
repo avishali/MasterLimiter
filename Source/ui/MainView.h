@@ -74,6 +74,11 @@ private:
     void updateBypassButtonState();
     void updateLearnStateDisplay();
     void updateCompensationReadout();
+    void setMeterScaleMode (MeterGroupComponent::ScaleMode mode);
+    void stepMeterScale (int delta);
+    void updateMeterScaleControls();
+    void setMeterShowRms (bool shouldShow);
+    void paintMeterScaleColumn (juce::Graphics& g);
 
     class CompensationBar : public juce::Component
     {
@@ -99,6 +104,7 @@ private:
     juce::Rectangle<int> ioPanelArea_;
     juce::Rectangle<int> footerArea_;
     juce::Rectangle<int> gainMatchLabelArea_;
+    juce::Rectangle<int> meterScaleColumnArea_;
 
     juce::Label header_ { {}, "MasterLimiter" };
     juce::Label headerMode_ { {}, "v0.2 - Maximizer" };
@@ -166,6 +172,10 @@ private:
     MeterGroupComponent meterOut_;
     LoudnessNumericPanel lufsPanel_;
     juce::Label lblTruePeak_ {};
+    juce::TextButton btnMeterScaleMinus_ { "-" };
+    juce::TextButton btnMeterScalePlus_ { "+" };
+    juce::TextButton btnMeterRms_ { "RMS" };
+    juce::Label lblMeterScaleRange_ { {}, "Full" };
 
     juce::TextButton btnBypass_ { "Bypass" };
     juce::TextButton btnResetPeaks_ { "Reset peaks" };
@@ -174,6 +184,7 @@ private:
     bool adjustingIoFaders_ { false };
     bool lastLimiterActive_ { true };
     master_limiter_ui::ClipBallisticsPtr clipBallistics_;
+    MeterGroupComponent::ScaleMode currentMeterScale_ { MeterGroupComponent::ScaleMode::FullRange };
     float clipLedLevel_ { 0.0f };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attGainDrive_;

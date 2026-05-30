@@ -37,6 +37,75 @@ juce::String formatClipReadout (float currentDb, float maxDb)
     return "Clip " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
 }
 
+juce::String scaleLabel (MeterGroupComponent::ScaleMode mode)
+{
+    switch (mode)
+    {
+        case MeterGroupComponent::ScaleMode::FullRange: return "Full";
+        case MeterGroupComponent::ScaleMode::Top48Db: return "48";
+        case MeterGroupComponent::ScaleMode::Top24Db: return "24";
+        case MeterGroupComponent::ScaleMode::Top12Db: return "12";
+        case MeterGroupComponent::ScaleMode::Top6Db: return "6";
+    }
+    return "Full";
+}
+
+MeterGroupComponent::ScaleMode scaleFromIndex (int index) noexcept
+{
+    switch (juce::jlimit (0, 4, index))
+    {
+        case 1: return MeterGroupComponent::ScaleMode::Top48Db;
+        case 2: return MeterGroupComponent::ScaleMode::Top24Db;
+        case 3: return MeterGroupComponent::ScaleMode::Top12Db;
+        case 4: return MeterGroupComponent::ScaleMode::Top6Db;
+        default: return MeterGroupComponent::ScaleMode::FullRange;
+    }
+}
+
+int scaleIndex (MeterGroupComponent::ScaleMode mode) noexcept
+{
+    switch (mode)
+    {
+        case MeterGroupComponent::ScaleMode::FullRange: return 0;
+        case MeterGroupComponent::ScaleMode::Top48Db: return 1;
+        case MeterGroupComponent::ScaleMode::Top24Db: return 2;
+        case MeterGroupComponent::ScaleMode::Top12Db: return 3;
+        case MeterGroupComponent::ScaleMode::Top6Db: return 4;
+    }
+    return 0;
+}
+
+void appendScaleTicks (juce::Array<float>& ticks, MeterGroupComponent::ScaleMode mode)
+{
+    switch (mode)
+    {
+        case MeterGroupComponent::ScaleMode::FullRange:
+            ticks.addArray ({ 6.0f, 0.0f, -6.0f, -12.0f, -24.0f, -48.0f, -72.0f, -96.0f, -120.0f });
+            break;
+        case MeterGroupComponent::ScaleMode::Top48Db:
+            ticks.addArray ({ 0.0f, -12.0f, -24.0f, -36.0f, -48.0f });
+            break;
+        case MeterGroupComponent::ScaleMode::Top24Db:
+            ticks.addArray ({ 0.0f, -3.0f, -6.0f, -9.0f, -12.0f, -15.0f, -18.0f, -24.0f });
+            break;
+        case MeterGroupComponent::ScaleMode::Top12Db:
+            ticks.addArray ({ 0.0f, -3.0f, -6.0f, -9.0f, -12.0f });
+            break;
+        case MeterGroupComponent::ScaleMode::Top6Db:
+            ticks.addArray ({ 0.0f, -1.0f, -2.0f, -3.0f, -4.0f, -5.0f, -6.0f });
+            break;
+    }
+}
+
+juce::String tickLabel (float db)
+{
+    if (std::abs (db) < 0.001f)
+        return "0";
+    if (db > 0.0f)
+        return "+" + juce::String (db, 0);
+    return juce::String (db, 0);
+}
+
 } // namespace
 
 void MainView::CompensationBar::setColours (juce::Colour negative, juce::Colour positive, juce::Colour track) noexcept
@@ -168,6 +237,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblIoInputReadout_);
     setupLabel (lblIoOutputTrim_);
     setupLabel (lblIoOutputReadout_);
+    setupLabel (lblMeterScaleRange_);
 
     styleRotary (sldGainDrive_);
     styleRotary (sldClipperDrive_);
@@ -219,6 +289,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnIoOutputLink_.setButtonText ("L/R");
     btnIoOutputLink_.setToggleState (true, juce::dontSendNotification);
     btnBypass_.setClickingTogglesState (true);
+    btnMeterRms_.setClickingTogglesState (true);
+    btnMeterRms_.setToggleState (false, juce::dontSendNotification);
     compGainBar_.setProcessor (&processor_);
     compGainBar_.setColours (theme.warning.withAlpha (0.85f),
                              theme.accent.withAlpha (0.9f),
@@ -235,6 +307,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldIoOutputTrimR_);
     addAndMakeVisible (btnIoOutputLink_);
     addAndMakeVisible (btnBypass_);
+    addAndMakeVisible (btnMeterScaleMinus_);
+    addAndMakeVisible (btnMeterScalePlus_);
+    addAndMakeVisible (btnMeterRms_);
 
     attGainDrive_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::input_gain_db), sldGainDrive_);
     attLimiterActive_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::limiter_active), btnLimiterActive_);
@@ -313,6 +388,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     {
         updateBypassButtonState();
     };
+    btnMeterScaleMinus_.onClick = [this] { stepMeterScale (-1); };
+    btnMeterScalePlus_.onClick = [this] { stepMeterScale (1); };
+    btnMeterRms_.onClick = [this] { setMeterShowRms (btnMeterRms_.getToggleState()); };
 
     sldIoInputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
     sldIoInputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimR_, sldIoInputTrimL_, btnIoInputLink_); };
@@ -353,6 +431,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     updateBypassButtonState();
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         updateCeilingModeButton (c->getIndex());
+    setMeterScaleMode (currentMeterScale_);
+    setMeterShowRms (false);
 
     sldGainDrive_.setTooltip ("Drive into the limiter in dB.");
     btnLimiterActive_.setTooltip ("Turns the limiter section on or off while preserving I/O trims.");
@@ -370,6 +450,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldIoOutputTrimR_.setTooltip ("Right output trim after the ceiling stage.");
     btnIoOutputLink_.setTooltip ("When enabled, moving one Output fader mirrors the other.");
     btnBypass_.setTooltip ("Plugin bypass. When on, the limiter is bypassed but I/O trims and Gain-Match still apply.");
+    btnMeterScaleMinus_.setTooltip ("Zoom the I/O meter range out.");
+    btnMeterScalePlus_.setTooltip ("Zoom the I/O meter range in.");
+    btnMeterRms_.setTooltip ("Show RMS fill and RMS readout on the I/O meters.");
     sldCeiling_.setTooltip ("Output ceiling in dBFS.");
     sldRelease_.setTooltip ("Limiter release time in milliseconds.");
     sldReleaseSustain_.setTooltip ("Multiplier on release time for sustained peaks (1–10×).");
@@ -514,6 +597,89 @@ void MainView::updateCompensationReadout()
     compGainBar_.repaint();
 }
 
+void MainView::setMeterScaleMode (MeterGroupComponent::ScaleMode mode)
+{
+    currentMeterScale_ = mode;
+    meterIn_.setScaleMode (currentMeterScale_);
+    meterOut_.setScaleMode (currentMeterScale_);
+    updateMeterScaleControls();
+    repaint (meterScaleColumnArea_.expanded (4, 2));
+}
+
+void MainView::stepMeterScale (int delta)
+{
+    setMeterScaleMode (scaleFromIndex (scaleIndex (currentMeterScale_) + delta));
+}
+
+void MainView::updateMeterScaleControls()
+{
+    const int idx = scaleIndex (currentMeterScale_);
+    btnMeterScaleMinus_.setEnabled (idx > 0);
+    btnMeterScalePlus_.setEnabled (idx < 4);
+    lblMeterScaleRange_.setText (scaleLabel (currentMeterScale_), juce::dontSendNotification);
+
+    const auto& theme = ui_.theme();
+    btnMeterScaleMinus_.setColour (juce::TextButton::buttonColourId,
+                                   (idx > 0 ? theme.panel.brighter (0.06f) : theme.panel.darker (0.08f)));
+    btnMeterScalePlus_.setColour (juce::TextButton::buttonColourId,
+                                  (idx < 4 ? theme.panel.brighter (0.06f) : theme.panel.darker (0.08f)));
+}
+
+void MainView::setMeterShowRms (bool shouldShow)
+{
+    btnMeterRms_.setToggleState (shouldShow, juce::dontSendNotification);
+    meterIn_.setShowRms (shouldShow);
+    meterOut_.setShowRms (shouldShow);
+
+    const auto& theme = ui_.theme();
+    if (shouldShow)
+        btnMeterRms_.setColour (juce::TextButton::buttonColourId, theme.accent.withAlpha (0.48f));
+    else
+        btnMeterRms_.setColour (juce::TextButton::buttonColourId, theme.panel.brighter (0.04f));
+}
+
+void MainView::paintMeterScaleColumn (juce::Graphics& g)
+{
+    if (meterScaleColumnArea_.isEmpty())
+        return;
+
+    const auto& theme = ui_.theme();
+    const auto& type = ui_.type();
+    const auto area = meterScaleColumnArea_.toFloat();
+    const float yMax = area.getBottom();
+    const float h = area.getHeight();
+    const float xLeft = area.getX();
+    const float xRight = area.getRight();
+
+    g.setColour (theme.grid.withAlpha (0.22f));
+    g.drawVerticalLine (static_cast<int> (std::round (area.getCentreX())), area.getY(), area.getBottom());
+    g.setFont (type.labelFont().withHeight (9.0f));
+
+    juce::Array<float> ticks;
+    appendScaleTicks (ticks, currentMeterScale_);
+
+    for (const auto db : ticks)
+    {
+        const float norm = mdsp_ui::meters::MeterRenderStateProvider::normaliseDb (db, currentMeterScale_);
+        const float y = yMax - (norm * h);
+        if (y < area.getY() - 0.5f || y > area.getBottom() + 0.5f)
+            continue;
+
+        const bool zero = std::abs (db) < 0.001f;
+        const auto tickColour = theme.textMuted.withAlpha (zero ? 0.58f : 0.42f);
+        g.setColour (tickColour);
+        g.drawLine (xLeft + 1.0f,
+                    y,
+                    xRight - 1.0f,
+                    y,
+                    zero ? 1.45f : 0.8f);
+
+        g.drawText (tickLabel (db),
+                    juce::Rectangle<float> (xLeft, y - 5.0f, area.getWidth(), 10.0f),
+                    juce::Justification::centred);
+    }
+}
+
 void MainView::mouseDown (const juce::MouseEvent& e)
 {
     const auto eventOnLearn = e.eventComponent == &btnLearnInputGain_
@@ -604,6 +770,8 @@ void MainView::paint (juce::Graphics& g)
         g.drawText ("Open", x2 - 22, y + 7, 44, 12, juce::Justification::centred, true);
     }
 
+    paintMeterScaleColumn (g);
+
     if (clipLedLevel_ > 0.001f)
     {
         const auto led = lblClipperDrive_.getBounds().removeFromRight (12).withSizeKeepingCentre (8, 8).toFloat();
@@ -680,7 +848,7 @@ void MainView::resized()
     meterGr_.setBounds (674, 104, 54, 354);
 
     meterIn_.setBounds (790, 154, 116, 314);
-    meterOut_.setBounds (934, 154, 116, 314);
+    meterOut_.setBounds (948, 154, 116, 314);
 
     lblIoInputTrim_.setBounds (790, 134, 116, 18);
     sldIoInputTrimL_.setBounds (800, 184, 42, 250);
@@ -688,11 +856,20 @@ void MainView::resized()
     btnIoInputLink_.setBounds (826, 470, 44, 20);
     lblIoInputReadout_.setBounds (790, 492, 116, 20);
 
-    lblIoOutputTrim_.setBounds (934, 134, 116, 18);
-    sldIoOutputTrimL_.setBounds (946, 184, 42, 250);
-    sldIoOutputTrimR_.setBounds (1000, 184, 42, 250);
-    btnIoOutputLink_.setBounds (970, 470, 44, 20);
-    lblIoOutputReadout_.setBounds (934, 492, 116, 20);
+    lblIoOutputTrim_.setBounds (948, 134, 116, 18);
+    sldIoOutputTrimL_.setBounds (960, 184, 42, 250);
+    sldIoOutputTrimR_.setBounds (1014, 184, 42, 250);
+    btnIoOutputLink_.setBounds (984, 470, 44, 20);
+    lblIoOutputReadout_.setBounds (948, 492, 116, 20);
+
+    const auto inputScaleRef = meterIn_.getScaleReferenceBoundsInParent();
+    const int scaleX = meterIn_.getRight() + 4;
+    const int scaleW = juce::jmax (24, meterOut_.getX() - meterIn_.getRight() - 8);
+    meterScaleColumnArea_ = { scaleX, inputScaleRef.getY(), scaleW, inputScaleRef.getHeight() };
+    btnMeterScaleMinus_.setBounds (scaleX, 114, 17, 17);
+    btnMeterScalePlus_.setBounds (scaleX + scaleW - 17, 114, 17, 17);
+    lblMeterScaleRange_.setBounds (scaleX, 132, scaleW, 18);
+    btnMeterRms_.setBounds (scaleX, 470, scaleW, 20);
 
     lufsPanel_.setBounds (790, 520, 160, 68);
     btnResetPeaks_.setBounds (962, 540, 100, 26);
@@ -705,6 +882,10 @@ void MainView::resized()
     btnIoOutputLink_.toFront (false);
     lblIoInputReadout_.toFront (false);
     lblIoOutputReadout_.toFront (false);
+    btnMeterScaleMinus_.toFront (false);
+    btnMeterScalePlus_.toFront (false);
+    btnMeterRms_.toFront (false);
+    lblMeterScaleRange_.toFront (false);
     btnLimiterActive_.toFront (false);
     btnBypass_.toFront (false);
     cmbClipperMode_.toFront (false);
@@ -713,7 +894,12 @@ void MainView::resized()
     meterStripArea_ = meterGr_.getBounds().getUnion (meterIn_.getBounds())
                                       .getUnion (meterOut_.getBounds())
                                       .getUnion (lufsPanel_.getBounds())
-                                      .getUnion (lblTruePeak_.getBounds());
+                                      .getUnion (lblTruePeak_.getBounds())
+                                      .getUnion (meterScaleColumnArea_)
+                                      .getUnion (btnMeterScaleMinus_.getBounds())
+                                      .getUnion (btnMeterScalePlus_.getBounds())
+                                      .getUnion (btnMeterRms_.getBounds())
+                                      .getUnion (lblMeterScaleRange_.getBounds());
 }
 
 void MainView::syncMetersFromProcessor()

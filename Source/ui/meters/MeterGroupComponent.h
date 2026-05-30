@@ -32,6 +32,9 @@ public:
     void sync (double hostSampleRate, float dtSec);
 
     void resetPeakHolds() noexcept;
+    void setScaleMode (ScaleMode mode) noexcept;
+    void setShowRms (bool shouldShow) noexcept;
+    juce::Rectangle<int> getScaleReferenceBoundsInParent() const noexcept;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -63,17 +66,30 @@ private:
         static juce::String formatDb (float g) noexcept;
     };
 
+    struct DisplayLevelSmoother
+    {
+        float peakDb { -200.0f };
+        float rmsDb { -200.0f };
+
+        void reset (float peak, float rms) noexcept;
+        void tick (float peak, float rms, float dtSec) noexcept;
+    };
+
     PeakNumericSmoother peakSmooth0_ {};
     PeakNumericSmoother peakSmooth1_ {};
+    PeakNumericSmoother rmsSmooth0_ {};
+    PeakNumericSmoother rmsSmooth1_ {};
+    DisplayLevelSmoother displaySmooth0_ {};
+    DisplayLevelSmoother displaySmooth1_ {};
     GrNumericSmoother grSmooth_ {};
-    float maxPeakLDb_ { -200.0f };
-    float maxPeakRDb_ { -200.0f };
 
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
     const BusKind kind_;
 
     int channelCount_ = 2;
+    ScaleMode scaleMode_ { ScaleMode::FullRange };
+    bool showRms_ { false };
 
     std::unique_ptr<MeterComponent> meter0_;
     std::unique_ptr<MeterComponent> meter1_;
