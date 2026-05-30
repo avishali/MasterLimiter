@@ -2,6 +2,38 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 16: UI/UX interaction
+
+**Status:** ✅ Shipped. UI-only interaction/layout polish; no DSP, parameter,
+or audio-path changes. Slice 3/4/5 unchanged.
+
+**Deliverables**
+- Hid the Lookahead and T/S Sustain controls. Their frozen params remain in
+  the APVTS at default: lookahead fixed 5 ms, sustain ratio 4.0.
+- Ozone-style type-in: clean value labels, double-click to edit inline,
+  Enter / click-away commits, Esc cancels, unit-aware + clamped.
+- Clipper Hard/Soft is now a 2-state toggle instead of a dropdown.
+- Tooltips on all controls + label-clarity pass.
+- Layout: Color below Clipper; Imaging (Stereo-Mode) compact + moved left
+  clear of Color; Gain-Match centered footer; SP/TP + Gain⇄Ceiling Link +
+  Limiter On fitted between the Gain and Ceiling knobs; `100%%`→`100%` fix.
+- Clip-ballistics free functions moved out of `GainReductionMeter.cpp` into
+  `Source/ui/meters/ClipBallistics.{h,cpp}` (firewall preserved).
+- `design/ui_direction_v1.html` added as the Slice 16b visual target.
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] avishali approved the Slice 16 interaction/layout family.
+
+**Followups**
+- Slice 16b is next: visual restyle per `design/ui_direction_v1.html`.
+
+---
+
 ## 2026-05-30 — Auto-release (ADR-0011)
 
 **Status:** ✅ Shipped. Program-dependent release with three modes; mode
