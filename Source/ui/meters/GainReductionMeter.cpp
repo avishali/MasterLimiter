@@ -22,21 +22,6 @@ mdsp_ui::meters::MeterBallisticsConfig makeGrBallisticsConfig() noexcept
     return config;
 }
 
-mdsp_ui::meters::MeterBallisticsConfig makeClipReadoutBallisticsConfig() noexcept
-{
-    auto config = makeGrBallisticsConfig();
-    config.clipHoldMs = 1000.0f;
-    return config;
-}
-
-mdsp_ui::meters::MeterBallisticsConfig makeClipLedBallisticsConfig() noexcept
-{
-    auto config = makeClipReadoutBallisticsConfig();
-    config.holdMs = 80.0f;
-    config.holdFalloffDbPerSec = 24.0f;
-    return config;
-}
-
 float normaliseGr (float grDb) noexcept
 {
     return juce::jlimit (0.0f, 1.0f, grDb / kMaxGrDb);
@@ -48,64 +33,6 @@ juce::Rectangle<float> makeTopDownFill (juce::Rectangle<float> bar, float grDb)
     return bar.withHeight (fillH);
 }
 } // namespace
-
-namespace master_limiter_ui
-{
-struct ClipBallisticsState;
-struct ClipBallisticsDeleter
-{
-    void operator() (ClipBallisticsState* state) const noexcept;
-};
-using ClipBallisticsPtr = std::unique_ptr<ClipBallisticsState, ClipBallisticsDeleter>;
-
-ClipBallisticsPtr makeClipBallisticsState();
-void resetClipBallistics (ClipBallisticsState& state) noexcept;
-void processClipReadout (ClipBallisticsState& state, float clipDb, float dtSec) noexcept;
-float processClipLed (ClipBallisticsState& state, bool clipped, float dtSec) noexcept;
-float getClipReadoutCurrent (const ClipBallisticsState& state) noexcept;
-} // namespace master_limiter_ui
-
-namespace master_limiter_ui
-{
-
-struct ClipBallisticsState
-{
-    mdsp_ui::meters::MeterBallistics readout;
-    mdsp_ui::meters::PeakHoldModel ledHold;
-};
-
-void ClipBallisticsDeleter::operator() (ClipBallisticsState* state) const noexcept
-{
-    delete state;
-}
-
-ClipBallisticsPtr makeClipBallisticsState()
-{
-    return ClipBallisticsPtr { new ClipBallisticsState };
-}
-
-void resetClipBallistics (ClipBallisticsState& state) noexcept
-{
-    state.readout.reset (0.0f);
-    state.ledHold.reset (0.0f);
-}
-
-void processClipReadout (ClipBallisticsState& state, float clipDb, float dtSec) noexcept
-{
-    state.readout.process (juce::jmax (0.0f, clipDb), dtSec, makeClipReadoutBallisticsConfig());
-}
-
-float processClipLed (ClipBallisticsState& state, bool clipped, float dtSec) noexcept
-{
-    return state.ledHold.process (clipped ? 1.0f : 0.0f, dtSec, makeClipLedBallisticsConfig());
-}
-
-float getClipReadoutCurrent (const ClipBallisticsState& state) noexcept
-{
-    return state.readout.getCurrent();
-}
-
-} // namespace master_limiter_ui
 
 GainReductionMeter::GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAudioProcessor& processor)
     : ui_ (ui),

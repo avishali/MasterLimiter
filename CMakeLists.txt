@@ -273,6 +273,8 @@ target_sources(${PLUGIN_NAME}
         Source/ui/MasterLimiterLookAndFeel.h
         Source/ui/loudness/LoudnessNumericPanel.cpp
         Source/ui/loudness/LoudnessNumericPanel.h
+        Source/ui/meters/ClipBallistics.cpp
+        Source/ui/meters/ClipBallistics.h
         Source/ui/meters/GainReductionMeter.cpp
         Source/ui/meters/GainReductionMeter.h
         Source/ui/meters/MeterComponent.cpp
