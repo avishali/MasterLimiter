@@ -2,6 +2,73 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 14: 2-band multiband limiting + Color control (ADR-0009)
+
+**Status:** ✅ Closed. Product ships the ADR-0009 two-band
+frequency-selective limiter family, closing the remaining cross-band
+pumping gap vs Ozone Maximizer. Audition approved: de-pumping is
+competitive with Ozone, slightly brighter, Color sweep is useful, and
+the GR meter now tracks push depth.
+
+**Architecture:** [ADR-0009](../third_party/melechdsp-hq/docs/DECISIONS/ADR-0009-masterlimiter-multiband-detection.md)
+— 2-band LR4 multiband limiting, serial two-lookahead topology,
+2 dB band headroom, user-facing Color control, and total-GR metering.
+ADR revisions R5/R6/R7 capture the final latency, Color, and metering
+decisions.
+
+**Deliverables**
+- 2-band Linkwitz-Riley split at `120 Hz` inside the 4× oversampled
+  region. The existing limiter chain remains the final wideband
+  brickwall.
+- Serial two-lookahead topology (Slice 14.4): the band stage first
+  produces the real band-limited signal; the final wideband brickwall
+  then detects and limits that signal. The earlier single-lookahead
+  estimate from Slice 14.1 leaked overs on dense material. Reported
+  latency moves from `301` to `541` samples.
+- Band headroom fixed at `2 dB` (Slice 14.3): bands are the primary
+  limiter, wideband is the safety catch. Default Color gives HF-ducking
+  modulation about `-21.5 dB` vs Ozone `-22.8 dB`.
+- New frozen parameter `band_color` (`0..100 %`, default `50 %`):
+  maps Color to band link `0.5 -> 0.0` (`0 %` Glued, `50 %`
+  Balanced, `100 %` Open). The value is block-read and sample-smoothed
+  with `juce::LinearSmoothedValue`, and the UI exposes a rotary knob
+  with 0/50/100 detents.
+- Total-GR meter fix (Slice 14.7): GR snapshots now report total
+  applied reduction (`band × wideband`) instead of wideband-only
+  reduction, removing the apparent ~4 dB cap while leaving audio
+  unchanged.
+
+**Bench + criteria**
+- HQ `dsp_bench` adds cross-band IMD, pumping diagnostic,
+  per-band effective GR, HF-ducking modulation, integrated LUFS /
+  true-peak readouts, and sample-peak overshoot magnitude in dB.
+- Slice 3/4/5 treatment-B criteria recalibrated at the shipped default
+  Color (`50 %`, link `0.25`, headroom `2 dB`) with `ADR-0009`
+  comments. Key changes include `imd_smpte_pct_max -> 11.6`,
+  Slice 3 `sample_peak_overs_max -> 2400`, Slice 5 5 dB pink null
+  `-> -7.6`, and Slice 5 5 dB transient crest `-> -10.43`.
+- Slice 14.7 meter fix was verified audio-neutral: Slice 3/4/5 metrics
+  were byte-for-byte identical to Slice 14.6.
+
+**Gate result**
+- [x] Debug + Release builds clean. No new `Source/` warnings.
+- [x] Close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] avishali audition approved: Ozone-competitive de-pumping,
+      Color range useful, GR meter climbs with push depth.
+- [x] Architect sign-off captured in ADR-0009 R5/R6/R7.
+
+**Followups**
+- Beta-prep batch is next: Slice 15 meter ballistics, Slice 16 UI/UX
+  interaction polish, Slice 17 beta packaging/default-state audit, then
+  user manual/instructions after the control surface freezes.
+- STFT "Max Transparency" remains the fuller Ozone-parity path in the
+  backlog if real-world use demands it.
+
+---
+
 ## 2026-05-30 — Slice 13: LUFS calibration (BS.1770-4 K-weighting fix)
 
 **Status:** ✅ Closed. HQ-side bugfix in `mdsp_dsp::LoudnessAnalyzer`.
