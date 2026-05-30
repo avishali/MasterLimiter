@@ -2,6 +2,43 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 7b: M/S mode (ADR-0008 addendum)
+
+**Status:** ✅ Closed. Product + HQ ADR addendum shipped; neutral
+default remains Stereo mode, so existing Slice 3/4/5 behavior is unchanged.
+
+**Deliverables**
+- New frozen `stereo_mode` Choice (`Stereo`/`M/S`, default `Stereo`).
+- Wideband final stage gains a domain branch: Stereo = existing L/R
+  parallel envelopes (`stereo_link_pct`); M/S = lossless Mid/Side
+  encode of the band-limited signal, same two wideband envelopes blended
+  by `ms_link_pct`, decoded back. Reuses envelopes — no new latency/CPU;
+  M/S is phase-transparent.
+- `ms_link_pct` (dormant placeholder since Slice 7) is now active in
+  M/S mode.
+- UI: single Link knob re-targeted by the mode (swapped attachment;
+  per-mode value recall) + Stereo/M-S toggle — collapses the earlier
+  two-knob layout (7b.1).
+- GR meter shows M|S components in M/S mode.
+- Also: meter tuning — I/O bar release 60 dB/s, clip LED hold/falloff
+  tuning (post-15b audition tweaks, committed separately).
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] avishali approved M/S mode with the single Link knob + Stereo/M-S
+      toggle.
+
+**Followups**
+- Auto-release is next: program-dependent release with 3 modes.
+- Then Slice 16 UI/UX interaction polish, Slice 17 packaging/defaults,
+  manual, and beta.
+
+---
+
 ## 2026-05-30 — Slice 15b: I/O level meter features
 
 **Status:** ✅ Closed. UI + read-only RMS measurement only; no audio
