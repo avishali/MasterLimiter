@@ -2,6 +2,42 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 15: meter ballistics (GR + Clip)
+
+**Status:** ✅ Closed. UI-only meter display change; no audio,
+parameter, HQ source, submodule, or bench-behaviour change.
+
+**Deliverables**
+- GR meter: replaced the symmetric 100 ms smoothing with instant
+  attack / ~300 ms release and per-channel peak-hold (~1 s hold,
+  ~12 dB/s falloff).
+- Clip: smoothed the current-value readout; the LED now lights
+  instantly, holds for ~1 s, then fades instead of flickering
+  per-block.
+- Reuses HQ `mdsp_ui::meters::MeterBallistics` and `PeakHoldModel`.
+  The product-local helper added during the first Slice 15 pass was
+  removed in the 15.1 reuse refactor.
+- Implementation note: a compilation firewall isolates the new-system
+  HQ meter headers (`MeterTypes.h`) from `MainView.cpp`, which
+  transitively pulls the old-system `MeterRenderState.h`. The
+  clip-ballistics free functions live in the `GainReductionMeter.cpp`
+  translation unit behind an opaque `ClipBallisticsState`.
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] avishali approved the GR/Clip meter ballistics.
+- [x] UI-only change; no audio path, parameter, or benchmark impact.
+
+**Followups**
+- Slice 15b is next: I/O meter features (RMS, shared range +/-,
+  peak reset, and shared centre dB scale).
+- Backlog: consolidate the dual HQ `mdsp_ui` meter systems after beta.
+- Product tidy: move clip-ballistics free functions out of
+  `GainReductionMeter.cpp` into a dedicated product-side file when the
+  next UI-interaction slice touches this area.
+
+---
+
 ## 2026-05-30 — Slice 14: 2-band multiband limiting + Color control (ADR-0009)
 
 **Status:** ✅ Closed. Product ships the ADR-0009 two-band
