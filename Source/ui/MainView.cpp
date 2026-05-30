@@ -158,6 +158,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblCeilingMode_);
     setupLabel (lblStereoLink_);
     setupLabel (lblMsLink_);
+    setupLabel (lblBandColor_);
     setupLabel (lblCharacter_);
     setupLabel (lblGainMatchNote_);
     setupLabel (lblLearnInputLufs_);
@@ -174,6 +175,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     styleRotary (sldLookahead_);
     styleRotary (sldStereoLink_);
     styleRotary (sldMsLink_);
+    styleRotary (sldBandColor_);
     styleHorizontalPlaceholder (sldCharacter_);
     styleIoTrimFader (sldIoInputTrimL_);
     styleIoTrimFader (sldIoInputTrimR_);
@@ -201,6 +203,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldCharacter_);
     addAndMakeVisible (sldStereoLink_);
     addAndMakeVisible (sldMsLink_);
+    addAndMakeVisible (sldBandColor_);
     lblClipperReadout_.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     lblClipperReadout_.addMouseListener (this, false);
 
@@ -244,6 +247,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attLookahead_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::lookahead_ms), sldLookahead_);
     attStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::stereo_link_pct), sldStereoLink_);
     attMsLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ms_link_pct), sldMsLink_);
+    attBandColor_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::band_color), sldBandColor_);
     attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::character), sldCharacter_);
     attGainMatchAutoTrack_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_match_auto), btnGainMatchAutoTrack_);
     attIoInputTrimL_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_input_l_db), sldIoInputTrimL_);
@@ -268,6 +272,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     useSliderTextboxFormat (sldLookahead_, 2, " ms");
     useSliderTextboxFormat (sldStereoLink_, 0, "%");
     useSliderTextboxFormat (sldMsLink_, 0, "%");
+    useSliderTextboxFormat (sldBandColor_, 0, "%");
     useSliderTextboxFormat (sldIoInputTrimL_, 2, " dB");
     useSliderTextboxFormat (sldIoInputTrimR_, 2, " dB");
     useSliderTextboxFormat (sldIoOutputTrimL_, 2, " dB");
@@ -313,6 +318,22 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldIoOutputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoOutputTrimR_, sldIoOutputTrimL_, btnIoOutputLink_); };
     btnIoInputLink_.onClick = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
     btnIoOutputLink_.onClick = [this] { syncLinkedFaders (sldIoOutputTrimL_, sldIoOutputTrimR_, btnIoOutputLink_); };
+    sldBandColor_.onValueChange = [this]
+    {
+        lblBandColor_.setText ("Color " + juce::String ((int) std::lround (sldBandColor_.getValue())) + "%", juce::dontSendNotification);
+    };
+    sldBandColor_.onDragEnd = [this]
+    {
+        constexpr double snapWindowPct = 3.0;
+        for (double detent : { 0.0, 50.0, 100.0 })
+        {
+            if (std::abs (sldBandColor_.getValue() - detent) <= snapWindowPct)
+            {
+                sldBandColor_.setValue (detent, juce::sendNotificationAsync);
+                break;
+            }
+        }
+    };
     btnCeilingMode_.onClick = [this]
     {
         if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
@@ -325,6 +346,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
         }
     };
     updateIoTrimReadouts();
+    lblBandColor_.setText ("Color " + juce::String ((int) std::lround (sldBandColor_.getValue())) + "%", juce::dontSendNotification);
     updateLimiterActiveState();
     updateBypassButtonState();
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
@@ -354,6 +376,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
     sldStereoLink_.setTooltip ("Stereo Link amount: 100% fully linked, 0% independent L/R limiting.");
     sldMsLink_.setTooltip ("Mid/side stereo link amount (0–100%).");
+    sldBandColor_.setTooltip ("Multiband Color: 0% glued/warm, 50% balanced, 100% open/bright.");
     sldCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
 
     btnLearnInputGain_.onClick = [this]
@@ -559,6 +582,24 @@ void MainView::paint (juce::Graphics& g)
     g.drawText ("Clean", juce::Rectangle<int> { 34, 362, 80, 16 }, juce::Justification::centredLeft);
     g.drawText ("Aggressive", juce::Rectangle<int> { 330, 362, 104, 16 }, juce::Justification::centredRight);
 
+    if (! sldBandColor_.getBounds().isEmpty())
+    {
+        const auto b = sldBandColor_.getBounds();
+        const int y = b.getBottom() + 2;
+        const int x0 = b.getX() + 8;
+        const int x1 = b.getCentreX();
+        const int x2 = b.getRight() - 8;
+
+        g.setColour (theme.textMuted.withAlpha (0.55f));
+        for (int x : { x0, x1, x2 })
+            g.drawVerticalLine (x, (float) y, (float) y + 5.0f);
+
+        g.setFont (type.labelFont().withHeight (9.0f));
+        g.drawText ("Glued", x0 - 22, y + 7, 44, 12, juce::Justification::centred, true);
+        g.drawText ("Bal", x1 - 18, y + 7, 36, 12, juce::Justification::centred, true);
+        g.drawText ("Open", x2 - 22, y + 7, 44, 12, juce::Justification::centred, true);
+    }
+
     if (clipLedLevel_ > 0.001f)
     {
         const auto led = lblClipperDrive_.getBounds().removeFromRight (12).withSizeKeepingCentre (8, 8).toFloat();
@@ -617,6 +658,8 @@ void MainView::resized()
     sldStereoLink_.setBounds (402, knobY + 18, knobW, knobH);
     lblMsLink_.setBounds (492, knobY, knobW, 18);
     sldMsLink_.setBounds (492, knobY + 18, knobW, knobH);
+    lblBandColor_.setBounds (582, knobY, knobW, 18);
+    sldBandColor_.setBounds (582, knobY + 18, knobW, 70);
     lblClipperDrive_.setBounds (495, 116, 140, 18);
     sldClipperDrive_.setBounds (495, 134, 140, 120);
     cmbClipperMode_.setBounds (515, 260, 100, 22);

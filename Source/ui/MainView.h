@@ -115,6 +115,9 @@ private:
     juce::Label lblMsLink_ { {}, "M/S Lk" };
     juce::Slider sldMsLink_;
 
+    juce::Label lblBandColor_ { {}, "Color" };
+    juce::Slider sldBandColor_;
+
     juce::Label lblCharacter_ { {}, "Character" };
     juce::Slider sldCharacter_;
 
@@ -162,6 +165,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookahead_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attStereoLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMsLink_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCharacter_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;

@@ -26,6 +26,7 @@ inline constexpr std::string_view lookahead_ms { "lookahead_ms" };
 inline constexpr std::string_view ceiling_mode { "ceiling_mode" };
 inline constexpr std::string_view stereo_link_pct { "stereo_link_pct" };
 inline constexpr std::string_view ms_link_pct { "ms_link_pct" };
+inline constexpr std::string_view band_color { "band_color" };
 inline constexpr std::string_view character { "character" };
 
 } // namespace param

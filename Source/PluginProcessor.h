@@ -11,6 +11,10 @@
 #include <mdsp_dsp/dynamics/PeakDetector.h>
 #include <mdsp_dsp/loudness/LoudnessAnalyzer.h>
 
+#ifndef MDSP_BAND_HEADROOM_DB
+ #define MDSP_BAND_HEADROOM_DB 2.0f
+#endif
+
 //==============================================================================
 class MasterLimiterAudioProcessor : public juce::AudioProcessor,
                                     private juce::AudioProcessorValueTreeState::Listener,
@@ -96,10 +100,19 @@ private:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    // Multiband pre-shave (ADR-0009): fixed 2-band split inside the 4x OS region.
+    static constexpr float kCrossoverHz = 120.0f;
+    static constexpr float kBandHeadroomDb = MDSP_BAND_HEADROOM_DB;
+
     mdsp_dsp::LookaheadDelay<float> lookahead_;
+    mdsp_dsp::LookaheadDelay<float> lookaheadWide_;
     mdsp_dsp::PeakDetector peakDetector_;
     mdsp_dsp::LimiterEnvelope envelope_;
     mdsp_dsp::LimiterEnvelope envelope_R_;
+    juce::dsp::LinkwitzRileyFilter<float> detectCrossover_;
+    juce::dsp::LinkwitzRileyFilter<float> applyCrossover_;
+    mdsp_dsp::LimiterEnvelope envelopeLow_;
+    mdsp_dsp::LimiterEnvelope envelopeHigh_;
     juce::dsp::Oversampling<float> limiterOversampler_ {
         2,
         2,
@@ -112,9 +125,19 @@ private:
     juce::AudioBuffer<float> gainBuf_;
     juce::AudioBuffer<float> peakBufR_;
     juce::AudioBuffer<float> gainBufR_;
+    juce::AudioBuffer<float> peakLowBuf_;
+    juce::AudioBuffer<float> gainLowBuf_;
+    juce::AudioBuffer<float> peakHighBuf_;
+    juce::AudioBuffer<float> gainHighBuf_;
+    juce::AudioBuffer<float> bandLowBuf_;
+    juce::AudioBuffer<float> bandHighBuf_;
+    juce::AudioBuffer<float> gLowOutBuf_;
+    juce::AudioBuffer<float> gHighOutBuf_;
+    juce::AudioBuffer<float> bandLimitedBuf_;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay_ { 4096 };
     juce::AudioBuffer<float> dryScratch_;
     juce::LinearSmoothedValue<float> bypassFade_;
+    juce::LinearSmoothedValue<float> bandLinkSmoothed_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
     juce::AudioParameterChoice* characterChoice_ = nullptr;
@@ -131,6 +154,7 @@ private:
     std::atomic<float>* ioOutputLDb_ = nullptr;
     std::atomic<float>* ioOutputRDb_ = nullptr;
     std::atomic<float>* stereoLinkPct_ = nullptr;
+    std::atomic<float>* bandColor_ = nullptr;
     std::atomic<float>* gainMatchAuto_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;

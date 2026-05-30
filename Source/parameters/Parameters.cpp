@@ -167,6 +167,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         100.0f,
         AudioParameterFloatAttributes().withLabel ("%")));
 
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (band_color, 1),
+        "Color",
+        NormalisableRange<float> (0.0f, 100.0f, 0.1f),
+        50.0f,
+        AudioParameterFloatAttributes()
+            .withLabel ("%")
+            .withStringFromValueFunction ([] (float v, int) { return juce::String (v, 0) + "%"; })));
+
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (character, 1),
         "Character",
