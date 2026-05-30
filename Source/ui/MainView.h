@@ -71,6 +71,7 @@ private:
     void updateIoTrimReadouts();
     void updateCeilingModeButton (int ceilingIdx);
     void updateStereoModeControls();
+    void updateReleaseAutoControls (bool forceRepaint = false);
     void updateLimiterActiveState();
     void updateBypassButtonState();
     void updateLearnStateDisplay();
@@ -132,6 +133,7 @@ private:
 
     juce::Label lblReleaseAuto_ { {}, "Auto Rel" };
     juce::ToggleButton btnReleaseAuto_ { "Auto Rel" };
+    juce::ComboBox cmbAutoReleaseMode_ { "Auto Release" };
 
     juce::Label lblLookahead_ { {}, "Lookahead" };
     juce::Slider sldLookahead_;
@@ -183,6 +185,7 @@ private:
     TpReadoutSmoother tpSmoother_ {};
     bool adjustingIoFaders_ { false };
     bool lastLimiterActive_ { true };
+    bool lastReleaseAuto_ { false };
     master_limiter_ui::ClipBallisticsPtr clipBallistics_;
     MeterGroupComponent::ScaleMode currentMeterScale_ { MeterGroupComponent::ScaleMode::FullRange };
     float clipLedLevel_ { 0.0f };
@@ -198,6 +201,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attReleaseSustain_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attReleaseAuto_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attAutoReleaseMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookahead_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;

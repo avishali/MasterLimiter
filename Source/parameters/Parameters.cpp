@@ -137,6 +137,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         false,
         releaseAutoAttrs));
 
+    layout.add (std::make_unique<AudioParameterChoice> (
+        pid (auto_release_mode, 1),
+        "Auto Release",
+        StringArray { "Transparent", "Balanced", "Reactive" },
+        0,
+        AudioParameterChoiceAttributes()));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (lookahead_ms, 1),
         "Lookahead",

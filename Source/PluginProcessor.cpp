@@ -35,6 +35,16 @@ mdsp_dsp::LimiterEnvelope::Mode mapCharacterIndexToMode (int index) noexcept
     }
 }
 
+mdsp_dsp::LimiterEnvelope::AutoReleaseMode mapAutoReleaseModeIndexToMode (int index) noexcept
+{
+    switch (index)
+    {
+        case 1:  return mdsp_dsp::LimiterEnvelope::AutoReleaseMode::Balanced;
+        case 2:  return mdsp_dsp::LimiterEnvelope::AutoReleaseMode::Reactive;
+        default: return mdsp_dsp::LimiterEnvelope::AutoReleaseMode::Transparent;
+    }
+}
+
 float meanSquareForChannel (const juce::AudioBuffer<float>& buffer, int channel, int numSamples) noexcept
 {
     if (channel < 0 || channel >= buffer.getNumChannels() || numSamples <= 0)
@@ -82,6 +92,8 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("io_output_link") != nullptr);
     jassert (apvts.getParameter ("release_ms") != nullptr);
     jassert (apvts.getParameter ("release_sustain_ratio") != nullptr);
+    jassert (apvts.getParameter ("release_auto") != nullptr);
+    jassert (apvts.getParameter ("auto_release_mode") != nullptr);
     jassert (apvts.getParameter ("gain_ceiling_link") != nullptr);
     jassert (apvts.getParameter ("gain_match_auto") != nullptr);
     jassert (apvts.getParameter ("stereo_mode") != nullptr);
@@ -182,7 +194,11 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 50.0f));
 
     releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
+    releaseAuto_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("release_auto"));
+    autoReleaseMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("auto_release_mode"));
     jassert (releaseSustainRatio_ != nullptr);
+    jassert (releaseAuto_ != nullptr);
+    jassert (autoReleaseMode_ != nullptr);
 
     ioInputLDb_ = apvts.getRawParameterValue ("io_input_l_db");
     ioInputRDb_ = apvts.getRawParameterValue ("io_input_r_db");
@@ -493,6 +509,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
         || ceilingMode_ == nullptr || stereoMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
         || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || clipperMode_ == nullptr
+        || releaseAuto_ == nullptr || autoReleaseMode_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
         || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
@@ -632,24 +649,27 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         const float bandThresholdLin = thresholdLin * juce::Decibels::decibelsToGain (-kBandHeadroomDb);
         const float releaseMs = readFloatParam (apvts, "release_ms");
         const float releaseSustainRatio = releaseSustainRatio_->get();
+        const bool autoRelease = releaseAuto_->get();
+        const auto autoReleaseMode = mapAutoReleaseModeIndexToMode (autoReleaseMode_->getIndex());
         const auto envelopeMode = mapCharacterIndexToMode (characterChoice_->getIndex());
         const float bandColor = bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 50.0f;
         bandLinkSmoothed_.setTargetValue (mapBandColorToLink (bandColor));
 
-        envelope_.setThresholdLinear (thresholdLin);
-        envelope_.setReleaseMs (releaseMs);
-        envelope_.setReleaseSustainRatio (releaseSustainRatio);
-        envelope_.setMode (envelopeMode);
+        auto configureEnvelope = [&] (mdsp_dsp::LimiterEnvelope& envelope, float envThresholdLin)
+        {
+            envelope.setThresholdLinear (envThresholdLin);
+            envelope.setAutoRelease (autoRelease);
+            envelope.setAutoReleaseMode (autoReleaseMode);
+            if (! autoRelease)
+                envelope.setReleaseMs (releaseMs);
+            envelope.setReleaseSustainRatio (releaseSustainRatio);
+            envelope.setMode (envelopeMode);
+        };
 
-        envelopeLow_.setThresholdLinear (bandThresholdLin);
-        envelopeLow_.setReleaseMs (releaseMs);
-        envelopeLow_.setReleaseSustainRatio (releaseSustainRatio);
-        envelopeLow_.setMode (envelopeMode);
-
-        envelopeHigh_.setThresholdLinear (bandThresholdLin);
-        envelopeHigh_.setReleaseMs (releaseMs);
-        envelopeHigh_.setReleaseSustainRatio (releaseSustainRatio);
-        envelopeHigh_.setMode (envelopeMode);
+        configureEnvelope (envelope_, thresholdLin);
+        configureEnvelope (envelope_R_, thresholdLin);
+        configureEnvelope (envelopeLow_, bandThresholdLin);
+        configureEnvelope (envelopeHigh_, bandThresholdLin);
 
         auto* peakLow = peakLowBuf_.getWritePointer (0);
         auto* peakHigh = peakHighBuf_.getWritePointer (0);
@@ -759,11 +779,6 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         }
         else
         {
-            envelope_R_.setThresholdLinear (thresholdLin);
-            envelope_R_.setReleaseMs (releaseMs);
-            envelope_R_.setReleaseSustainRatio (releaseSustainRatio);
-            envelope_R_.setMode (envelopeMode);
-
             auto* peakL = peakBuf_.getWritePointer (0);
             auto* peakR = peakBufR_.getWritePointer (0);
 

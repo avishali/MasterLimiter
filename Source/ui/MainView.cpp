@@ -267,6 +267,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldReleaseSustain_);
     btnReleaseAuto_.setClickingTogglesState (true);
     addAndMakeVisible (btnReleaseAuto_);
+    cmbAutoReleaseMode_.addItemList (juce::StringArray { "Transparent", "Balanced", "Reactive" }, 1);
+    cmbAutoReleaseMode_.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (cmbAutoReleaseMode_);
     addAndMakeVisible (sldLookahead_);
     btnCeilingMode_.setClickingTogglesState (true);
     addAndMakeVisible (btnCeilingMode_);
@@ -320,6 +323,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_ms), sldRelease_);
     attReleaseSustain_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldReleaseSustain_);
     attReleaseAuto_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::release_auto), btnReleaseAuto_);
+    attAutoReleaseMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::auto_release_mode), cmbAutoReleaseMode_);
     attLookahead_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::lookahead_ms), sldLookahead_);
     attBandColor_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::band_color), sldBandColor_);
     attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::character), sldCharacter_);
@@ -387,6 +391,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnMeterScaleMinus_.onClick = [this] { stepMeterScale (-1); };
     btnMeterScalePlus_.onClick = [this] { stepMeterScale (1); };
     btnMeterRms_.onClick = [this] { setMeterShowRms (btnMeterRms_.getToggleState()); };
+    btnReleaseAuto_.onClick = [this] { updateReleaseAutoControls(); };
 
     sldIoInputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
     sldIoInputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimR_, sldIoInputTrimL_, btnIoInputLink_); };
@@ -436,6 +441,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     lblBandColor_.setText ("Color " + juce::String ((int) std::lround (sldBandColor_.getValue())) + "%", juce::dontSendNotification);
     updateLimiterActiveState();
     updateBypassButtonState();
+    updateReleaseAutoControls (true);
     updateStereoModeControls();
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         updateCeilingModeButton (c->getIndex());
@@ -465,6 +471,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldRelease_.setTooltip ("Limiter release time in milliseconds.");
     sldReleaseSustain_.setTooltip ("Multiplier on release time for sustained peaks (1–10×).");
     btnReleaseAuto_.setTooltip ("When Auto is on, release time follows the program.");
+    cmbAutoReleaseMode_.setTooltip ("Auto release response: Transparent, Balanced, or Reactive.");
     sldLookahead_.setTooltip ("Lookahead delay in milliseconds (higher catches peaks earlier).");
     btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
     btnStereoMode_.setTooltip ("Click to toggle whether the wideband link operates in L/R stereo or M/S.");
@@ -561,6 +568,24 @@ void MainView::updateStereoModeControls()
     attLink_.reset();
     attLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (activeParam), sldStereoLink_);
     repaint (btnStereoMode_.getBounds().getUnion (sldStereoLink_.getBounds()).expanded (8, 8));
+}
+
+void MainView::updateReleaseAutoControls (bool forceRepaint)
+{
+    const bool autoRelease = btnReleaseAuto_.getToggleState();
+    const bool changed = autoRelease != lastReleaseAuto_;
+    lastReleaseAuto_ = autoRelease;
+
+    sldRelease_.setEnabled (! autoRelease);
+    lblRelease_.setEnabled (! autoRelease);
+    cmbAutoReleaseMode_.setEnabled (autoRelease);
+
+    if (changed || forceRepaint)
+        repaint (sldRelease_.getBounds()
+                     .getUnion (lblRelease_.getBounds())
+                     .getUnion (btnReleaseAuto_.getBounds())
+                     .getUnion (cmbAutoReleaseMode_.getBounds())
+                     .expanded (8, 8));
 }
 
 void MainView::updateLimiterActiveState()
@@ -853,7 +878,8 @@ void MainView::resized()
     lblLookahead_.setBounds (222, knobY, knobW, 18);
     sldLookahead_.setBounds (222, knobY + 18, knobW, knobH);
     lblReleaseAuto_.setBounds (312, knobY, knobW, 18);
-    btnReleaseAuto_.setBounds (314, knobY + 46, 74, 28);
+    btnReleaseAuto_.setBounds (314, knobY + 22, 74, 26);
+    cmbAutoReleaseMode_.setBounds (304, knobY + 56, 94, 22);
     btnStereoMode_.setBounds (402, knobY + 46, knobW, 28);
     lblStereoLink_.setBounds (492, knobY, knobW, 18);
     sldStereoLink_.setBounds (492, knobY + 18, knobW, knobH);
@@ -916,6 +942,7 @@ void MainView::resized()
     btnLimiterActive_.toFront (false);
     btnBypass_.toFront (false);
     cmbClipperMode_.toFront (false);
+    cmbAutoReleaseMode_.toFront (false);
     compGainBar_.toFront (false);
 
     meterStripArea_ = meterGr_.getBounds().getUnion (meterIn_.getBounds())
@@ -941,6 +968,7 @@ void MainView::syncMetersFromProcessor()
     updateLearnStateDisplay();
     updateCompensationReadout();
     updateBypassButtonState();
+    updateReleaseAutoControls();
 
     int ceilingIdx = 0;
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
