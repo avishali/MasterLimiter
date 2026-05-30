@@ -113,7 +113,7 @@ void MeterGroupComponent::DisplayLevelSmoother::tick (float peak, float rms, flo
         if (raw >= current)
             return raw;
 
-        constexpr float releaseDbPerSec = 20.0f;
+        constexpr float releaseDbPerSec = 40.0f;
         return juce::jmax (raw, current - releaseDbPerSec * juce::jmax (0.0f, dt));
     };
 

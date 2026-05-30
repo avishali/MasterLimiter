@@ -139,7 +139,7 @@ void MasterLimiterLookAndFeel::drawLinearSlider (juce::Graphics& g,
                                                handleY - 5.0f,
                                                bounds.getWidth() - 4.0f,
                                                10.0f);
-    g.setColour (theme.accent.brighter (0.65f));
+    g.setColour (juce::Colour::fromRGB (0x1d, 0x1d, 0x37));
     g.fillRoundedRectangle (handle, 3.0f);
     g.setColour (theme.text.withAlpha (0.28f));
     g.drawRoundedRectangle (handle, 3.0f, m.strokeThin);

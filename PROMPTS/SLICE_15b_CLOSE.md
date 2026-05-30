@@ -89,6 +89,7 @@ git commit -m "MasterLimiter Slice 15b close: bump HQ submodule (Top48Db) + PROG
 git add PROMPTS/SLICE_15b_io_meter_features.md \
         PROMPTS/SLICE_15b_1_meter_refinements.md \
         PROMPTS/SLICE_15b_2_io_release_and_peak_colour.md \
+        PROMPTS/SLICE_15b_3_io_meter_polish.md \
         PROMPTS/SLICE_15b_CLOSE.md
 git commit -m "docs: archive Slice 15b prompts"
 ```

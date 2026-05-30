@@ -11,8 +11,9 @@ path, parameter, or bench-behaviour change.
 - Engine: per-bus, per-channel RMS snapshots at the existing I/O
   measurement points. RMS is measurement-only, uses a one-pole
   ~300 ms mean-square window, and publishes new atomics/getters.
-- I/O meters: RMS bar fill + numeric readout are available behind a
-  shared `RMS` toggle, default OFF for sample-peak-only metering.
+- I/O meters: sample-peak bars stay light blue and always visible;
+  the shared `RMS` toggle adds a separate RMS-colour overlay only.
+  Peak and RMS numeric readouts are always visible.
 - Meter range: shared `+/-` controls step both Input and Output meters
   together through Full → 48 → 24 → 12 → 6 dB.
 - Peak reset: clicking either I/O meter resets the peak-hold line/max
@@ -20,9 +21,11 @@ path, parameter, or bench-behaviour change.
 - Scale layout: I/O bars are clean (`setDrawInternalScale(false)`);
   one shared centre dB scale sits between Input and Output, uses a
   uniform neutral colour, and has no red zone.
-- Display ballistics: I/O bars use instant attack and ~20 dB/s display
-  release so they glide down when audio stops. Sample-peak bar/cap was
-  recoloured to a light blue/teal.
+- Display ballistics: I/O bars use instant attack and ~40 dB/s display
+  release so they glide down when audio stops. Peak/RMS measurement
+  floors are -120 dB so bars empty fully at digital silence while
+  readouts still show `-inf`.
+- I/O trim fader handles use the darker #1D1D37 tone.
 - GR meter: release tightened 300 → 50 ms while preserving instant
   attack + peak-hold markers, so individual limiting events read
   clearly.

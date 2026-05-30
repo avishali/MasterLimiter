@@ -325,38 +325,36 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     const float width = static_cast<float> (meterArea_.getWidth());
     const auto peakColour = theme.accent.brighter (0.55f);
 
-    const float fillNorm = showRms_ ? renderState_.rmsNorm : renderState_.peakNorm;
-    const float rmsH = fillNorm * h;
-    const float rmsTop = yMax - rmsH;
-    const bool hasRmsSignal = fillNorm > 0.002f;
+    const float peakH = renderState_.peakNorm * h;
+    const float peakTop = yMax - peakH;
+    const bool hasPeakSignal = renderState_.peakNorm > 0.002f;
 
-    if (hasRmsSignal && rmsH > 0.5f)
+    if (hasPeakSignal && peakH > 0.5f)
     {
-        auto rmsRect = meterArea_.withTop (static_cast<int> (std::round (rmsTop)));
-        const auto rmsRectF = rmsRect.toFloat();
+        auto peakRect = meterArea_.withTop (static_cast<int> (std::round (peakTop)));
+        const auto peakRectF = peakRect.toFloat();
 
-        juce::ColourGradient signalGlow (theme.accent.withAlpha (0.36f),
+        juce::ColourGradient signalGlow (peakColour.withAlpha (0.34f),
                                          xLeft + (width * 0.5f),
-                                         rmsTop,
-                                         theme.accent.withAlpha (0.08f),
+                                         peakTop,
+                                         peakColour.withAlpha (0.07f),
                                          xLeft + (width * 0.5f),
                                          yMax,
                                          false);
         g.setGradientFill (signalGlow);
-        g.fillRoundedRectangle (rmsRectF.expanded (1.0f, 0.0f), m.rSmall);
+        g.fillRoundedRectangle (peakRectF.expanded (1.0f, 0.0f), m.rSmall);
 
-        g.setColour ((showRms_ ? theme.accent : peakColour).withAlpha (0.88f));
-        g.fillRoundedRectangle (rmsRectF, m.rSmall);
+        g.setColour (peakColour.withAlpha (0.88f));
+        g.fillRoundedRectangle (peakRectF, m.rSmall);
     }
 
-    const float peakTop = yMax - (renderState_.peakNorm * h);
-    if (showRms_ && renderState_.peakNorm > renderState_.rmsNorm && renderState_.peakNorm > 0.002f)
+    const float rmsH = renderState_.rmsNorm * h;
+    const float rmsTop = yMax - rmsH;
+    if (showRms_ && renderState_.rmsNorm > 0.002f && rmsH > 0.5f)
     {
-        g.setColour (peakColour.withAlpha (0.24f));
-        g.fillRect (xLeft + 2.0f,
-                    peakTop,
-                    width - 4.0f,
-                    juce::jmax (1.0f, rmsTop - peakTop));
+        auto rmsRect = meterArea_.withTop (static_cast<int> (std::round (rmsTop)));
+        g.setColour (theme.accent.withAlpha (0.74f));
+        g.fillRoundedRectangle (rmsRect.toFloat().reduced (2.0f, 0.0f), m.rSmall);
     }
 
     if (renderState_.peakNorm > 0.002f)
@@ -519,22 +517,15 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     const juce::String peakLine = numericOverrideActive_ ? numericOverridePeak_ : numericTextPeak_;
     const juce::String rmsLine = numericOverrideActive_ ? numericOverrideRms_ : numericTextRms_;
 
+    auto numBounds = numericArea_;
+    auto peakBounds = numBounds.removeFromTop (numBounds.getHeight() / 2);
+    auto rmsBounds = numBounds;
+
     g.setColour (peakColour.withAlpha (0.9f));
-    if (! showRms_)
-    {
-        g.drawText (peakLine, numericArea_, juce::Justification::centred);
-    }
-    else
-    {
-        auto numBounds = numericArea_;
-        auto peakBounds = numBounds.removeFromTop (numBounds.getHeight() / 2);
-        auto rmsBounds = numBounds;
+    g.drawText (peakLine, peakBounds, juce::Justification::centred);
 
-        g.drawText (peakLine, peakBounds, juce::Justification::centred);
-
-        g.setColour (theme.text.withAlpha (0.68f));
-        g.drawText (rmsLine, rmsBounds, juce::Justification::centred);
-    }
+    g.setColour (theme.text.withAlpha (0.68f));
+    g.drawText (rmsLine, rmsBounds, juce::Justification::centred);
 
     if (renderState_.bypassed)
     {
