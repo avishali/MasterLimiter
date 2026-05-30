@@ -7,6 +7,20 @@
 
 namespace
 {
+namespace palette
+{
+const juce::Colour bgDeep       = juce::Colour::fromRGB (0x0d, 0x10, 0x15);
+const juce::Colour panel        = juce::Colour::fromRGB (0x16, 0x1b, 0x22);
+const juce::Colour control      = juce::Colour::fromRGB (0x1e, 0x24, 0x2e);
+const juce::Colour border       = juce::Colour::fromRGB (0x2c, 0x33, 0x3f);
+const juce::Colour grid         = juce::Colour::fromRGB (0x38, 0x41, 0x4e);
+const juce::Colour text         = juce::Colour::fromRGB (0xe8, 0xed, 0xf3);
+const juce::Colour textMuted    = juce::Colour::fromRGB (0x8c, 0x97, 0xa6);
+const juce::Colour accent       = juce::Colour::fromRGB (0x33, 0xd2, 0xbe);
+const juce::Colour accentBright = juce::Colour::fromRGB (0x5b, 0xe7, 0xd6);
+const juce::Colour warning      = juce::Colour::fromRGB (0xe8, 0x70, 0x4f);
+} // namespace palette
+
 juce::String pid (std::string_view sv)
 {
     return { sv.data(), static_cast<size_t> (sv.size()) };
@@ -191,10 +205,13 @@ juce::Rectangle<int> MainView::ValueSlider::getValueLabelBounds() const
 {
     auto bounds = getLocalBounds();
 
+    if (valueLabelMode_ == ValueLabelMode::Hidden)
+        return {};
+
     if (valueLabelMode_ == ValueLabelMode::Below)
         return bounds.removeFromBottom (20).reduced (1, 1);
 
-    return bounds.withSizeKeepingCentre (juce::jmin (72, juce::jmax (44, bounds.getWidth() - 18)), 24);
+    return bounds.withSizeKeepingCentre (juce::jmin (60, juce::jmax (42, bounds.getWidth() - 26)), 20);
 }
 
 void MainView::ValueSlider::paint (juce::Graphics& g)
@@ -214,6 +231,7 @@ void MainView::ValueSlider::mouseDown (const juce::MouseEvent& e)
 {
     if (e.mods.isLeftButtonDown()
         && e.getNumberOfClicks() >= 2
+        && (! getValueLabelBounds().isEmpty())
         && getValueLabelBounds().contains (e.getPosition())
         && onValueEditRequest != nullptr)
     {
@@ -222,6 +240,95 @@ void MainView::ValueSlider::mouseDown (const juce::MouseEvent& e)
     }
 
     juce::Slider::mouseDown (e);
+}
+
+void MainView::SegmentedChoice::setOptions (juce::StringArray options)
+{
+    options_ = options;
+    selectedIndex_ = juce::jlimit (0, juce::jmax (0, options_.size() - 1), selectedIndex_);
+    repaint();
+}
+
+void MainView::SegmentedChoice::setSelectedIndex (int index, juce::NotificationType notification)
+{
+    const int clamped = juce::jlimit (0, juce::jmax (0, options_.size() - 1), index);
+    if (selectedIndex_ == clamped)
+        return;
+
+    selectedIndex_ = clamped;
+    repaint();
+
+    if (notification != juce::dontSendNotification && onChange != nullptr)
+        onChange (selectedIndex_);
+}
+
+int MainView::SegmentedChoice::indexAt (juce::Point<int> p) const noexcept
+{
+    if (options_.isEmpty() || getWidth() <= 0)
+        return 0;
+
+    const float segmentW = static_cast<float> (getWidth()) / static_cast<float> (options_.size());
+    return juce::jlimit (0, options_.size() - 1, static_cast<int> (std::floor (static_cast<float> (p.x) / segmentW)));
+}
+
+void MainView::SegmentedChoice::paint (juce::Graphics& g)
+{
+    if (options_.isEmpty())
+        return;
+
+    const auto bounds = getLocalBounds().toFloat().reduced (0.5f);
+    const float radius = 7.0f;
+    const auto alpha = isEnabled() ? 1.0f : 0.42f;
+
+    g.setColour (palette::control);
+    g.fillRoundedRectangle (bounds, radius);
+    g.setColour (palette::border);
+    g.drawRoundedRectangle (bounds, radius, 1.0f);
+
+    const float segmentW = bounds.getWidth() / static_cast<float> (options_.size());
+    auto selected = bounds;
+    selected.setX (bounds.getX() + segmentW * static_cast<float> (selectedIndex_));
+    selected.setWidth (segmentW);
+
+    juce::ColourGradient selectedGradient (juce::Colour::fromRGB (0x1f, 0x2d, 0x2f),
+                                           selected.getCentreX(),
+                                           selected.getY(),
+                                           juce::Colour::fromRGB (0x18, 0x24, 0x26),
+                                           selected.getCentreX(),
+                                           selected.getBottom(),
+                                           false);
+    g.setGradientFill (selectedGradient);
+    g.fillRoundedRectangle (selected.reduced (1.0f), radius - 1.0f);
+    g.setColour (palette::accent.withAlpha (0.18f * alpha));
+    g.drawRoundedRectangle (selected.reduced (1.0f), radius - 1.0f, 1.0f);
+
+    g.setColour (palette::border.withAlpha (0.8f));
+    for (int i = 1; i < options_.size(); ++i)
+    {
+        const float x = bounds.getX() + segmentW * static_cast<float> (i);
+        g.drawVerticalLine (static_cast<int> (std::round (x)), bounds.getY() + 3.0f, bounds.getBottom() - 3.0f);
+    }
+
+    const auto font = ui_ != nullptr ? ui_->type().labelFont().withHeight (10.5f).boldened()
+                                     : juce::Font (juce::FontOptions (10.5f)).boldened();
+    g.setFont (font);
+
+    for (int i = 0; i < options_.size(); ++i)
+    {
+        auto textBounds = bounds;
+        textBounds.setX (bounds.getX() + segmentW * static_cast<float> (i));
+        textBounds.setWidth (segmentW);
+        g.setColour ((i == selectedIndex_ ? palette::text : palette::textMuted).withAlpha (alpha));
+        g.drawFittedText (options_[i], textBounds.toNearestInt().reduced (4, 1), juce::Justification::centred, 1);
+    }
+}
+
+void MainView::SegmentedChoice::mouseDown (const juce::MouseEvent& e)
+{
+    if (! isEnabled())
+        return;
+
+    setSelectedIndex (indexAt (e.getPosition()), juce::sendNotificationSync);
 }
 
 //==============================================================================
@@ -236,23 +343,23 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
       lufsPanel_ (ui_, processor),
       clipBallistics_ (master_limiter_ui::makeClipBallisticsState())
 {
-    const auto& theme = ui_.theme();
+    addMouseListener (this, true);
 
     header_.setJustificationType (juce::Justification::centredLeft);
     header_.setFont (ui_.type().titleFont().withHeight (20.0f).boldened());
-    header_.setColour (juce::Label::textColourId, theme.accent.brighter (0.5f));
+    header_.setColour (juce::Label::textColourId, palette::accentBright);
     addAndMakeVisible (header_);
 
     headerMode_.setJustificationType (juce::Justification::centredLeft);
     headerMode_.setFont (ui_.type().labelFont().withHeight (10.0f));
-    headerMode_.setColour (juce::Label::textColourId, theme.textMuted);
+    headerMode_.setColour (juce::Label::textColourId, palette::textMuted);
     addAndMakeVisible (headerMode_);
 
     auto setupLabel = [&] (juce::Label& l)
     {
         l.setJustificationType (juce::Justification::centred);
         l.setFont (ui_.type().labelFont().withHeight (11.0f));
-        l.setColour (juce::Label::textColourId, theme.textMuted);
+        l.setColour (juce::Label::textColourId, palette::textMuted);
         addAndMakeVisible (l);
     };
 
@@ -281,14 +388,13 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     styleRotary (sldRelease_);
     styleRotary (sldStereoLink_);
     styleRotary (sldBandColor_);
-    styleHorizontalPlaceholder (sldCharacter_);
     styleIoTrimFader (sldIoInputTrimL_);
     styleIoTrimFader (sldIoInputTrimR_);
     styleIoTrimFader (sldIoOutputTrimL_);
     styleIoTrimFader (sldIoOutputTrimR_);
 
     sldGainDrive_.setRange (0.0, 24.0, 0.1);
-    sldGainDrive_.setNumDecimalPlacesToDisplay (2);
+    sldGainDrive_.setNumDecimalPlacesToDisplay (1);
     sldGainDrive_.setTextValueSuffix (" dB");
     sldGainDrive_.setValue (0.0, juce::dontSendNotification);
 
@@ -300,12 +406,14 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldRelease_);
     btnReleaseAuto_.setClickingTogglesState (true);
     addAndMakeVisible (btnReleaseAuto_);
-    cmbAutoReleaseMode_.addItemList (juce::StringArray { "Transparent", "Balanced", "Reactive" }, 1);
-    cmbAutoReleaseMode_.setJustificationType (juce::Justification::centred);
-    addAndMakeVisible (cmbAutoReleaseMode_);
+    segAutoReleaseMode_.setUiContext (&ui_);
+    segAutoReleaseMode_.setOptions (juce::StringArray { "Transparent", "Balanced", "Reactive" });
+    addAndMakeVisible (segAutoReleaseMode_);
     btnCeilingMode_.setClickingTogglesState (true);
     addAndMakeVisible (btnCeilingMode_);
-    addAndMakeVisible (sldCharacter_);
+    segCharacter_.setUiContext (&ui_);
+    segCharacter_.setOptions (juce::StringArray { "Clean", "Tight", "Aggressive" });
+    addAndMakeVisible (segCharacter_);
     addAndMakeVisible (sldStereoLink_);
     btnStereoMode_.setClickingTogglesState (false);
     addAndMakeVisible (btnStereoMode_);
@@ -314,21 +422,31 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     lblClipperReadout_.addMouseListener (this, false);
 
     btnGainCeilingLink_.setClickingTogglesState (true);
+    btnGainCeilingLink_.setName ("GainCeilingLinkIcon");
+    btnGainCeilingLink_.setButtonText ({});
     btnLimiterActive_.setClickingTogglesState (true);
+    btnLimiterActive_.setName ("LimiterPower");
+    btnClipperMode_.setName ("ClipperModeSegment");
+    btnCeilingMode_.setName ("CeilingModeSegment");
+    btnStereoMode_.setName ("StereoModeSegment");
     btnGainMatchAutoTrack_.setClickingTogglesState (true);
     btnIoInputLink_.setClickingTogglesState (true);
-    btnIoInputLink_.setButtonText ("L/R");
+    btnIoInputLink_.setName ("IoInputLinkIcon");
+    btnIoInputLink_.setButtonText ({});
     btnIoInputLink_.setToggleState (true, juce::dontSendNotification);
     btnIoOutputLink_.setClickingTogglesState (true);
-    btnIoOutputLink_.setButtonText ("L/R");
+    btnIoOutputLink_.setName ("IoOutputLinkIcon");
+    btnIoOutputLink_.setButtonText ({});
     btnIoOutputLink_.setToggleState (true, juce::dontSendNotification);
     btnBypass_.setClickingTogglesState (true);
     btnMeterRms_.setClickingTogglesState (true);
     btnMeterRms_.setToggleState (false, juce::dontSendNotification);
+    btnMeterScaleMinus_.setName ("MeterScaleMinus");
+    btnMeterScalePlus_.setName ("MeterScalePlus");
     compGainBar_.setProcessor (&processor_);
-    compGainBar_.setColours (theme.warning.withAlpha (0.85f),
-                             theme.accent.withAlpha (0.9f),
-                             theme.grid.withAlpha (0.65f));
+    compGainBar_.setColours (palette::warning.withAlpha (0.85f),
+                             palette::accent.withAlpha (0.9f),
+                             palette::grid.withAlpha (0.65f));
     addAndMakeVisible (btnGainCeilingLink_);
     addAndMakeVisible (btnLimiterActive_);
     addAndMakeVisible (btnGainMatchAutoTrack_);
@@ -363,9 +481,27 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attGainCeilingLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_ceiling_link), btnGainCeilingLink_);
     attRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_ms), sldRelease_);
     attReleaseAuto_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::release_auto), btnReleaseAuto_);
-    attAutoReleaseMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::auto_release_mode), cmbAutoReleaseMode_);
+    if (auto* autoModeParam = apvts_.getParameter (pid (param::auto_release_mode)))
+    {
+        attAutoReleaseMode_ = std::make_unique<juce::ParameterAttachment> (*autoModeParam,
+                                                                          [this] (float value)
+                                                                          {
+                                                                              updateAutoReleaseModeControl ((int) std::lround (value));
+                                                                          },
+                                                                          nullptr);
+        attAutoReleaseMode_->sendInitialUpdate();
+    }
     attBandColor_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::band_color), sldBandColor_);
-    attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::character), sldCharacter_);
+    if (auto* characterParam = apvts_.getParameter (pid (param::character)))
+    {
+        attCharacter_ = std::make_unique<juce::ParameterAttachment> (*characterParam,
+                                                                    [this] (float value)
+                                                                    {
+                                                                        updateCharacterModeControl ((int) std::lround (value));
+                                                                    },
+                                                                    nullptr);
+        attCharacter_->sendInitialUpdate();
+    }
     attGainMatchAutoTrack_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_match_auto), btnGainMatchAutoTrack_);
     attIoInputTrimL_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_input_l_db), sldIoInputTrimL_);
     attIoInputTrimR_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::io_input_r_db), sldIoInputTrimR_);
@@ -381,9 +517,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
         slider.setTextValueSuffix (suffix);
     };
 
-    useSliderTextboxFormat (sldGainDrive_, 2, " dB");
-    useSliderTextboxFormat (sldClipperDrive_, 2, " dB");
-    useSliderTextboxFormat (sldCeiling_, 2, " dB");
+    useSliderTextboxFormat (sldGainDrive_, 1, " dB");
+    useSliderTextboxFormat (sldClipperDrive_, 1, " dB");
+    useSliderTextboxFormat (sldCeiling_, 1, " dB");
     useSliderTextboxFormat (sldRelease_, 0, " ms");
     useSliderTextboxFormat (sldStereoLink_, 0, juce::String());
     useSliderTextboxFormat (sldBandColor_, 0, juce::String());
@@ -399,18 +535,23 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupValueEdit (sldRelease_, ValueSlider::ValueLabelMode::Centre);
     setupValueEdit (sldStereoLink_, ValueSlider::ValueLabelMode::Centre);
     setupValueEdit (sldBandColor_, ValueSlider::ValueLabelMode::Centre);
-    setupValueEdit (sldIoInputTrimL_, ValueSlider::ValueLabelMode::Below);
-    setupValueEdit (sldIoInputTrimR_, ValueSlider::ValueLabelMode::Below);
-    setupValueEdit (sldIoOutputTrimL_, ValueSlider::ValueLabelMode::Below);
-    setupValueEdit (sldIoOutputTrimR_, ValueSlider::ValueLabelMode::Below);
-    sldCharacter_.textFromValueFunction = [] (double v)
+    sldGainDrive_.setRange (sldGainDrive_.getMinimum(), sldGainDrive_.getMaximum(), 0.1);
+    sldClipperDrive_.setRange (sldClipperDrive_.getMinimum(), sldClipperDrive_.getMaximum(), 0.1);
+    sldCeiling_.setRange (sldCeiling_.getMinimum(), sldCeiling_.getMaximum(), 0.1);
+    setupValueEdit (sldIoInputTrimL_, ValueSlider::ValueLabelMode::Hidden);
+    setupValueEdit (sldIoInputTrimR_, ValueSlider::ValueLabelMode::Hidden);
+    setupValueEdit (sldIoOutputTrimL_, ValueSlider::ValueLabelMode::Hidden);
+    setupValueEdit (sldIoOutputTrimR_, ValueSlider::ValueLabelMode::Hidden);
+
+    segAutoReleaseMode_.onChange = [this] (int index)
     {
-        switch (juce::jlimit (0, 2, (int) std::lround (v)))
-        {
-            case 0:  return juce::String ("Clean");
-            case 2:  return juce::String ("Aggressive");
-            default: return juce::String ("Tight");
-        }
+        if (attAutoReleaseMode_ != nullptr)
+            attAutoReleaseMode_->setValueAsCompleteGesture ((float) juce::jlimit (0, 2, index));
+    };
+    segCharacter_.onChange = [this] (int index)
+    {
+        if (attCharacter_ != nullptr)
+            attCharacter_->setValueAsCompleteGesture ((float) juce::jlimit (0, 2, index));
     };
 
     addAndMakeVisible (meterIn_);
@@ -420,7 +561,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     lblTruePeak_.setJustificationType (juce::Justification::centredLeft);
     lblTruePeak_.setFont (ui_.type().labelFont().withHeight (11.0f));
-    lblTruePeak_.setColour (juce::Label::textColourId, theme.textMuted);
+    lblTruePeak_.setColour (juce::Label::textColourId, palette::textMuted);
     addAndMakeVisible (lblTruePeak_);
 
     btnResetPeaks_.onClick = [this]
@@ -507,10 +648,10 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     valueEditor_.setSelectAllWhenFocused (true);
     valueEditor_.setJustification (juce::Justification::centred);
     valueEditor_.setFont (ui_.type().labelFont().withHeight (11.0f));
-    valueEditor_.setColour (juce::TextEditor::backgroundColourId, theme.background.brighter (0.08f));
-    valueEditor_.setColour (juce::TextEditor::outlineColourId, theme.accent.withAlpha (0.75f));
-    valueEditor_.setColour (juce::TextEditor::focusedOutlineColourId, theme.accent.brighter (0.35f));
-    valueEditor_.setColour (juce::TextEditor::textColourId, theme.text);
+    valueEditor_.setColour (juce::TextEditor::backgroundColourId, palette::control);
+    valueEditor_.setColour (juce::TextEditor::outlineColourId, palette::accent.withAlpha (0.75f));
+    valueEditor_.setColour (juce::TextEditor::focusedOutlineColourId, palette::accentBright);
+    valueEditor_.setColour (juce::TextEditor::textColourId, palette::text);
     valueEditor_.onReturnKey = [this] { finishValueEdit (true); };
     valueEditor_.onEscapeKey = [this] { finishValueEdit (false); };
     valueEditor_.onFocusLost = [this] { finishValueEdit (true); };
@@ -538,12 +679,12 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldCeiling_.setTooltip ("Output ceiling in dBFS.");
     sldRelease_.setTooltip ("Limiter release time in milliseconds.");
     btnReleaseAuto_.setTooltip ("When Auto is on, release time follows the program.");
-    cmbAutoReleaseMode_.setTooltip ("Auto release response: Transparent, Balanced, or Reactive.");
+    segAutoReleaseMode_.setTooltip ("Auto release response: Transparent, Balanced, or Reactive.");
     btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
     btnStereoMode_.setTooltip ("Click to toggle whether the wideband link operates in L/R stereo or M/S.");
     sldStereoLink_.setTooltip ("Link amount for the active stereo mode: 100% fully linked, 0% independent.");
     sldBandColor_.setTooltip ("Multiband Color: 0% glued/warm, 50% balanced, 100% open/bright.");
-    sldCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
+    segCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
     lblTruePeak_.setTooltip ("Shows the current sample-peak or true-peak output readout in dB.");
     btnResetPeaks_.setTooltip ("Resets held peaks, maximum gain reduction, and clip maximums.");
 
@@ -557,7 +698,10 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     updateCompensationReadout();
 }
 
-MainView::~MainView() = default;
+MainView::~MainView()
+{
+    removeMouseListener (this);
+}
 
 void MainView::styleRotary (ValueSlider& s) const
 {
@@ -569,19 +713,13 @@ void MainView::styleRotary (ValueSlider& s) const
 void MainView::styleIoTrimFader (ValueSlider& s) const
 {
     s.setSliderStyle (juce::Slider::LinearVertical);
+    s.setComponentID ("IoTrimFader");
     s.setSliderSnapsToMousePosition (false);
     s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     s.setRange (-24.0, 24.0, 0.01);
     s.setNumDecimalPlacesToDisplay (2);
     s.setTextValueSuffix (" dB");
     s.setValue (0.0, juce::dontSendNotification);
-    s.setScrollWheelEnabled (false);
-}
-
-void MainView::styleHorizontalPlaceholder (juce::Slider& s) const
-{
-    s.setSliderStyle (juce::Slider::LinearHorizontal);
-    s.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     s.setScrollWheelEnabled (false);
 }
 
@@ -598,6 +736,7 @@ void MainView::beginValueEdit (ValueSlider& s)
 
     finishValueEdit (false);
     editingSlider_ = &s;
+    ignoreNextEditorClickAway_ = true;
     valueEditor_.setText (s.getTextFromValue (s.getValue()), false);
     positionValueEditor();
     valueEditor_.setVisible (true);
@@ -612,8 +751,7 @@ void MainView::positionValueEditor()
         return;
 
     const auto labelBounds = editingSlider_->getValueLabelBounds()
-                                 .translated (editingSlider_->getX(), editingSlider_->getY())
-                                 .expanded (3, 2);
+                                 .translated (editingSlider_->getX(), editingSlider_->getY());
     valueEditor_.setBounds (labelBounds);
 }
 
@@ -700,6 +838,20 @@ void MainView::updateClipperModeButton (int clipperIdx)
     repaint (btnClipperMode_.getBounds().expanded (4, 4));
 }
 
+void MainView::updateCharacterModeControl (int characterIdx)
+{
+    lastCharacterModeIdx_ = juce::jlimit (0, 2, characterIdx);
+    segCharacter_.setSelectedIndex (lastCharacterModeIdx_, juce::dontSendNotification);
+    repaint (segCharacter_.getBounds().expanded (4, 4));
+}
+
+void MainView::updateAutoReleaseModeControl (int modeIdx)
+{
+    lastAutoReleaseModeIdx_ = juce::jlimit (0, 2, modeIdx);
+    segAutoReleaseMode_.setSelectedIndex (lastAutoReleaseModeIdx_, juce::dontSendNotification);
+    repaint (segAutoReleaseMode_.getBounds().expanded (4, 4));
+}
+
 void MainView::updateReleaseAutoControls (bool forceRepaint)
 {
     const bool autoRelease = btnReleaseAuto_.getToggleState();
@@ -708,13 +860,13 @@ void MainView::updateReleaseAutoControls (bool forceRepaint)
 
     sldRelease_.setEnabled (! autoRelease);
     lblRelease_.setEnabled (! autoRelease);
-    cmbAutoReleaseMode_.setEnabled (autoRelease);
+    segAutoReleaseMode_.setEnabled (autoRelease);
 
     if (changed || forceRepaint)
         repaint (sldRelease_.getBounds()
                      .getUnion (lblRelease_.getBounds())
                      .getUnion (btnReleaseAuto_.getBounds())
-                     .getUnion (cmbAutoReleaseMode_.getBounds())
+                     .getUnion (segAutoReleaseMode_.getBounds())
                      .expanded (8, 8));
 }
 
@@ -728,11 +880,10 @@ void MainView::updateLimiterActiveState()
 
 void MainView::updateBypassButtonState()
 {
-    const auto& theme = ui_.theme();
     const bool bypassed = btnBypass_.getToggleState();
     btnBypass_.setButtonText (bypassed ? "Bypassed" : "Bypass");
     if (bypassed)
-        btnBypass_.setColour (juce::TextButton::buttonColourId, theme.warning.withAlpha (0.85f));
+        btnBypass_.setColour (juce::TextButton::buttonColourId, palette::warning.withAlpha (0.85f));
     else
         btnBypass_.removeColour (juce::TextButton::buttonColourId);
     repaint (btnBypass_.getBounds().expanded (4, 4));
@@ -740,7 +891,6 @@ void MainView::updateBypassButtonState()
 
 void MainView::updateLearnStateDisplay()
 {
-    const auto& theme = ui_.theme();
     const float ref = processor_.getLearnedRefLufs();
     const bool hasRef = std::isfinite (ref);
 
@@ -752,14 +902,14 @@ void MainView::updateLearnStateDisplay()
             const float phase = static_cast<float> (tick) / 1000.0f;
             const float alpha = 0.35f + 0.35f * (0.5f + 0.5f * std::sin (phase * juce::MathConstants<float>::twoPi));
             btnLearnInputGain_.setButtonText ("Listening...");
-            btnLearnInputGain_.setColour (juce::TextButton::buttonColourId, theme.accent.withAlpha (alpha));
+            btnLearnInputGain_.setColour (juce::TextButton::buttonColourId, palette::accent.withAlpha (alpha));
             lblLearnInputLufs_.setText ("Listening...", juce::dontSendNotification);
             break;
         }
 
         case MasterLimiterAudioProcessor::LearnState::Captured:
             btnLearnInputGain_.setButtonText ("Learned");
-            btnLearnInputGain_.setColour (juce::TextButton::buttonColourId, theme.accent.withAlpha (0.55f));
+            btnLearnInputGain_.setColour (juce::TextButton::buttonColourId, palette::accent.withAlpha (0.55f));
             lblLearnInputLufs_.setText (hasRef ? (juce::String (ref, 1) + " LUFS") : "No ref", juce::dontSendNotification);
             break;
 
@@ -801,11 +951,10 @@ void MainView::updateMeterScaleControls()
     btnMeterScalePlus_.setEnabled (idx < 4);
     lblMeterScaleRange_.setText (scaleLabel (currentMeterScale_), juce::dontSendNotification);
 
-    const auto& theme = ui_.theme();
     btnMeterScaleMinus_.setColour (juce::TextButton::buttonColourId,
-                                   (idx > 0 ? theme.panel.brighter (0.06f) : theme.panel.darker (0.08f)));
+                                   (idx > 0 ? palette::control.brighter (0.06f) : palette::panel.darker (0.08f)));
     btnMeterScalePlus_.setColour (juce::TextButton::buttonColourId,
-                                  (idx < 4 ? theme.panel.brighter (0.06f) : theme.panel.darker (0.08f)));
+                                  (idx < 4 ? palette::control.brighter (0.06f) : palette::panel.darker (0.08f)));
 }
 
 void MainView::setMeterShowRms (bool shouldShow)
@@ -814,11 +963,10 @@ void MainView::setMeterShowRms (bool shouldShow)
     meterIn_.setShowRms (shouldShow);
     meterOut_.setShowRms (shouldShow);
 
-    const auto& theme = ui_.theme();
     if (shouldShow)
-        btnMeterRms_.setColour (juce::TextButton::buttonColourId, theme.accent.withAlpha (0.48f));
+        btnMeterRms_.setColour (juce::TextButton::buttonColourId, palette::accent.withAlpha (0.48f));
     else
-        btnMeterRms_.setColour (juce::TextButton::buttonColourId, theme.panel.brighter (0.04f));
+        btnMeterRms_.setColour (juce::TextButton::buttonColourId, palette::control.brighter (0.04f));
 }
 
 void MainView::paintMeterScaleColumn (juce::Graphics& g)
@@ -826,16 +974,17 @@ void MainView::paintMeterScaleColumn (juce::Graphics& g)
     if (meterScaleColumnArea_.isEmpty())
         return;
 
-    const auto& theme = ui_.theme();
     const auto& type = ui_.type();
     const auto area = meterScaleColumnArea_.toFloat();
     const float yMax = area.getBottom();
     const float h = area.getHeight();
     const float xLeft = area.getX();
     const float xRight = area.getRight();
+    const float labelW = juce::jmin (20.0f, area.getWidth() * 0.62f);
+    const float labelRight = xLeft + labelW;
 
-    g.setColour (theme.grid.withAlpha (0.22f));
-    g.drawVerticalLine (static_cast<int> (std::round (area.getCentreX())), area.getY(), area.getBottom());
+    g.setColour (palette::grid.withAlpha (0.22f));
+    g.drawVerticalLine (static_cast<int> (std::round (labelRight + 2.0f)), area.getY(), area.getBottom());
     g.setFont (type.labelFont().withHeight (9.0f));
 
     juce::Array<float> ticks;
@@ -849,22 +998,35 @@ void MainView::paintMeterScaleColumn (juce::Graphics& g)
             continue;
 
         const bool zero = std::abs (db) < 0.001f;
-        const auto tickColour = theme.textMuted.withAlpha (zero ? 0.58f : 0.42f);
+        const auto tickColour = palette::textMuted.withAlpha (zero ? 0.58f : 0.42f);
         g.setColour (tickColour);
-        g.drawLine (xLeft + 1.0f,
+        g.drawLine (labelRight + 4.0f,
                     y,
                     xRight - 1.0f,
                     y,
                     zero ? 1.45f : 0.8f);
 
+        g.setColour ((db >= 0.0f ? palette::warning : palette::textMuted).withAlpha (zero ? 0.72f : 0.58f));
         g.drawText (tickLabel (db),
-                    juce::Rectangle<float> (xLeft, y - 5.0f, area.getWidth(), 10.0f),
-                    juce::Justification::centred);
+                    juce::Rectangle<float> (xLeft, y - 5.0f, labelW, 10.0f),
+                    juce::Justification::centredRight);
     }
 }
 
 void MainView::mouseDown (const juce::MouseEvent& e)
 {
+    if (valueEditor_.isVisible())
+    {
+        if (ignoreNextEditorClickAway_)
+        {
+            ignoreNextEditorClickAway_ = false;
+        }
+        else if (! valueEditor_.getBounds().contains (e.getEventRelativeTo (this).getPosition()))
+        {
+            finishValueEdit (true);
+        }
+    }
+
     const auto eventOnLearn = e.eventComponent == &btnLearnInputGain_
                            || btnLearnInputGain_.getBounds().contains (e.getEventRelativeTo (this).getPosition());
     if (eventOnLearn && e.mods.isRightButtonDown())
@@ -889,15 +1051,14 @@ void MainView::mouseDown (const juce::MouseEvent& e)
 
 void MainView::paint (juce::Graphics& g)
 {
-    const auto& theme = ui_.theme();
     const auto& type = ui_.type();
     const auto& m = ui_.metrics();
 
-    g.fillAll (theme.background);
+    g.fillAll (palette::bgDeep);
 
     if (! headerArea_.isEmpty())
     {
-        g.setColour (theme.background.brighter (0.04f));
+        g.setColour (palette::bgDeep.brighter (0.04f));
         g.fillRect (headerArea_);
     }
 
@@ -907,15 +1068,15 @@ void MainView::paint (juce::Graphics& g)
             return;
 
         const auto panel = area.toFloat();
-        g.setColour (theme.panel.brighter (0.02f));
+        g.setColour (palette::panel);
         g.fillRoundedRectangle (panel, m.rLarge);
-        g.setColour (theme.borderDivider);
+        g.setColour (palette::border);
         g.drawRoundedRectangle (panel.reduced (0.5f), m.rLarge, m.strokeThin);
 
         auto titleArea = area.reduced (18, 10).removeFromTop (18);
         const bool limiterOffTitle = title == "M A X I M I Z E R" && ! btnLimiterActive_.getToggleState();
-        g.setColour (limiterOffTitle ? juce::Colours::red.withAlpha (0.78f)
-                                      : theme.textMuted.withAlpha (0.8f));
+        g.setColour (limiterOffTitle ? palette::warning.withAlpha (0.78f)
+                                      : palette::textMuted.withAlpha (0.8f));
         g.setFont (type.labelFont().withHeight (13.0f).boldened());
         g.drawText (title, titleArea, title == "I/O" ? juce::Justification::centred : juce::Justification::centredLeft, true);
     };
@@ -925,15 +1086,10 @@ void MainView::paint (juce::Graphics& g)
 
     if (! gainMatchLabelArea_.isEmpty())
     {
-        g.setColour (theme.textMuted.withAlpha (0.75f));
+        g.setColour (palette::textMuted.withAlpha (0.75f));
         g.setFont (type.labelFont().withHeight (12.0f).boldened());
-        g.drawText ("G A I N  M A T C H", gainMatchLabelArea_, juce::Justification::centredLeft, true);
+        g.drawText ("G A I N  M A T C H", gainMatchLabelArea_, juce::Justification::centred, true);
     }
-
-    g.setColour (theme.textMuted.withAlpha (0.72f));
-    g.setFont (type.labelFont().withHeight (11.0f));
-    g.drawText ("Clean", juce::Rectangle<int> { 34, 362, 80, 16 }, juce::Justification::centredLeft);
-    g.drawText ("Aggressive", juce::Rectangle<int> { 330, 362, 104, 16 }, juce::Justification::centredRight);
 
     if (! sldBandColor_.getBounds().isEmpty())
     {
@@ -943,7 +1099,7 @@ void MainView::paint (juce::Graphics& g)
         const int x1 = b.getCentreX();
         const int x2 = b.getRight() - 8;
 
-        g.setColour (theme.textMuted.withAlpha (0.55f));
+        g.setColour (palette::textMuted.withAlpha (0.55f));
         for (int x : { x0, x1, x2 })
             g.drawVerticalLine (x, (float) y, (float) y + 5.0f);
 
@@ -958,15 +1114,15 @@ void MainView::paint (juce::Graphics& g)
     if (clipLedLevel_ > 0.001f)
     {
         const auto led = lblClipperDrive_.getBounds().removeFromRight (12).withSizeKeepingCentre (8, 8).toFloat();
-        g.setColour (theme.warning.withAlpha (juce::jlimit (0.0f, 1.0f, clipLedLevel_)));
+        g.setColour (palette::warning.withAlpha (juce::jlimit (0.0f, 1.0f, clipLedLevel_)));
         g.fillEllipse (led);
     }
 
     if (! footerArea_.isEmpty())
     {
-        g.setColour (theme.background.brighter (0.02f));
+        g.setColour (palette::bgDeep.brighter (0.02f));
         g.fillRect (footerArea_);
-        g.setColour (theme.grid.withAlpha (0.45f));
+        g.setColour (palette::grid.withAlpha (0.45f));
         auto footerTopLine = footerArea_;
         g.fillRect (footerTopLine.removeFromTop (1));
     }
@@ -982,21 +1138,21 @@ void MainView::resized()
     header_.setBounds (24, 8, 150, 34);
     headerMode_.setBounds (184, 12, 790, 24);
     btnBypass_.setBounds (982, 12, 92, 28);
-    btnLimiterActive_.setBounds (206, 134, 86, 22);
+    btnLimiterActive_.setBounds (232, 126, 34, 34);
 
     lblGainDrive_.setBounds (48, 116, 140, 18);
     sldGainDrive_.setBounds (40, 134, 156, 136);
     lblGainDriveRange_.setBounds (42, 270, 154, 18);
-    btnGainCeilingLink_.setBounds (206, 164, 86, 22);
+    btnGainCeilingLink_.setBounds (224, 166, 50, 22);
 
     lblCeiling_.setBounds (300, 116, 156, 18);
     sldCeiling_.setBounds (300, 134, 156, 136);
     lblCeilingMode_.setBounds (0, 0, 0, 0);
     btnCeilingMode_.setBounds (206, 194, 86, 22);
-    lblTruePeak_.setBounds (300, 324, 156, 20);
+    lblTruePeak_.setBounds (204, 220, 90, 18);
 
     lblCharacter_.setBounds (34, 314, 128, 18);
-    sldCharacter_.setBounds (34, 336, 400, 24);
+    segCharacter_.setBounds (34, 336, 400, 24);
 
     const int knobY = 388;
     const int knobW = 78;
@@ -1005,7 +1161,7 @@ void MainView::resized()
     sldRelease_.setBounds (62, knobY + 18, knobW, knobH);
     lblReleaseAuto_.setBounds (174, knobY, 86, 18);
     btnReleaseAuto_.setBounds (184, knobY + 22, 76, 24);
-    cmbAutoReleaseMode_.setBounds (158, knobY + 56, 98, 22);
+    segAutoReleaseMode_.setBounds (146, knobY + 56, 154, 22);
     btnStereoMode_.setBounds (316, knobY + 48, 86, 24);
     lblStereoLink_.setBounds (414, knobY, knobW, 18);
     sldStereoLink_.setBounds (414, knobY + 18, knobW, knobH);
@@ -1016,8 +1172,8 @@ void MainView::resized()
     lblBandColor_.setBounds (526, 314, knobW, 18);
     sldBandColor_.setBounds (526, 332, knobW, knobH);
 
-    gainMatchLabelArea_ = { 152, 528, 468, 18 };
     btnGainMatchAutoTrack_.setBounds (152, 550, 126, 30);
+    gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (528).withHeight (18);
     lblGainMatchNote_.setBounds (288, 550, 76, 30);
     compGainBar_.setBounds (372, 562, 48, 8);
     // Slice 11b2.1: Learn sits with Auto/Track so the LUFS feature reads as one group.
@@ -1068,7 +1224,8 @@ void MainView::resized()
     btnLimiterActive_.toFront (false);
     btnBypass_.toFront (false);
     btnClipperMode_.toFront (false);
-    cmbAutoReleaseMode_.toFront (false);
+    segCharacter_.toFront (false);
+    segAutoReleaseMode_.toFront (false);
     compGainBar_.toFront (false);
     valueEditor_.toFront (false);
 

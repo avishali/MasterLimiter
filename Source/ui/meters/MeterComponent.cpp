@@ -164,7 +164,7 @@ void MeterComponent::resized()
     auto b = getLocalBounds();
 
     labelArea_ = b.removeFromTop (16);
-    numericArea_ = b.removeFromBottom (kind_ == Kind::Level ? 30 : 20).reduced (2, 2);
+    numericArea_ = b.removeFromBottom (kind_ == Kind::Level ? 34 : 20).reduced (2, 2);
 
     auto ledRow = labelArea_;
     ledArea_ = ledRow.removeFromRight (14).withSizeKeepingCentre (10, 10);
@@ -308,11 +308,13 @@ void MeterComponent::paintLevel (juce::Graphics& g)
 
     if (y0 > yTop)
     {
-        g.setColour (theme.danger.withAlpha (0.15f));
-        g.fillRect (static_cast<float> (meterArea_.getX()),
-                    yTop,
-                    static_cast<float> (meterArea_.getWidth()),
-                    y0 - yTop);
+        const float capY = juce::jlimit (yTop + 1.0f, static_cast<float> (meterArea_.getBottom()) - 1.0f, y0);
+        g.setColour (theme.danger.withAlpha (0.72f));
+        g.drawLine (static_cast<float> (meterArea_.getX()) + 1.0f,
+                    capY,
+                    static_cast<float> (meterArea_.getRight()) - 1.0f,
+                    capY,
+                    1.4f);
     }
 
     g.setColour (theme.background.withAlpha (0.65f));
@@ -517,7 +519,7 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     const juce::String peakLine = numericOverrideActive_ ? numericOverridePeak_ : numericTextPeak_;
     const juce::String rmsLine = numericOverrideActive_ ? numericOverrideRms_ : numericTextRms_;
 
-    auto numBounds = numericArea_;
+    auto numBounds = numericArea_.translated (0, 3);
     auto peakBounds = numBounds.removeFromTop (numBounds.getHeight() / 2);
     auto rmsBounds = numBounds;
 

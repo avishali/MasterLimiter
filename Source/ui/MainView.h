@@ -48,7 +48,8 @@ private:
         enum class ValueLabelMode
         {
             Centre,
-            Below
+            Below,
+            Hidden
         };
 
         void setValueLabelMode (ValueLabelMode mode) noexcept { valueLabelMode_ = mode; }
@@ -62,9 +63,30 @@ private:
         ValueLabelMode valueLabelMode_ { ValueLabelMode::Centre };
     };
 
+    class SegmentedChoice : public juce::Component,
+                            public juce::SettableTooltipClient
+    {
+    public:
+        void setOptions (juce::StringArray options);
+        void setSelectedIndex (int index, juce::NotificationType notification);
+        int getSelectedIndex() const noexcept { return selectedIndex_; }
+        void setUiContext (mdsp_ui::UiContext* ui) noexcept { ui_ = ui; }
+
+        std::function<void (int)> onChange;
+
+        void paint (juce::Graphics& g) override;
+        void mouseDown (const juce::MouseEvent& e) override;
+
+    private:
+        int indexAt (juce::Point<int> p) const noexcept;
+
+        mdsp_ui::UiContext* ui_ = nullptr;
+        juce::StringArray options_;
+        int selectedIndex_ { 0 };
+    };
+
     void styleRotary (ValueSlider& s) const;
     void styleIoTrimFader (ValueSlider& s) const;
-    void styleHorizontalPlaceholder (juce::Slider& s) const;
     void setupValueEdit (ValueSlider& s, ValueSlider::ValueLabelMode mode);
     void beginValueEdit (ValueSlider& s);
     void positionValueEditor();
@@ -74,6 +96,8 @@ private:
     void updateCeilingModeButton (int ceilingIdx);
     void updateStereoModeControls();
     void updateClipperModeButton (int clipperIdx);
+    void updateCharacterModeControl (int characterIdx);
+    void updateAutoReleaseModeControl (int modeIdx);
     void updateReleaseAutoControls (bool forceRepaint = false);
     void updateLimiterActiveState();
     void updateBypassButtonState();
@@ -134,7 +158,7 @@ private:
 
     juce::Label lblReleaseAuto_ { {}, "Auto" };
     juce::ToggleButton btnReleaseAuto_ { "Auto" };
-    juce::ComboBox cmbAutoReleaseMode_ { "Auto Release" };
+    SegmentedChoice segAutoReleaseMode_;
 
     juce::Label lblCeilingMode_ { {}, "SP / TP" };
     juce::ToggleButton btnCeilingMode_ { "SP" };
@@ -148,7 +172,7 @@ private:
     ValueSlider sldBandColor_;
 
     juce::Label lblCharacter_ { {}, "Character" };
-    juce::Slider sldCharacter_;
+    SegmentedChoice segCharacter_;
 
     juce::ToggleButton btnGainMatchAutoTrack_ { "Auto / Track" };
     juce::Label lblGainMatchNote_ { {}, "+0.0 dB" };
@@ -186,6 +210,9 @@ private:
     bool lastLimiterActive_ { true };
     bool lastReleaseAuto_ { false };
     int lastClipperModeIdx_ { -1 };
+    int lastCharacterModeIdx_ { -1 };
+    int lastAutoReleaseModeIdx_ { -1 };
+    bool ignoreNextEditorClickAway_ { false };
     ValueSlider* editingSlider_ { nullptr };
     juce::TextEditor valueEditor_ { "Value Entry" };
     master_limiter_ui::ClipBallisticsPtr clipBallistics_;
@@ -202,10 +229,10 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainCeilingLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attReleaseAuto_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attAutoReleaseMode_;
+    std::unique_ptr<juce::ParameterAttachment> attAutoReleaseMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCharacter_;
+    std::unique_ptr<juce::ParameterAttachment> attCharacter_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimR_;

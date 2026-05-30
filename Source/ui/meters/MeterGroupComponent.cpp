@@ -192,6 +192,8 @@ void MeterGroupComponent::handlePeakReset() noexcept
     provider1_.updateFromValues (rPeak, rRms, false, false);
     provider0_.resetPeakHold();
     provider1_.resetPeakHold();
+    maxPeakLDb_ = -200.0f;
+    maxPeakRDb_ = -200.0f;
     peakSmooth0_.reset();
     peakSmooth1_.reset();
     rmsSmooth0_.reset();
@@ -293,6 +295,10 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     rmsSmooth1_.tick (rRms, dtSec, holdTicks);
     displaySmooth0_.tick (lPeak, lRms, dtSec);
     displaySmooth1_.tick (rPeak, rRms, dtSec);
+    if (std::isfinite (lPeak))
+        maxPeakLDb_ = juce::jmax (maxPeakLDb_, lPeak);
+    if (std::isfinite (rPeak))
+        maxPeakRDb_ = juce::jmax (maxPeakRDb_, rPeak);
 
     constexpr float kClipThresholdDb = 0.0f;  // digital full-scale
     const bool clippedL = renderState0_.clipLatched || (std::isfinite (lPeak) && lPeak >= kClipThresholdDb);
@@ -304,13 +310,13 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
 
     const auto lCurrentText = formatDbBare (peakSmooth0_.duty);
     const auto rCurrentText = formatDbBare (peakSmooth1_.duty);
-    const auto lRmsText = formatDbBare (rmsSmooth0_.duty);
-    const auto rRmsText = formatDbBare (rmsSmooth1_.duty);
+    const auto lMaxText = formatDbBare (maxPeakLDb_);
+    const auto rMaxText = formatDbBare (maxPeakRDb_);
 
     if (meter0_ != nullptr)
-        meter0_->setNumericReadoutOverride (true, lCurrentText, lRmsText);
+        meter0_->setNumericReadoutOverride (true, lCurrentText, lMaxText);
     if (meter1_ != nullptr)
-        meter1_->setNumericReadoutOverride (true, rCurrentText, rRmsText);
+        meter1_->setNumericReadoutOverride (true, rCurrentText, rMaxText);
 }
 
 void MeterGroupComponent::paint (juce::Graphics& g)
