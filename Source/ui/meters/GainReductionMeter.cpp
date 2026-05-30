@@ -32,7 +32,8 @@ mdsp_ui::meters::MeterBallisticsConfig makeClipReadoutBallisticsConfig() noexcep
 mdsp_ui::meters::MeterBallisticsConfig makeClipLedBallisticsConfig() noexcept
 {
     auto config = makeClipReadoutBallisticsConfig();
-    config.holdFalloffDbPerSec = 1.2f;
+    config.holdMs = 80.0f;
+    config.holdFalloffDbPerSec = 24.0f;
     return config;
 }
 
