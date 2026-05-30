@@ -2,6 +2,43 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 7b.2: M/S ceiling fix
+
+**Status:** ✅ Closed. Hotfix to the shipped 7b M/S mode; avishali
+confirmed M/S mode no longer overshoots the ceiling.
+
+**Deliverables**
+- Bug: in M/S mode with Link < 100%, Mid and Side were limited
+  independently then decoded (`L=M'+S'`, `R=M'-S'`), so decoded L/R
+  could overshoot the ceiling. Default Stereo mode was unaffected,
+  which is why the default bench missed it.
+- Fix: per-sample decoded-L/R safety bound in the M/S apply branch.
+  When decoded L/R exceeds `thresholdLin`, both channels are scaled by
+  `thresholdLin/peak` (gain, not clip), preserving the stereo image for
+  that instant.
+- GR metering now folds in that M/S safety gain so the extra reduction
+  is visible.
+- Stereo path untouched, so Slice 3/4/5 default behaviour remains
+  unchanged.
+- HQ bench adds an M/S-mode ceiling-overs test at Link 0 / ceiling 0.
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] M/S ceiling-overs bench: FAIL before fix (`SP 2`, `TP 8`) →
+      PASS after fix (`SP 0`, `TP 0`).
+
+**Followups**
+- Backlog: a fully transparent final-ceiling stage covering M/S
+  decode overshoot, clipper inter-sample peaks, and post-gain overs.
+- Auto-release remains in progress on `slice-auto-release` and must
+  rebase onto this new `main` before close.
+
+---
+
 ## 2026-05-30 — Slice 7b: M/S mode (ADR-0008 addendum)
 
 **Status:** ✅ Closed. Product + HQ ADR addendum shipped; neutral
