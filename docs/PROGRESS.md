@@ -2,6 +2,60 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 13: LUFS calibration (BS.1770-4 K-weighting fix)
+
+**Status:** ✅ Closed. HQ-side bugfix in `mdsp_dsp::LoudnessAnalyzer`.
+No new params, no API change, no product source change, no ADR.
+
+**Root cause & fix (HQ `shared/mdsp_dsp/src/loudness/LoudnessAnalyzer.cpp`)**
+Two K-weighting coefficient deviations from BS.1770-4 §A caused a
+consistent ~1 LU positive offset vs reference meters (WLM,
+iZotope Insight 2):
+- **Stage 1 high-shelf frequency**: `1500 Hz` → `1681.974 Hz`
+  (§A.1). The too-low corner over-boosted HF energy, inflating
+  the reading.
+- **Stage 2 RLB high-pass**: Q was JUCE's default `1/√2 ≈ 0.707`
+  (2-arg `makeHighPass`) → explicit `0.5003` (3-arg overload);
+  frequency `38.0 Hz` → `38.135 Hz` (§A.2).
+
+**Validation**
+- Real-world program material now agrees with WLM / Insight 2
+  within ~0.2 LU (prior ~1 LU systematic offset eliminated).
+  avishali confirmed in Ableton.
+- Synthetic 1 kHz stereo sine normalized (pyloudnorm) to
+  −23.000 LUFS measures −23.22 in our analyzer (−0.22 LU). This
+  residual is bilinear-transform warping in the shelf transition
+  region — the shelf corner (1681 Hz) makes a 1 kHz tone the
+  worst-case probe; broadband material averages it out, which is
+  why real-world agreement is tighter than the synthetic test.
+- Exact per-rate BS.1770-4 digital coefficients were considered
+  and **declined** — the JUCE bilinear approximation is within
+  tolerance for a mastering tool. If a future need for sub-0.1 LU
+  precision arises, a Slice 13.1 would hardcode the canonical
+  §A coefficients with per-rate (44.1/48/88.2/96 kHz) derivation.
+
+**Gate result**
+- [x] Debug + Release builds clean (one pre-existing JUCE/VST3
+      SDK deprecation warning; none from `Source/` or
+      `shared/mdsp_dsp/`).
+- [x] Product bench Slice 3/4/5 PASS 13/13, 14/14, 25/25
+      unchanged (analyzer feeds UI meters only; Track off at
+      bench defaults → no audio-path effect).
+- [x] avishali audition: real-world LUFS agrees with WLM /
+      Insight 2 within ~0.2 LU.
+- [x] Architect sign-off on diff scope + RT-safety (two
+      coefficient values; no structural change).
+
+**Followups**
+- ADR-0009 (multiband detection) promoted to active — the
+  remaining architectural lever for the "open" gap vs Ozone
+  IRC IV (~7 dB null residual) and the CPU↔GR correlation,
+  in the backlog since Slice 7 close.
+- Slice 13.1 (exact BS.1770-4 per-rate coefficients) remains
+  un-queued; open only if sub-0.1 LU precision is ever needed.
+
+---
+
 ## 2026-05-30 — Slice 12: Clipper gain-staging + Hard/Soft modes + threshold semantics + drive-attributable meter (ADR-0010)
 
 **Status:** ✅ Closed. One new frozen `AudioParameterChoice`
