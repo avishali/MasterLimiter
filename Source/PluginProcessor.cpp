@@ -822,9 +822,18 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                 outL[i] = mid + side;
                 outR[i] = mid - side;
 
+                const float decodedPeak = std::max (std::abs (outL[i]), std::abs (outR[i]));
+                float msSafetyGain = 1.0f;
+                if (decodedPeak > thresholdLin)
+                {
+                    msSafetyGain = thresholdLin / decodedPeak;
+                    outL[i] *= msSafetyGain;
+                    outR[i] *= msSafetyGain;
+                }
+
                 const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
-                minTotalL = std::min (minTotalL, gDeepBand * gainWideL[i]);
-                minTotalR = std::min (minTotalR, gDeepBand * gainWideR[i]);
+                minTotalL = std::min (minTotalL, gDeepBand * gainWideL[i] * msSafetyGain);
+                minTotalR = std::min (minTotalR, gDeepBand * gainWideR[i] * msSafetyGain);
             }
         }
 
