@@ -2,6 +2,43 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-31 — Slice 17: beta packaging
+
+**Status:** ✅ Shipped. Product-only beta packaging; no HQ commit, no
+submodule bump, and no parameter ID/range changes. Slice 3/4/5 unchanged.
+
+**Deliverables**
+- Defaults: `character` = Clean, I/O links off. Ceiling −1.0 dB,
+  SamplePeak, and limiter-on confirmed. Fresh insert now matches the
+  "Default" preset.
+- 5 factory presets via an in-UI header preset menu (`PresetManager`):
+  Default, Transparent Master, Loud & Aggressive, Gentle Glue, and
+  Clipper Punch. Values are beta starting points and remain tunable by ear.
+- Presets set processing parameters only; they do not touch plugin bypass,
+  Gain-Match Learn/reference state, or override I/O trims except for the
+  documented Default/init-state reset values.
+- Param smoothing added on Drive, Ceiling, Clipper drive, and I/O gains via
+  `juce::LinearSmoothedValue`.
+- Version moved to `0.3.0`; header shows
+  `v0.3.0 (beta) - Maximizer`.
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] No parameter ID/range changes.
+
+**Followups**
+- Slice 18 is next: code signing, notarization, and AAX/PACE build/signing.
+- Then: architect-authored user manual, then beta build.
+- Backlog unchanged: palette-injection centralization, full knob/slider
+  redraw, auto-release mode tuning, final transparent ceiling stage, HQ
+  dual-meter-system consolidation.
+
+---
+
 ## 2026-05-31 — Slice 16b: visual restyle
 
 **Status:** ✅ Shipped. UI-only visual restyle; no DSP, parameter, audio-path,
