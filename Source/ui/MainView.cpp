@@ -228,7 +228,6 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblLookahead_);
     setupLabel (lblCeilingMode_);
     setupLabel (lblStereoLink_);
-    setupLabel (lblMsLink_);
     setupLabel (lblBandColor_);
     setupLabel (lblCharacter_);
     setupLabel (lblGainMatchNote_);
@@ -246,7 +245,6 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     styleRotary (sldReleaseSustain_);
     styleRotary (sldLookahead_);
     styleRotary (sldStereoLink_);
-    styleRotary (sldMsLink_);
     styleRotary (sldBandColor_);
     styleHorizontalPlaceholder (sldCharacter_);
     styleIoTrimFader (sldIoInputTrimL_);
@@ -274,7 +272,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (btnCeilingMode_);
     addAndMakeVisible (sldCharacter_);
     addAndMakeVisible (sldStereoLink_);
-    addAndMakeVisible (sldMsLink_);
+    btnStereoMode_.setClickingTogglesState (false);
+    addAndMakeVisible (btnStereoMode_);
     addAndMakeVisible (sldBandColor_);
     lblClipperReadout_.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     lblClipperReadout_.addMouseListener (this, false);
@@ -322,8 +321,6 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attReleaseSustain_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldReleaseSustain_);
     attReleaseAuto_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::release_auto), btnReleaseAuto_);
     attLookahead_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::lookahead_ms), sldLookahead_);
-    attStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::stereo_link_pct), sldStereoLink_);
-    attMsLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ms_link_pct), sldMsLink_);
     attBandColor_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::band_color), sldBandColor_);
     attCharacter_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::character), sldCharacter_);
     attGainMatchAutoTrack_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_match_auto), btnGainMatchAutoTrack_);
@@ -348,7 +345,6 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     useSliderTextboxFormat (sldReleaseSustain_, 1, juce::String());
     useSliderTextboxFormat (sldLookahead_, 2, " ms");
     useSliderTextboxFormat (sldStereoLink_, 0, "%");
-    useSliderTextboxFormat (sldMsLink_, 0, "%");
     useSliderTextboxFormat (sldBandColor_, 0, "%");
     useSliderTextboxFormat (sldIoInputTrimL_, 2, " dB");
     useSliderTextboxFormat (sldIoInputTrimR_, 2, " dB");
@@ -398,6 +394,17 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldIoOutputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoOutputTrimR_, sldIoOutputTrimL_, btnIoOutputLink_); };
     btnIoInputLink_.onClick = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
     btnIoOutputLink_.onClick = [this] { syncLinkedFaders (sldIoOutputTrimL_, sldIoOutputTrimR_, btnIoOutputLink_); };
+    btnStereoMode_.onClick = [this]
+    {
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::stereo_mode))))
+        {
+            const int nextIdx = c->getIndex() == 0 ? 1 : 0;
+            c->beginChangeGesture();
+            c->setValueNotifyingHost (nextIdx == 0 ? 0.0f : 1.0f);
+            c->endChangeGesture();
+            updateStereoModeControls();
+        }
+    };
     sldBandColor_.onValueChange = [this]
     {
         lblBandColor_.setText ("Color " + juce::String ((int) std::lround (sldBandColor_.getValue())) + "%", juce::dontSendNotification);
@@ -429,6 +436,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     lblBandColor_.setText ("Color " + juce::String ((int) std::lround (sldBandColor_.getValue())) + "%", juce::dontSendNotification);
     updateLimiterActiveState();
     updateBypassButtonState();
+    updateStereoModeControls();
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         updateCeilingModeButton (c->getIndex());
     setMeterScaleMode (currentMeterScale_);
@@ -459,8 +467,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnReleaseAuto_.setTooltip ("When Auto is on, release time follows the program.");
     sldLookahead_.setTooltip ("Lookahead delay in milliseconds (higher catches peaks earlier).");
     btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
-    sldStereoLink_.setTooltip ("Stereo Link amount: 100% fully linked, 0% independent L/R limiting.");
-    sldMsLink_.setTooltip ("Mid/side stereo link amount (0–100%).");
+    btnStereoMode_.setTooltip ("Click to toggle whether the wideband link operates in L/R stereo or M/S.");
+    sldStereoLink_.setTooltip ("Link amount for the active stereo mode: 100% fully linked, 0% independent.");
     sldBandColor_.setTooltip ("Multiband Color: 0% glued/warm, 50% balanced, 100% open/bright.");
     sldCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
 
@@ -533,6 +541,26 @@ void MainView::updateCeilingModeButton (int ceilingIdx)
     const bool isTruePeak = ceilingIdx == 1;
     btnCeilingMode_.setButtonText (isTruePeak ? "TP" : "SP");
     btnCeilingMode_.setToggleState (isTruePeak, juce::dontSendNotification);
+}
+
+void MainView::updateStereoModeControls()
+{
+    int stereoIdx = 0;
+    if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::stereo_mode))))
+        stereoIdx = c->getIndex();
+
+    const bool msMode = stereoIdx == 1;
+    btnStereoMode_.setButtonText (msMode ? "M/S" : "Stereo");
+    btnStereoMode_.setToggleState (msMode, juce::dontSendNotification);
+
+    if (stereoIdx == lastStereoModeIdx_)
+        return;
+
+    lastStereoModeIdx_ = stereoIdx;
+    const auto activeParam = msMode ? param::ms_link_pct : param::stereo_link_pct;
+    attLink_.reset();
+    attLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (activeParam), sldStereoLink_);
+    repaint (btnStereoMode_.getBounds().getUnion (sldStereoLink_.getBounds()).expanded (8, 8));
 }
 
 void MainView::updateLimiterActiveState()
@@ -826,10 +854,9 @@ void MainView::resized()
     sldLookahead_.setBounds (222, knobY + 18, knobW, knobH);
     lblReleaseAuto_.setBounds (312, knobY, knobW, 18);
     btnReleaseAuto_.setBounds (314, knobY + 46, 74, 28);
-    lblStereoLink_.setBounds (402, knobY, knobW, 18);
-    sldStereoLink_.setBounds (402, knobY + 18, knobW, knobH);
-    lblMsLink_.setBounds (492, knobY, knobW, 18);
-    sldMsLink_.setBounds (492, knobY + 18, knobW, knobH);
+    btnStereoMode_.setBounds (402, knobY + 46, knobW, 28);
+    lblStereoLink_.setBounds (492, knobY, knobW, 18);
+    sldStereoLink_.setBounds (492, knobY + 18, knobW, knobH);
     lblBandColor_.setBounds (582, knobY, knobW, 18);
     sldBandColor_.setBounds (582, knobY + 18, knobW, 70);
     lblClipperDrive_.setBounds (495, 116, 140, 18);
@@ -919,6 +946,7 @@ void MainView::syncMetersFromProcessor()
     if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::ceiling_mode))))
         ceilingIdx = c->getIndex();
     updateCeilingModeButton (ceilingIdx);
+    updateStereoModeControls();
 
     if (btnLimiterActive_.getToggleState() != lastLimiterActive_)
         updateLimiterActiveState();

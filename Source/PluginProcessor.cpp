@@ -84,7 +84,9 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("release_sustain_ratio") != nullptr);
     jassert (apvts.getParameter ("gain_ceiling_link") != nullptr);
     jassert (apvts.getParameter ("gain_match_auto") != nullptr);
+    jassert (apvts.getParameter ("stereo_mode") != nullptr);
     jassert (apvts.getParameter ("stereo_link_pct") != nullptr);
+    jassert (apvts.getParameter ("ms_link_pct") != nullptr);
     jassert (apvts.getParameter ("character") != nullptr);
 
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
@@ -152,9 +154,11 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     bandLimitedBuf_.setSize (2, osMaxBlockSize, false, true, true);
 
     ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
+    stereoMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("stereo_mode"));
     characterChoice_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("character"));
     clipperMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("clipper_mode"));
     jassert (ceilingMode_ != nullptr);
+    jassert (stereoMode_ != nullptr);
     jassert (characterChoice_ != nullptr);
     jassert (clipperMode_ != nullptr);
 
@@ -164,12 +168,14 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("plugin_bypass"));
     clipperDriveDb_ = apvts.getRawParameterValue ("clipper_drive_db");
     stereoLinkPct_ = apvts.getRawParameterValue ("stereo_link_pct");
+    msLinkPct_ = apvts.getRawParameterValue ("ms_link_pct");
     bandColor_ = apvts.getRawParameterValue ("band_color");
     gainMatchAuto_ = apvts.getRawParameterValue ("gain_match_auto");
     jassert (limiterActive_ != nullptr);
     jassert (pluginBypass_ != nullptr);
     jassert (clipperDriveDb_ != nullptr);
     jassert (stereoLinkPct_ != nullptr);
+    jassert (msLinkPct_ != nullptr);
     jassert (bandColor_ != nullptr);
     jassert (gainMatchAuto_ != nullptr);
     bandLinkSmoothed_.reset (osSampleRate, 0.02);
@@ -485,10 +491,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
-        || ceilingMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
+        || ceilingMode_ == nullptr || stereoMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
         || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || clipperMode_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
-        || stereoLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
+        || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -714,13 +720,27 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         const auto* bandLimitedR = nch > 1 ? bandLimitedBuf_.getReadPointer (1) : bandLimitedL;
         auto* peakWideL = peakBuf_.getWritePointer (0);
         auto* peakWideR = peakBufR_.getWritePointer (0);
-        for (int i = 0; i < osN; ++i)
+        const bool useMsMode = stereoMode_->getIndex() == 1 && nch > 1;
+        if (! useMsMode)
         {
-            peakWideL[i] = std::abs (bandLimitedL[i]);
-            peakWideR[i] = std::abs (bandLimitedR[i]);
+            for (int i = 0; i < osN; ++i)
+            {
+                peakWideL[i] = std::abs (bandLimitedL[i]);
+                peakWideR[i] = std::abs (bandLimitedR[i]);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < osN; ++i)
+            {
+                const float mid = 0.5f * (bandLimitedL[i] + bandLimitedR[i]);
+                const float side = 0.5f * (bandLimitedL[i] - bandLimitedR[i]);
+                peakWideL[i] = std::abs (mid);
+                peakWideR[i] = std::abs (side);
+            }
         }
 
-        const float linkPct = stereoLinkPct_->load (std::memory_order_relaxed);
+        const float linkPct = (useMsMode ? msLinkPct_ : stereoLinkPct_)->load (std::memory_order_relaxed);
         const float link = juce::jlimit (0.0f, 1.0f, linkPct * 0.01f);
         const bool fastPath = link >= 0.9995f;
 
@@ -767,22 +787,44 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         float minTotalL = 1.0f;
         float minTotalR = 1.0f;
 
-        for (int i = 0; i < osN; ++i)
+        if (! useMsMode)
         {
-            const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
-            for (int ch = 0; ch < nch; ++ch)
+            for (int i = 0; i < osN; ++i)
             {
-                const auto* bandLimited = bandLimitedBuf_.getReadPointer (ch);
-                auto* d = osBlock.getChannelPointer ((size_t) ch);
-                const float delayed = lookaheadWide_.pushPop (ch, bandLimited[i]);
-                const float wideGain = (ch == 0) ? gainWideL[i] : gainWideR[i];
-                d[i] = delayed * wideGain;
+                const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
+                for (int ch = 0; ch < nch; ++ch)
+                {
+                    const auto* bandLimited = bandLimitedBuf_.getReadPointer (ch);
+                    auto* d = osBlock.getChannelPointer ((size_t) ch);
+                    const float delayed = lookaheadWide_.pushPop (ch, bandLimited[i]);
+                    const float wideGain = (ch == 0) ? gainWideL[i] : gainWideR[i];
+                    d[i] = delayed * wideGain;
 
-                const float totalGain = gDeepBand * wideGain;
-                if (ch == 0)
-                    minTotalL = std::min (minTotalL, totalGain);
-                else
-                    minTotalR = std::min (minTotalR, totalGain);
+                    const float totalGain = gDeepBand * wideGain;
+                    if (ch == 0)
+                        minTotalL = std::min (minTotalL, totalGain);
+                    else
+                        minTotalR = std::min (minTotalR, totalGain);
+                }
+            }
+        }
+        else
+        {
+            auto* outL = osBlock.getChannelPointer (0);
+            auto* outR = osBlock.getChannelPointer (1);
+            for (int i = 0; i < osN; ++i)
+            {
+                const float delayedL = lookaheadWide_.pushPop (0, bandLimitedL[i]);
+                const float delayedR = lookaheadWide_.pushPop (1, bandLimitedR[i]);
+                const float mid = 0.5f * (delayedL + delayedR) * gainWideL[i];
+                const float side = 0.5f * (delayedL - delayedR) * gainWideR[i];
+
+                outL[i] = mid + side;
+                outR[i] = mid - side;
+
+                const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
+                minTotalL = std::min (minTotalL, gDeepBand * gainWideL[i]);
+                minTotalR = std::min (minTotalR, gDeepBand * gainWideR[i]);
             }
         }
 

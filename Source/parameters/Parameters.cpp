@@ -151,6 +151,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         0,
         AudioParameterChoiceAttributes()));
 
+    layout.add (std::make_unique<AudioParameterChoice> (
+        pid (stereo_mode, 1),
+        "Stereo Mode",
+        StringArray { "Stereo", "M/S" },
+        0,
+        AudioParameterChoiceAttributes()));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (stereo_link_pct, 1),
         "Stereo Link",

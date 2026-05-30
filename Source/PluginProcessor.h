@@ -144,6 +144,7 @@ private:
     juce::LinearSmoothedValue<float> bandLinkSmoothed_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
+    juce::AudioParameterChoice* stereoMode_ = nullptr;
     juce::AudioParameterChoice* characterChoice_ = nullptr;
     juce::AudioParameterFloat* inputGainDbParam_ = nullptr;
     juce::AudioParameterFloat* ceilingDbParam_ = nullptr;
@@ -158,6 +159,7 @@ private:
     std::atomic<float>* ioOutputLDb_ = nullptr;
     std::atomic<float>* ioOutputRDb_ = nullptr;
     std::atomic<float>* stereoLinkPct_ = nullptr;
+    std::atomic<float>* msLinkPct_ = nullptr;
     std::atomic<float>* bandColor_ = nullptr;
     std::atomic<float>* gainMatchAuto_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;

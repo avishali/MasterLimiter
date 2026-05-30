@@ -70,6 +70,7 @@ private:
     void syncLinkedFaders (juce::Slider& source, juce::Slider& target, juce::ToggleButton& link);
     void updateIoTrimReadouts();
     void updateCeilingModeButton (int ceilingIdx);
+    void updateStereoModeControls();
     void updateLimiterActiveState();
     void updateBypassButtonState();
     void updateLearnStateDisplay();
@@ -141,8 +142,7 @@ private:
     juce::Label lblStereoLink_ { {}, "Link" };
     juce::Slider sldStereoLink_;
 
-    juce::Label lblMsLink_ { {}, "M/S Lk" };
-    juce::Slider sldMsLink_;
+    juce::ToggleButton btnStereoMode_ { "Stereo" };
 
     juce::Label lblBandColor_ { {}, "Color" };
     juce::Slider sldBandColor_;
@@ -186,6 +186,7 @@ private:
     master_limiter_ui::ClipBallisticsPtr clipBallistics_;
     MeterGroupComponent::ScaleMode currentMeterScale_ { MeterGroupComponent::ScaleMode::FullRange };
     float clipLedLevel_ { 0.0f };
+    int lastStereoModeIdx_ { -1 };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attGainDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attLimiterActive_;
@@ -198,8 +199,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attReleaseSustain_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attReleaseAuto_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookahead_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attStereoLink_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMsLink_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCharacter_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
