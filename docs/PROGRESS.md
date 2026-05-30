@@ -2,6 +2,52 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-30 — Slice 15b: I/O level meter features
+
+**Status:** ✅ Closed. UI + read-only RMS measurement only; no audio
+path, parameter, or bench-behaviour change.
+
+**Deliverables**
+- Engine: per-bus, per-channel RMS snapshots at the existing I/O
+  measurement points. RMS is measurement-only, uses a one-pole
+  ~300 ms mean-square window, and publishes new atomics/getters.
+- I/O meters: RMS bar fill + numeric readout are available behind a
+  shared `RMS` toggle, default OFF for sample-peak-only metering.
+- Meter range: shared `+/-` controls step both Input and Output meters
+  together through Full → 48 → 24 → 12 → 6 dB.
+- Peak reset: clicking either I/O meter resets the peak-hold line/max
+  for that bus through the existing callback path.
+- Scale layout: I/O bars are clean (`setDrawInternalScale(false)`);
+  one shared centre dB scale sits between Input and Output, uses a
+  uniform neutral colour, and has no red zone.
+- Display ballistics: I/O bars use instant attack and ~20 dB/s display
+  release so they glide down when audio stops. Sample-peak bar/cap was
+  recoloured to a light blue/teal.
+- GR meter: release tightened 300 → 50 ms while preserving instant
+  attack + peak-hold markers, so individual limiting events read
+  clearly.
+- HQ: `mdsp_ui` adds `MeterScaleMode::Top48Db` plus provider mapping
+  for the -48 dB range.
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] avishali approved the I/O meter behaviour and GR release
+      refinement.
+
+**Followups**
+- Meters are complete: GR ballistics + Ozone-style I/O metering are
+  shipped.
+- Slice 16 is next: UI/UX interaction polish, including type-in
+  parameter values, tooltip/label clarity, final layout polish, Color
+  knob placement, and the clip-ballistics file tidy.
+- Backlog: consolidate the dual HQ `mdsp_ui` meter systems after beta.
+
+---
+
 ## 2026-05-30 — Slice 15: meter ballistics (GR + Clip)
 
 **Status:** ✅ Closed. UI-only meter display change; no audio,
