@@ -7,6 +7,7 @@
 
 #include "parameters/ParameterIDs.h"
 #include "parameters/Parameters.h"
+#include "ui/PresetManager.h"
 
 namespace
 {
@@ -120,6 +121,7 @@ MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
 void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     constexpr int osFactor = 4;
+    constexpr double controlSmoothingSeconds = 0.02;
     const int baseLookaheadSamples = static_cast<int> (std::llround (5.0e-3 * sampleRate));
     const int osLookaheadSamples = baseLookaheadSamples * osFactor;
     const int osMaxBlockSize = samplesPerBlock * osFactor;
@@ -213,6 +215,21 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     ioOutputLink_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("io_output_link"));
     jassert (ioInputLink_ != nullptr);
     jassert (ioOutputLink_ != nullptr);
+
+    inputGainSmoothed_.reset (osSampleRate, controlSmoothingSeconds);
+    inputGainSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_ != nullptr ? inputGainDbParam_->get() : 0.0f));
+    ceilingSmoothed_.reset (osSampleRate, controlSmoothingSeconds);
+    ceilingSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ceilingDbParam_ != nullptr ? ceilingDbParam_->get() : -1.0f));
+    clipperDriveSmoothed_.reset (osSampleRate, controlSmoothingSeconds);
+    clipperDriveSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (clipperDriveDb_ != nullptr ? -clipperDriveDb_->load (std::memory_order_relaxed) : 0.0f));
+    ioInputGainLSmoothed_.reset (sampleRate, controlSmoothingSeconds);
+    ioInputGainLSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioInputLDb_ != nullptr ? ioInputLDb_->load (std::memory_order_relaxed) : 0.0f));
+    ioInputGainRSmoothed_.reset (sampleRate, controlSmoothingSeconds);
+    ioInputGainRSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioInputRDb_ != nullptr ? ioInputRDb_->load (std::memory_order_relaxed) : 0.0f));
+    ioOutputGainLSmoothed_.reset (sampleRate, controlSmoothingSeconds);
+    ioOutputGainLSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioOutputLDb_ != nullptr ? ioOutputLDb_->load (std::memory_order_relaxed) : 0.0f));
+    ioOutputGainRSmoothed_.reset (sampleRate, controlSmoothingSeconds);
+    ioOutputGainRSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioOutputRDb_ != nullptr ? ioOutputRDb_->load (std::memory_order_relaxed) : 0.0f));
 
     baseLatencySamples_ = (2 * baseLookaheadSamples) + limiterOsLatencySamples_;
     cachedCeilingMode_  = ceilingMode_->getIndex();
@@ -381,6 +398,11 @@ void MasterLimiterAudioProcessor::clearLearnedReference()
     triggerAsyncUpdate();
 }
 
+bool MasterLimiterAudioProcessor::applyPreset (int presetIndex)
+{
+    return master_limiter_ui::PresetManager::applyPreset (apvts, presetIndex);
+}
+
 void MasterLimiterAudioProcessor::handleAsyncUpdate()
 {
     commitLearnedRef();
@@ -391,22 +413,36 @@ void MasterLimiterAudioProcessor::commitLearnedRef()
     updateHostDisplay();
 }
 
-void MasterLimiterAudioProcessor::applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const
+void MasterLimiterAudioProcessor::applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels)
 {
-    const float ioInputLGain = juce::Decibels::decibelsToGain (ioInputLDb_->load (std::memory_order_relaxed));
-    const float ioInputRGain = juce::Decibels::decibelsToGain (ioInputRDb_->load (std::memory_order_relaxed));
-    buffer.applyGain (0, 0, numSamples, ioInputLGain);
-    if (numChannels > 1)
-        buffer.applyGain (1, 0, numSamples, ioInputRGain);
+    ioInputGainLSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (ioInputLDb_->load (std::memory_order_relaxed)));
+    ioInputGainRSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (ioInputRDb_->load (std::memory_order_relaxed)));
+
+    auto* left = buffer.getWritePointer (0);
+    auto* right = numChannels > 1 ? buffer.getWritePointer (1) : nullptr;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        left[i] *= ioInputGainLSmoothed_.getNextValue();
+        if (right != nullptr)
+            right[i] *= ioInputGainRSmoothed_.getNextValue();
+    }
 }
 
-void MasterLimiterAudioProcessor::applyIoOutputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const
+void MasterLimiterAudioProcessor::applyIoOutputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels)
 {
-    const float ioOutputLGain = juce::Decibels::decibelsToGain (ioOutputLDb_->load (std::memory_order_relaxed));
-    const float ioOutputRGain = juce::Decibels::decibelsToGain (ioOutputRDb_->load (std::memory_order_relaxed));
-    buffer.applyGain (0, 0, numSamples, ioOutputLGain);
-    if (numChannels > 1)
-        buffer.applyGain (1, 0, numSamples, ioOutputRGain);
+    ioOutputGainLSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (ioOutputLDb_->load (std::memory_order_relaxed)));
+    ioOutputGainRSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (ioOutputRDb_->load (std::memory_order_relaxed)));
+
+    auto* left = buffer.getWritePointer (0);
+    auto* right = numChannels > 1 ? buffer.getWritePointer (1) : nullptr;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        left[i] *= ioOutputGainLSmoothed_.getNextValue();
+        if (right != nullptr)
+            right[i] *= ioOutputGainRSmoothed_.getNextValue();
+    }
 }
 
 void MasterLimiterAudioProcessor::processLearnResetRequest()
@@ -587,16 +623,16 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         auto osBlock = limiterOversampler_.processSamplesUp (block);
         const int osN = (int) osBlock.getNumSamples();
 
-        const float clipperDriveDb = clipperDriveDb_->load (std::memory_order_relaxed);
-        const float clipperDriveGain = juce::Decibels::decibelsToGain (-clipperDriveDb);
+        clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
         const int clipperModeIdx = clipperMode_->getIndex();
         float maxAttenuationDb = 0.0f;
 
-        for (int ch = 0; ch < nch; ++ch)
+        for (int i = 0; i < osN; ++i)
         {
-            auto* d = osBlock.getChannelPointer ((size_t) ch);
-            for (int i = 0; i < osN; ++i)
+            const float clipperDriveGain = clipperDriveSmoothed_.getNextValue();
+            for (int ch = 0; ch < nch; ++ch)
             {
+                auto* d = osBlock.getChannelPointer ((size_t) ch);
                 const float x = d[i] * clipperDriveGain;
                 const float ax = std::abs (x);
                 float y = x;
@@ -636,15 +672,19 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
             maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
 
-        const float inGainLin = juce::Decibels::decibelsToGain (inputGainDbParam_->get());
-        for (int ch = 0; ch < nch; ++ch)
+        inputGainSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
+        for (int i = 0; i < osN; ++i)
         {
-            auto* d = osBlock.getChannelPointer ((size_t) ch);
-            for (int i = 0; i < osN; ++i)
+            const float inGainLin = inputGainSmoothed_.getNextValue();
+            for (int ch = 0; ch < nch; ++ch)
+            {
+                auto* d = osBlock.getChannelPointer ((size_t) ch);
                 d[i] *= inGainLin;
+            }
         }
 
-        const float ceilingLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
+        ceilingSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (ceilingDbParam_->get()));
+        const float ceilingLin = ceilingSmoothed_.skip (osN);
         const float thresholdLin = (modeIdx == 1) ? (ceilingLin * 0.965f) : ceilingLin;
         const float bandThresholdLin = thresholdLin * juce::Decibels::decibelsToGain (-kBandHeadroomDb);
         const float releaseMs = readFloatParam (apvts, "release_ms");

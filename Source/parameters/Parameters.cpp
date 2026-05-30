@@ -86,7 +86,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterBool> (
         pid (io_input_link, 1),
         "I/O Input Link",
-        true,
+        false,
         AudioParameterBoolAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
@@ -106,7 +106,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterBool> (
         pid (io_output_link, 1),
         "I/O Output Link",
-        true,
+        false,
         AudioParameterBoolAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
@@ -194,7 +194,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (character, 1),
         "Character",
         StringArray { "Clean", "Tight", "Aggressive" },
-        1,
+        0,
         AudioParameterChoiceAttributes()));
 
     return layout;

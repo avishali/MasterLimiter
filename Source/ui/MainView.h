@@ -137,7 +137,8 @@ private:
     juce::Rectangle<int> meterScaleColumnArea_;
 
     juce::Label header_ { {}, "MasterLimiter" };
-    juce::Label headerMode_ { {}, "v0.2 - Maximizer" };
+    juce::Label headerMode_ { {}, "v0.3.0 (beta) - Maximizer" };
+    juce::ComboBox presetMenu_ { "Factory Presets" };
 
     juce::Label lblGainDrive_ { {}, "Gain" };
     ValueSlider sldGainDrive_;

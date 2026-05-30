@@ -2,6 +2,7 @@
 #include "PluginProcessor.h"
 #include "parameters/ParameterIDs.h"
 #include "ui/meters/ClipBallistics.h"
+#include "ui/PresetManager.h"
 
 #include <cmath>
 
@@ -355,6 +356,23 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     headerMode_.setColour (juce::Label::textColourId, palette::textMuted);
     addAndMakeVisible (headerMode_);
 
+    presetMenu_.setJustificationType (juce::Justification::centredLeft);
+    presetMenu_.setColour (juce::ComboBox::backgroundColourId, palette::control);
+    presetMenu_.setColour (juce::ComboBox::textColourId, palette::text);
+    presetMenu_.setColour (juce::ComboBox::outlineColourId, palette::border);
+    presetMenu_.setColour (juce::ComboBox::focusedOutlineColourId, palette::accent.withAlpha (0.8f));
+    presetMenu_.setColour (juce::ComboBox::arrowColourId, palette::accentBright);
+    for (int i = 0; i < master_limiter_ui::PresetManager::getNumPresets(); ++i)
+        presetMenu_.addItem (master_limiter_ui::PresetManager::getPresetName (i), i + 1);
+    presetMenu_.setSelectedId (1, juce::dontSendNotification);
+    presetMenu_.onChange = [this]
+    {
+        const int presetIndex = presetMenu_.getSelectedId() - 1;
+        if (presetIndex >= 0)
+            processor_.applyPreset (presetIndex);
+    };
+    addAndMakeVisible (presetMenu_);
+
     auto setupLabel = [&] (juce::Label& l)
     {
         l.setJustificationType (juce::Justification::centred);
@@ -433,11 +451,11 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnIoInputLink_.setClickingTogglesState (true);
     btnIoInputLink_.setName ("IoInputLinkIcon");
     btnIoInputLink_.setButtonText ({});
-    btnIoInputLink_.setToggleState (true, juce::dontSendNotification);
+    btnIoInputLink_.setToggleState (false, juce::dontSendNotification);
     btnIoOutputLink_.setClickingTogglesState (true);
     btnIoOutputLink_.setName ("IoOutputLinkIcon");
     btnIoOutputLink_.setButtonText ({});
-    btnIoOutputLink_.setToggleState (true, juce::dontSendNotification);
+    btnIoOutputLink_.setToggleState (false, juce::dontSendNotification);
     btnBypass_.setClickingTogglesState (true);
     btnMeterRms_.setClickingTogglesState (true);
     btnMeterRms_.setToggleState (false, juce::dontSendNotification);
@@ -685,6 +703,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldStereoLink_.setTooltip ("Link amount for the active stereo mode: 100% fully linked, 0% independent.");
     sldBandColor_.setTooltip ("Multiband Color: 0% glued/warm, 50% balanced, 100% open/bright.");
     segCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
+    presetMenu_.setTooltip ("Factory presets. Selecting one updates the processing controls.");
     lblTruePeak_.setTooltip ("Shows the current sample-peak or true-peak output readout in dB.");
     btnResetPeaks_.setTooltip ("Resets held peaks, maximum gain reduction, and clip maximums.");
 
@@ -1136,7 +1155,8 @@ void MainView::resized()
     footerArea_ = {};
 
     header_.setBounds (24, 8, 150, 34);
-    headerMode_.setBounds (184, 12, 790, 24);
+    headerMode_.setBounds (184, 12, 260, 24);
+    presetMenu_.setBounds (468, 12, 260, 28);
     btnBypass_.setBounds (982, 12, 92, 28);
     btnLimiterActive_.setBounds (232, 126, 34, 34);
 
@@ -1222,6 +1242,7 @@ void MainView::resized()
     btnMeterRms_.toFront (false);
     lblMeterScaleRange_.toFront (false);
     btnLimiterActive_.toFront (false);
+    presetMenu_.toFront (false);
     btnBypass_.toFront (false);
     btnClipperMode_.toFront (false);
     segCharacter_.toFront (false);

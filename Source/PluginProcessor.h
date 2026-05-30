@@ -86,14 +86,15 @@ public:
 
     void armLearnReference() noexcept;
     void clearLearnedReference();
+    bool applyPreset (int presetIndex);
 
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
     void cacheGainCeilingLinkParameters();
     void refreshGainCeilingLinkBaseline();
-    void applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const;
-    void applyIoOutputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) const;
+    void applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels);
+    void applyIoOutputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels);
     void processLearnResetRequest();
     void updateLearnCapture (int numSamples);
     float updateCompensationGainDb (float liveLufs);
@@ -142,6 +143,13 @@ private:
     juce::AudioBuffer<float> dryScratch_;
     juce::LinearSmoothedValue<float> bypassFade_;
     juce::LinearSmoothedValue<float> bandLinkSmoothed_;
+    juce::LinearSmoothedValue<float> inputGainSmoothed_;
+    juce::LinearSmoothedValue<float> ceilingSmoothed_;
+    juce::LinearSmoothedValue<float> clipperDriveSmoothed_;
+    juce::LinearSmoothedValue<float> ioInputGainLSmoothed_;
+    juce::LinearSmoothedValue<float> ioInputGainRSmoothed_;
+    juce::LinearSmoothedValue<float> ioOutputGainLSmoothed_;
+    juce::LinearSmoothedValue<float> ioOutputGainRSmoothed_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
     juce::AudioParameterChoice* stereoMode_ = nullptr;

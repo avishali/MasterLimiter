@@ -31,7 +31,7 @@ endif()
 
 set(PLUGIN_NAME "MasterLimiter" CACHE STRING "Plugin name")
 set(PLUGIN_VERSION_MAJOR 0 CACHE STRING "Plugin version major" FORCE)
-set(PLUGIN_VERSION_MINOR 1 CACHE STRING "Plugin version minor" FORCE)
+set(PLUGIN_VERSION_MINOR 3 CACHE STRING "Plugin version minor" FORCE)
 set(PLUGIN_VERSION_PATCH 0 CACHE STRING "Plugin version patch" FORCE)
 set(COMPANY_NAME "MelechDSP" CACHE STRING "Company name")
 set(PLUGIN_CODE "MaLm" CACHE STRING "4-character plugin code (e.g., Tmpl)")
@@ -269,6 +269,8 @@ target_sources(${PLUGIN_NAME}
         Source/parameters/ParameterIDs.h
         Source/ui/MainView.cpp
         Source/ui/MainView.h
+        Source/ui/PresetManager.cpp
+        Source/ui/PresetManager.h
         Source/ui/MasterLimiterLookAndFeel.cpp
         Source/ui/MasterLimiterLookAndFeel.h
         Source/ui/loudness/LoudnessNumericPanel.cpp
