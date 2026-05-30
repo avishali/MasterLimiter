@@ -52,18 +52,17 @@ slice or split a follow-up slice.
 | 15b | ✅ **Shipped — I/O meter features** | `mdsp_ui::meters::MeterScaleMode::Top48Db` | RMS snapshots + I/O meters | Shipped 2026-05-30. I/O meters now have read-only RMS measurement with always-visible peak+RMS numerics, light-blue sample-peak bars, optional RMS-colour overlay via shared default-OFF `RMS` toggle, shared range +/- stepping Full → 48 → 24 → 12 → 6 dB, click-to-reset peak holds, one shared centre dB scale, instant-attack / ~40 dB/s display release, and -120 dB measurement floor so bars empty at silence. I/O trim faders use the darker #1D1D37 handle tone. GR release tightened 300 → 50 ms. Meters are now complete: GR ballistics + full Ozone-style I/O meter. Slice 3/4/5 PASS unchanged. |
 | Auto | ✅ **Shipped — Auto-release (ADR-0011)** | ADR-0011; `LimiterEnvelope` auto-release modes | `release_auto`, `auto_release_mode`, UI enable/disable wiring | Shipped 2026-05-30. New frozen `auto_release_mode` Choice (`Transparent`/`Balanced`/`Reactive`, default Transparent); existing `release_auto` bool now functional. `LimiterEnvelope` uses per-mode precomputed fast/slow release coefficients blended per-sample by sustain factor, with no per-sample `exp`, applied to all four envelopes. Auto OFF remains the default and Slice 3/4/5 PASS unchanged. UI greys the manual Release knob when Auto is on and enables the mode selector. Per-mode constant fine-tuning deferred post-beta. |
 | 16 | ✅ **Shipped — UI/UX interaction** | — | UI interaction polish | Shipped 2026-05-30. UI-only pass: Ozone-style double-click type-in with unit-aware clamp, tooltips, label clarity, hidden Lookahead + T/S controls (frozen params retained at defaults), Clipper Hard/Soft toggle, Color below Clipper, Imaging compact + moved left clear of Color, Gain-Match centered footer, SP/TP + Gain⇄Ceiling Link + Limiter On fitted between Gain and Ceiling, `100%%`→`100%`, and clip-ballistics free functions split into `Source/ui/meters/ClipBallistics.{h,cpp}`. Slice 3/4/5 PASS unchanged. |
-| 16b | **ACTIVE NEXT — Visual restyle** | — | UI visual polish | Visual pass per `design/ui_direction_v1.html`: refined clean/dark/teal palette, button redesign with clear on-state, power button for Limiter On/Off, horizontal Ozone-style link icon for Link toggles, segmented toggles, LUFS box restyle, knob/fader refinement. |
-| 17 | **Beta prep — packaging/default state** | — | packaging + defaults | Parameter smoothing + default-state audit, factory preset(s), and visible version stamp for avishali's beta tester build. |
+| 16b | ✅ **Shipped — Visual restyle** | — | UI visual polish | Shipped 2026-05-31. Visual pass per `design/ui_direction_v1.html`: refined clean/dark/teal palette, button redesign with clear on-state, Limiter power button, horizontal Ozone-style link icons, segmented selectors for Clipper/Stereo/Character/Auto-release mode, LUFS box restyle, knob/fader refinement, clean meter scale/readouts, and max-peak readout latch. UI-only; no DSP/param/audio/HQ change. Slice 3/4/5 PASS unchanged. |
+| 17 | **ACTIVE NEXT — Beta prep / packaging / default state** | — | packaging + defaults | Parameter smoothing + default-state audit, factory preset(s), and visible version stamp for avishali's beta tester build. |
 | Doc | **User manual / instructions** | docs | — | Architect-authored manual after Slices 15-16 freeze the control surface. |
 
 Note: Auto-release shipped 2026-05-30 (ADR-0011). The dead-control sweep
-has turned M/S and auto-release into real features, and Slice 16 hid the
-remaining Lookahead + T/S controls while preserving frozen defaults. The
-active next slice is Slice 16b visual restyle per `design/ui_direction_v1.html`,
-followed by Slice 17 packaging/default-state audit, then the
-architect-authored user manual. STFT "Max Transparency" remains the backlog
-path to fuller Ozone parity if real-world use demands it. Slice 6
-(saturator) remains backlogged.
+has turned M/S and auto-release into real features, Slice 16 hid the remaining
+Lookahead + T/S controls while preserving frozen defaults, and Slice 16b put
+the visual look in place. The active next slice is Slice 17 packaging/default-
+state audit, followed by the architect-authored user manual. STFT
+"Max Transparency" remains the backlog path to fuller Ozone parity if
+real-world use demands it. Slice 6 (saturator) remains backlogged.
 
 ## Backlog
 
@@ -72,6 +71,8 @@ path to fuller Ozone parity if real-world use demands it. Slice 6
 | Backlog | STFT "Max Transparency" multiband / spectral path | ADR-0009 R4 / Alternatives | TBD | Fuller Ozone-parity path if real-world use demands more transparency than the shipped 2-band Color design. Kept out of Slice 14 because the audition-approved 2-band design is simpler, deterministic, and beta-ready. |
 | Backlog | Auto-release mode fine-tuning | `mdsp_dsp::LimiterEnvelope` | auto-release mode constants | Transparent/Balanced/Reactive constants are approved for beta; final per-mode tuning deferred post-beta. |
 | Backlog | Final inter-sample-peak-safe ceiling stage | TBD | final post-chain ceiling guard | Transparent final ceiling stage covering M/S decode overshoot, clipper inter-sample peaks, and post-gain overs. Slice 7b.2 fixes the shipped M/S overshoot directly; this remains future polish for one unified final guard. |
+| Backlog | Palette-injection centralization | — | `PluginEditor.cpp` / UI theme wiring | Colours are currently applied product-local across the UI files for the Slice 16b restyle. Centralize via one `UiContext` / theme override after beta to prevent drift. |
+| Backlog | Full bespoke knob/slider redraw | — | UI controls / look-and-feel | Slice 16b was the light visual refinement. Deeper custom knob and slider art is deferred until after beta. |
 | Backlog | HQ: consolidate dual `mdsp_ui` meter systems | `mdsp_ui/meters/MeterTypes.h`, `MeterRenderState.h` | none | `MeterTypes.h` and `MeterRenderState.h` both define `mdsp_ui::meters::MeterRenderState`, colliding in any translation unit including both. Slice 15 needed a firewall around the HQ ballistics headers; post-beta HQ cleanup should merge the old/new meter contracts. |
 | Backlog | Envelope smoothing-stage SIMD | `mdsp_dsp::LimiterEnvelope` | none | The inner ramp loop is NEON-vectorized as of Slice 7.1.4.1. The per-sample smoothing cascade (s1/s2 + T/S s1s/s2s for Clean) remains scalar. If a future regression surfaces the smoothing as a hot path, vectorize. Low priority. |
 | Backlog | Envelope snap-event smoother (was proposed Slice 9.6b) | `mdsp_dsp::LimiterEnvelope` | none | Demoted from Slice 9 close per Ozone evidence: only ~2 percentage-point IMD lever vs the 4–7 percent gap to in-family numbers. Revisit if a different future motivation surfaces. |

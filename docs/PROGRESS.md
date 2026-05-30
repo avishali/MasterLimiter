@@ -2,6 +2,46 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-31 — Slice 16b: visual restyle
+
+**Status:** ✅ Shipped. UI-only visual restyle; no DSP, parameter, audio-path,
+or HQ changes. Slice 3/4/5 unchanged.
+
+**Deliverables**
+- Refined clean/dark/teal palette matching `design/ui_direction_v1.html`
+  as a product-local override; no HQ `Theme.h` edit.
+- Button redesign: gradient + clear teal on-state; power button for Limiter
+  On/Off; horizontal Ozone-style link icons for Gain⇄Ceiling and I/O links;
+  segmented selectors for Clipper Hard/Soft, Stereo L/R·M/S, Character
+  (Clean/Tight/Aggressive), and Auto-release mode.
+- Ozone-style type-in: double-click to edit, fits inside the knob,
+  click-away / Enter commits, Esc cancels.
+- Knob/fader refinement: two-tone teal arc + soft glow; short rim tick clear
+  of value text; faders are slim handles that do not obstruct the meter;
+  numeric value moved outside the meter box.
+- Meters: scale numbers clear of tick lines + aligned ("0" with "+6");
+  over/clip red is a thin cap that never covers the bar; +/- buttons draw real
+  glyphs; default range Full; max-peak readout latches/holds until meter
+  click-reset.
+- LUFS box restyled. Gain/Ceiling/Clipper show one decimal + 0.1 dB drag
+  UI-side only; params untouched.
+
+**Gate result**
+- [x] Release build clean. No new `Source/` warnings.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] avishali approved the Slice 16b visual-restyle family.
+
+**Followups**
+- Slice 17 is next: packaging/default-state audit, factory preset(s), and
+  visible version stamp for beta.
+- Backlog: centralize palette injection after beta; deeper bespoke knob/slider
+  artwork remains deferred.
+
+---
+
 ## 2026-05-30 — Slice 16: UI/UX interaction
 
 **Status:** ✅ Shipped. UI-only interaction/layout polish; no DSP, parameter,
