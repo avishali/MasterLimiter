@@ -2,6 +2,51 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-05-31 — Slice 18: distribution tooling
+
+**Status:** ✅ Shipped. Product-only distribution tooling; no DSP/parameter
+change, no HQ commit, and no submodule bump. SDK-less build and Slice 3/4/5
+remain unchanged.
+
+**Deliverables**
+- Conditional AAX in CMake: with no `AAX_SDK_PATH`, formats stay
+  `AU;VST3;Standalone` and existing builds are untouched. Set
+  `-DAAX_SDK_PATH=...` and the AAX target is added via
+  `juce_set_aax_sdk_path`. Optional `ENABLE_AAX_WRAPTOOL_SIGN` POST_BUILD hook
+  calls `scripts/wraptool_sign_aax.sh`.
+- macOS scripts ported from AnalyzerPro: signing (`sign_and_notarize.sh`,
+  `release_sign_macos.sh`, `wraptool_sign_aax.sh`), build/installer
+  (`source_repo_env.sh`, `build_release.sh`, `create_installer.sh`,
+  `release_macos.sh`), `.aax_wraptool.env.example`, and
+  `resources/MasterLimiter-standalone.entitlements`. Real `.env` and
+  `.aax_wraptool.env` are gitignored local-only files.
+- AAX build verified: `build_release.sh` sourcing local `.env` with
+  `AAX_SDK_PATH` builds `MasterLimiter.aaxplugin`, confirming Slice 18's
+  conditional-AAX path with the real SDK.
+- Docs: `RELEASE_SIGNING.md`, `AAX_SIGNING_REQUEST_TEMPLATE.md`, and beta
+  `MANUAL.md`.
+
+**Gate result**
+- [x] SDK-less release build clean; formats stay `AU;VST3;Standalone`.
+- [x] Slice 3/4/5 close bench PASS:
+  - Slice 3: `PASS 13/13`
+  - Slice 4: `PASS 14/14`
+  - Slice 5: `PASS 25/25`
+- [x] Signing/build scripts parse with `bash -n`.
+- [x] AAX build with the local SDK produced `MasterLimiter.aaxplugin`.
+
+**Followups**
+- Local/external prerequisites remain: `AAX_SDK_PATH`,
+  `scripts/.aax_wraptool.env` with iLok credentials, and MasterLimiter's own
+  Avid/PACE registration.
+- Product GUID `75B5E420-5C80-11F1-9221-00505692C25A` must be verified as the
+  wraptool wrap-config GUID; otherwise obtain the `wcguid` from Fusion or use
+  `customernumber` + `customername`.
+- Remaining to beta: avishali signs/registers AAX, tests in Pro Tools, then
+  cuts the signed + notarized beta build for the tester.
+
+---
+
 ## 2026-05-31 — Slice 17: beta packaging
 
 **Status:** ✅ Shipped. Product-only beta packaging; no HQ commit, no

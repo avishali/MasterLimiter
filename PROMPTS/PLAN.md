@@ -54,17 +54,18 @@ slice or split a follow-up slice.
 | 16 | ✅ **Shipped — UI/UX interaction** | — | UI interaction polish | Shipped 2026-05-30. UI-only pass: Ozone-style double-click type-in with unit-aware clamp, tooltips, label clarity, hidden Lookahead + T/S controls (frozen params retained at defaults), Clipper Hard/Soft toggle, Color below Clipper, Imaging compact + moved left clear of Color, Gain-Match centered footer, SP/TP + Gain⇄Ceiling Link + Limiter On fitted between Gain and Ceiling, `100%%`→`100%`, and clip-ballistics free functions split into `Source/ui/meters/ClipBallistics.{h,cpp}`. Slice 3/4/5 PASS unchanged. |
 | 16b | ✅ **Shipped — Visual restyle** | — | UI visual polish | Shipped 2026-05-31. Visual pass per `design/ui_direction_v1.html`: refined clean/dark/teal palette, button redesign with clear on-state, Limiter power button, horizontal Ozone-style link icons, segmented selectors for Clipper/Stereo/Character/Auto-release mode, LUFS box restyle, knob/fader refinement, clean meter scale/readouts, and max-peak readout latch. UI-only; no DSP/param/audio/HQ change. Slice 3/4/5 PASS unchanged. |
 | 17 | ✅ **Shipped — Beta packaging / presets / default state** | — | packaging + defaults | Shipped 2026-05-31. Product-only beta packaging: default/init state now matches the "Default" preset (`character` Clean, I/O links off, ceiling −1.0 dB, SamplePeak, limiter on), 5 factory presets via an in-UI header menu (`PresetManager`), `LinearSmoothedValue` smoothing on Drive/Ceiling/Clipper drive/I/O gains, and version/header moved to `0.3.0` / `v0.3.0 (beta) - Maximizer`. No parameter ID/range changes, no HQ/submodule bump. Slice 3/4/5 PASS unchanged. |
-| 18 | **ACTIVE NEXT — Code signing + notarization + AAX/PACE** | — | signing/build scripts/config | MasterLimiter AAX Product GUID = `75B5E420-5C80-11F1-9221-00505692C25A` (catalog product GUID; verify whether it doubles as the wraptool wrap-config GUID). If wraptool returns `WrapConfigNotFound`, obtain the wrap-config GUID from PACE Fusion or use `customernumber` + `customername`. Credentials stay in gitignored `scripts/.aax_wraptool.env`. |
-| Doc | **User manual / instructions** | docs | — | Architect-authored manual after Slice 18, then beta build. |
+| 18 | ✅ **Shipped — Distribution tooling** | — | signing/build scripts/config/docs | Shipped 2026-05-31. Conditional AAX in CMake: SDK-less builds stay `AU;VST3;Standalone`; setting `AAX_SDK_PATH` enables AAX via `juce_set_aax_sdk_path`. Ported macOS sign/notarize, PACE wraptool, build, installer, and release orchestration scripts from AnalyzerPro. Real `scripts/.env` and `scripts/.aax_wraptool.env` stay gitignored; only templates/docs are committed. AAX Product GUID = `75B5E420-5C80-11F1-9221-00505692C25A` (catalog product GUID; verify whether it doubles as the wraptool wrap-config GUID). Manual shipped. |
+| Beta | **Remaining — signed/notarized beta build** | — | release artifacts | avishali builds AAX with the SDK, registers/signs it with PACE, tests in Pro Tools, then cuts the signed + notarized beta build (VST3 + AU, plus AAX once signed) for the tester. |
 
 Note: Auto-release shipped 2026-05-30 (ADR-0011). The dead-control sweep
 has turned M/S and auto-release into real features, Slice 16 hid the remaining
 Lookahead + T/S controls while preserving frozen defaults, Slice 16b put the
-visual look in place, and Slice 17 packaged the beta defaults/presets/version.
-The active next slice is Slice 18 signing/notarization/AAX, followed by the
-architect-authored user manual, then the beta build. STFT "Max Transparency"
-remains the backlog path to fuller Ozone parity if real-world use demands it.
-Slice 6 (saturator) remains backlogged.
+visual look in place, Slice 17 packaged the beta defaults/presets/version, and
+Slice 18 shipped distribution tooling plus the beta manual. Remaining to beta:
+avishali builds/signs/registers AAX, tests in Pro Tools, then cuts the signed +
+notarized tester build. STFT "Max Transparency" remains the backlog path to
+fuller Ozone parity if real-world use demands it. Slice 6 (saturator) remains
+backlogged.
 
 ## Backlog
 
