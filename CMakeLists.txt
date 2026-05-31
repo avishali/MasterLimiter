@@ -43,6 +43,7 @@ set(NEEDS_MIDI_INPUT FALSE CACHE BOOL "Does the plugin need MIDI input?")
 set(NEEDS_MIDI_OUTPUT FALSE CACHE BOOL "Does the plugin need MIDI output?")
 set(IS_MIDI_EFFECT FALSE CACHE BOOL "Is this a MIDI effect?")
 set(EDITOR_WANTS_KEYBOARD_FOCUS FALSE CACHE BOOL "Does the editor need keyboard focus?")
+set(AAX_SDK_PATH "" CACHE PATH "Path to AAX SDK root (contains Interfaces/ACF)")
 
 # ==============================================================================
 # DEV MODE (define BEFORE first use)
@@ -58,8 +59,20 @@ else()
     message(STATUS "Build mode: RELEASE")
 endif()
 
-# Plugin formats (no AAX in this product; dev and release use the same set)
-set(PLUGIN_FORMATS "VST3;AU;Standalone" CACHE STRING "Plugin formats to build (AU, VST3, Standalone)" FORCE)
+# Plugin formats. AAX is opt-in via AAX_SDK_PATH so SDK-less builds remain unchanged.
+set(PLUGIN_FORMATS "AU;VST3;Standalone" CACHE STRING "Plugin formats to build (AU, VST3, Standalone, AAX)" FORCE)
+
+if ((AAX_SDK_PATH STREQUAL "") AND DEFINED ENV{AAX_SDK_PATH})
+    set(AAX_SDK_PATH "$ENV{AAX_SDK_PATH}")
+endif()
+
+if (NOT AAX_SDK_PATH STREQUAL "")
+    list(APPEND PLUGIN_FORMATS "AAX")
+    set(PLUGIN_FORMATS "${PLUGIN_FORMATS}" CACHE STRING "Plugin formats to build (AU, VST3, Standalone, AAX)" FORCE)
+    message(STATUS "MasterLimiter: AAX enabled using SDK: ${AAX_SDK_PATH}")
+else()
+    message(STATUS "MasterLimiter: AAX disabled (AAX_SDK_PATH not set)")
+endif()
 
 # ==============================================================================
 # SDK PATHS
@@ -157,6 +170,10 @@ endif()
 # ==============================================================================
 
 add_subdirectory("${JUCE_PATH}" "${CMAKE_CURRENT_BINARY_DIR}/JUCE" EXCLUDE_FROM_ALL)
+
+if (NOT AAX_SDK_PATH STREQUAL "")
+    juce_set_aax_sdk_path("${AAX_SDK_PATH}")
+endif()
 
 # ==============================================================================
 # MelechDSP SDK (from HQ_DIR)
@@ -292,6 +309,7 @@ set(_mdsp_consumer_targets
     ${PLUGIN_NAME}_Standalone
     ${PLUGIN_NAME}_VST3
     ${PLUGIN_NAME}_AU
+    ${PLUGIN_NAME}_AAX
     ${PLUGIN_NAME}_SharedCode
 )
 
@@ -371,6 +389,31 @@ function(assert_target_not_self_linking tgt)
 endfunction()
 
 assert_target_not_self_linking(${PLUGIN_NAME})
+
+# Optional PACE wraptool sign + verify after AAX build (distribution signing; macOS only).
+# Secrets stay in scripts/.aax_wraptool.env or the environment, never in CMake cache.
+option(ENABLE_AAX_WRAPTOOL_SIGN "Run PACE wraptool on the AAX bundle after each AAX build (macOS)" OFF)
+set(AAX_WRAPTOOL "" CACHE FILEPATH "Path to wraptool binary (optional; script defaults to Fusion Current)")
+
+if(APPLE AND ENABLE_AAX_WRAPTOOL_SIGN)
+    if("${PLUGIN_FORMATS}" MATCHES "AAX" AND TARGET ${PLUGIN_NAME}_AAX)
+        if(AAX_WRAPTOOL)
+            set(_aax_wraptool_arg "${AAX_WRAPTOOL}")
+        else()
+            set(_aax_wraptool_arg "")
+        endif()
+        add_custom_command(TARGET ${PLUGIN_NAME}_AAX POST_BUILD
+            COMMAND /bin/bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/wraptool_sign_aax.sh"
+                "$<TARGET_FILE:${PLUGIN_NAME}_AAX>"
+                "${_aax_wraptool_arg}"
+            COMMENT "PACE wraptool: sign + verify AAX"
+            VERBATIM
+        )
+        message(STATUS "  AAX wraptool POST_BUILD: ON (ENABLE_AAX_WRAPTOOL_SIGN)")
+    elseif(ENABLE_AAX_WRAPTOOL_SIGN)
+        message(WARNING "ENABLE_AAX_WRAPTOOL_SIGN is ON but AAX is not in PLUGIN_FORMATS or ${PLUGIN_NAME}_AAX target is missing; skipping wraptool step.")
+    endif()
+endif()
 
 message(STATUS "")
 message(STATUS "==========================================")

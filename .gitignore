@@ -45,5 +45,8 @@ compile_commands.json
 node_modules/
 scripts/node_modules/
 scripts/.env
+scripts/.env.*
+scripts/.aax_wraptool.env
 !scripts/.env.example
+!scripts/*.example
 beta-dist/
