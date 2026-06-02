@@ -86,7 +86,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterBool> (
         pid (io_input_link, 1),
         "I/O Input Link",
-        false,
+        true,
         AudioParameterBoolAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
@@ -106,7 +106,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterBool> (
         pid (io_output_link, 1),
         "I/O Output Link",
-        false,
+        true,
         AudioParameterBoolAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
