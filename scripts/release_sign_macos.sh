@@ -27,22 +27,26 @@ fi
 sign_bundle() {
   local path="$1"
   local entitlements="${2:-}"
-  local entitlements_args=()
 
   if [[ -n "$entitlements" ]]; then
     if [[ ! -f "$entitlements" ]]; then
       echo "ERROR: Entitlements file not found: $entitlements"
       exit 1
     fi
-    entitlements_args=(--entitlements "$entitlements")
   fi
 
   if [[ -d "$path" ]]; then
     echo "Signing: $path"
-    codesign --force --deep --options runtime --timestamp \
-      "${entitlements_args[@]}" \
-      --sign "$IDENTITY" \
-      "$path"
+    if [[ -n "$entitlements" ]]; then
+      codesign --force --deep --options runtime --timestamp \
+        --entitlements "$entitlements" \
+        --sign "$IDENTITY" \
+        "$path"
+    else
+      codesign --force --deep --options runtime --timestamp \
+        --sign "$IDENTITY" \
+        "$path"
+    fi
     codesign --verify --deep --strict --verbose=2 "$path"
   else
     echo "Skip (not found): $path"

@@ -40,7 +40,7 @@ fi
 
 MASTERLIMITER_AAX_USE_SYSTEM_WIDE_LIBRARY="${MASTERLIMITER_AAX_USE_SYSTEM_WIDE_LIBRARY:-1}"
 
-if [ "${INSTALL_DOMAIN+x}" != x ]; then
+if [ -n "${INSTALL_DOMAIN:-}" ]; then
     case "$INSTALL_DOMAIN" in
         user|system) ;;
         *)
