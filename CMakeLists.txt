@@ -322,6 +322,8 @@ target_sources(${PLUGIN_NAME}
         Source/parameters/ParameterIDs.h
         Source/ui/MainView.cpp
         Source/ui/MainView.h
+        Source/ui/HistoryGraphComponent.cpp
+        Source/ui/HistoryGraphComponent.h
         Source/ui/PresetManager.cpp
         Source/ui/PresetManager.h
         Source/ui/MasterLimiterLookAndFeel.cpp

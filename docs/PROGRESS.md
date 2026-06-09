@@ -2,6 +2,52 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-09 — Slice: history graph window
+
+**Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed for
+audition.
+Adds a separate, optional Pro-L-style scrolling history window for gain
+reduction, output level, input level, dB grid, ceiling line, and time grid.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter processor/editor/main view/CMake lookup; JUCE
+  `DocumentWindow`, `Timer`, `Component`, `TextButton`, `ComboBox`; shared DSP
+  list plus `lock-free SPSC ring buffer metering history gain reduction peak
+  envelope`.
+- FILES RETRIEVED: `PluginProcessor.{h,cpp}`, `PluginEditor.{h,cpp}`,
+  `MainView.{h,cpp}`, `CMakeLists.txt`, `docs/SIGNAL_FLOW.md`,
+  `docs/PROGRESS.md`, `PROMPTS/PLAN.md`, and
+  `PROMPTS/SLICE_HISTORY_GRAPH.md`.
+- SECTIONS CITED: `prepareToPlay()` preallocation/reset area,
+  `processCore()` output metering tail, `PluginEditor` timer/editor shell,
+  `MainView` header controls/layout, and CMake `target_sources()`.
+- REUSE CHECK: reused the product processor metering atoms and editor/UI
+  structure. I checked the local library but found no existing implementation
+  for the requested lock-free history graph ring, so I added the product-local
+  ring and graph component.
+
+**Deliverables**
+- Added a fixed 4096-frame SPSC history ring in `PluginProcessor`, written at a
+  uniform ~2 ms sample cadence after output metering.
+- Added `HistoryGraphComponent` with a UI-side rolling display buffer, 60 Hz
+  drain/repaint, 1.5/3/6 s local window selector, per-pixel max decimation, dB
+  grid, time grid, ceiling line, output fill, input line, and top-hanging GR
+  fill.
+- Added an editor-owned non-modal `DocumentWindow` opened by a new header
+  `Graph` button.
+
+**RT / gate**
+- Audio-thread additions are scalar max/compare operations and one release-store
+  per published history frame; no locks or allocations were added to the audio
+  callback.
+- [x] Release build clean via `cmake --build build` (2026-06-09).
+- [x] AU/VST3 copied to user plug-in folders.
+- [ ] Audition: graph scroll, window selector, repeated open/close, and visual
+      alignment with limiting behavior.
+
+---
+
 ## 2026-06-09 — Slice: lookahead envelope-follower release A/B
 
 **Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed for

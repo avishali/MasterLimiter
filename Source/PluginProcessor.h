@@ -61,6 +61,19 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     const juce::AudioProcessorValueTreeState& getAPVTS() const noexcept { return apvts; }
 
+    struct HistoryFrame
+    {
+        float grDb = 0.0f;
+        float outDb = -120.0f;
+        float inDb = -120.0f;
+    };
+
+    int readHistorySince (uint32_t& inOutCursor, HistoryFrame* out, int maxOut) const noexcept;
+    uint32_t getHistoryWriteIndex() const noexcept { return historyWriteIdx_.load (std::memory_order_acquire); }
+    double getHistorySampleRate() const noexcept;
+    int getHistoryFrameSamples() const noexcept { return historyFrameSamples_; }
+    float getCeilingDbForGraph() const noexcept;
+
     float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
     float getCurrentGrLDb() const noexcept { return currentGrLDb_.load (std::memory_order_relaxed); }
     float getCurrentGrRDb() const noexcept { return currentGrRDb_.load (std::memory_order_relaxed); }
@@ -233,6 +246,15 @@ private:
     std::atomic<float> lastLinkedCeilingDb_ { 0.0f };
     std::atomic<bool> gainCeilingLinkWasEnabled_ { false };
     std::atomic<bool> couplingInProgress_ { false };
+
+    static constexpr int kHistoryRingSize = 4096;
+    HistoryFrame historyRing_[kHistoryRingSize] {};
+    std::atomic<uint32_t> historyWriteIdx_ { 0 };
+    int historyFrameSamples_ = 0;
+    int historySampleCounter_ = 0;
+    float frameMaxGrDb_ = 0.0f;
+    float frameMaxOutDb_ = -120.0f;
+    float frameMaxInDb_ = -120.0f;
 
     mdsp_dsp::LoudnessAnalyzer loudness_;
     mdsp_dsp::LoudnessAnalyzer loudnessRef_;

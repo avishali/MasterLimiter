@@ -338,6 +338,13 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     dryCompGainDbSmoothed_ = 0.0f;
     dryCompGainDbMirror_.store (0.0f, std::memory_order_relaxed);
 
+    historyFrameSamples_ = juce::jmax (1, static_cast<int> (std::llround (sampleRate * 0.002)));
+    historySampleCounter_ = 0;
+    frameMaxGrDb_ = 0.0f;
+    frameMaxOutDb_ = -120.0f;
+    frameMaxInDb_ = -120.0f;
+    historyWriteIdx_.store (0, std::memory_order_release);
+
     msInL_ = 0.0f;
     msInR_ = 0.0f;
     msOutL_ = 0.0f;
@@ -348,6 +355,43 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
 void MasterLimiterAudioProcessor::releaseResources()
 {
+}
+
+int MasterLimiterAudioProcessor::readHistorySince (uint32_t& inOutCursor,
+                                                   HistoryFrame* out,
+                                                   int maxOut) const noexcept
+{
+    if (out == nullptr || maxOut <= 0)
+        return 0;
+
+    const uint32_t writeIdx = historyWriteIdx_.load (std::memory_order_acquire);
+    uint32_t cursor = inOutCursor;
+
+    if (cursor > writeIdx)
+        cursor = writeIdx;
+
+    const uint32_t available = writeIdx - cursor;
+    if (available > static_cast<uint32_t> (kHistoryRingSize))
+        cursor = writeIdx - static_cast<uint32_t> (kHistoryRingSize);
+
+    const uint32_t clampedAvailable = writeIdx - cursor;
+    const uint32_t toCopy = std::min (clampedAvailable, static_cast<uint32_t> (maxOut));
+
+    for (uint32_t i = 0; i < toCopy; ++i)
+        out[i] = historyRing_[(cursor + i) & static_cast<uint32_t> (kHistoryRingSize - 1)];
+
+    inOutCursor = cursor + toCopy;
+    return static_cast<int> (toCopy);
+}
+
+double MasterLimiterAudioProcessor::getHistorySampleRate() const noexcept
+{
+    return getSampleRate();
+}
+
+float MasterLimiterAudioProcessor::getCeilingDbForGraph() const noexcept
+{
+    return ceilingDbParam_ != nullptr ? ceilingDbParam_->get() : -1.0f;
 }
 
 void MasterLimiterAudioProcessor::cacheGainCeilingLinkParameters()
@@ -1081,6 +1125,30 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         msOutR_ += meterRmsMsCoeff_ * (msR - msOutR_);
         outputRmsLDb_.store (rmsDbFromMeanSquare (msOutL_), std::memory_order_relaxed);
         outputRmsRDb_.store (rmsDbFromMeanSquare (msOutR_), std::memory_order_relaxed);
+
+        const float blkGrDb = std::max (currentGrLDb_.load (std::memory_order_relaxed),
+                                        currentGrRDb_.load (std::memory_order_relaxed));
+        const float blkOutDb = std::max (outLdb, outRdb);
+        const float blkInDb = std::max (inputPeakLDb_.load (std::memory_order_relaxed),
+                                       inputPeakRDb_.load (std::memory_order_relaxed));
+
+        for (int i = 0; i < n; ++i)
+        {
+            frameMaxGrDb_ = std::max (frameMaxGrDb_, blkGrDb);
+            frameMaxOutDb_ = std::max (frameMaxOutDb_, blkOutDb);
+            frameMaxInDb_ = std::max (frameMaxInDb_, blkInDb);
+
+            if (++historySampleCounter_ >= historyFrameSamples_)
+            {
+                const uint32_t w = historyWriteIdx_.load (std::memory_order_relaxed);
+                historyRing_[w & static_cast<uint32_t> (kHistoryRingSize - 1)] = { frameMaxGrDb_, frameMaxOutDb_, frameMaxInDb_ };
+                historyWriteIdx_.store (w + 1, std::memory_order_release);
+                historySampleCounter_ = 0;
+                frameMaxGrDb_ = 0.0f;
+                frameMaxOutDb_ = -120.0f;
+                frameMaxInDb_ = -120.0f;
+            }
+        }
 
         loudness_.process (buffer);
     }

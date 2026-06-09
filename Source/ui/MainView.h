@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -27,6 +28,8 @@ public:
     void syncMetersFromProcessor();
     void repaintMeterStrip();
     void resetPeakHolds();
+
+    std::function<void()> onToggleHistoryGraph;
 
 private:
     static constexpr const char* kPlaceholderTooltip = "Placeholder - wired in a later slice.";
@@ -229,6 +232,7 @@ private:
     juce::Label lblMeterScaleRange_ { {}, "Full" };
 
     juce::TextButton btnBypass_ { "Bypass" };
+    juce::TextButton btnHistory_ { "Graph" };
     juce::TextButton btnResetPeaks_ { "Reset peaks" };
 
     TpReadoutSmoother tpSmoother_ {};

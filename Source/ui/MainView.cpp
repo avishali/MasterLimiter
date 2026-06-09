@@ -585,6 +585,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldIoOutputTrimR_);
     addAndMakeVisible (btnIoOutputLink_);
     addAndMakeVisible (btnBypass_);
+    addAndMakeVisible (btnHistory_);
     addAndMakeVisible (btnMeterScaleMinus_);
     addAndMakeVisible (btnMeterScalePlus_);
     addAndMakeVisible (btnMeterRms_);
@@ -755,6 +756,11 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     {
         updateBypassButtonState();
     };
+    btnHistory_.onClick = [this]
+    {
+        if (onToggleHistoryGraph)
+            onToggleHistoryGraph();
+    };
     btnMeterScaleMinus_.onClick = [this] { stepMeterScale (-1); };
     btnMeterScalePlus_.onClick = [this] { stepMeterScale (1); };
     btnMeterRms_.onClick = [this] { setMeterShowRms (btnMeterRms_.getToggleState()); };
@@ -852,6 +858,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldIoOutputTrimR_.setTooltip ("Right output trim after the ceiling stage.");
     btnIoOutputLink_.setTooltip ("When enabled, moving one Output fader mirrors the other.");
     btnBypass_.setTooltip ("Plugin bypass. When on, the limiter is bypassed but I/O trims and Gain-Match still apply.");
+    btnHistory_.setTooltip ("Open the scrolling gain-reduction and level history graph.");
     btnMeterScaleMinus_.setTooltip ("Zoom the I/O meter range out.");
     btnMeterScalePlus_.setTooltip ("Zoom the I/O meter range in.");
     btnMeterRms_.setTooltip ("Show RMS fill and RMS readout on the I/O meters.");
@@ -1367,8 +1374,9 @@ void MainView::resized()
 
     header_.setBounds (24, 8, 150, 34);
     headerMode_.setBounds (184, 12, 520, 24);
-    presetMenu_.setBounds (724, 12, 236, 28);
-    btnBypass_.setBounds (982, 12, 92, 28);
+    presetMenu_.setBounds (724, 12, 190, 28);
+    btnHistory_.setBounds (924, 12, 64, 28);
+    btnBypass_.setBounds (998, 12, 92, 28);
     btnLimiterActive_.setBounds (232, 126, 34, 34);
 
     lblGainDrive_.setBounds (48, 116, 140, 18);
@@ -1481,6 +1489,7 @@ void MainView::resized()
     btnLimiterActive_.toFront (false);
     btnClipperActive_.toFront (false);
     presetMenu_.toFront (false);
+    btnHistory_.toFront (false);
     btnBypass_.toFront (false);
     btnClipperMode_.toFront (false);
     segCharacter_.toFront (false);
