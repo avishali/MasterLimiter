@@ -1,6 +1,7 @@
 #include "GainReductionMeter.h"
 
 #include "PluginProcessor.h"
+#include "ui/meters/ClipBallistics.h"
 
 #include <mdsp_ui/meters/MeterBallistics.h>
 #include <mdsp_ui/meters/PeakHoldModel.h>

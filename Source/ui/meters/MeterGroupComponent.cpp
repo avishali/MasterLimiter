@@ -4,17 +4,6 @@
 
 namespace
 {
-juce::String titleFor (MeterGroupComponent::BusKind k)
-{
-    switch (k)
-    {
-        case MeterGroupComponent::BusKind::Output: return "OUT";
-        case MeterGroupComponent::BusKind::Input: return "IN";
-        case MeterGroupComponent::BusKind::GainReduction: return "GR";
-    }
-    return {};
-}
-
 juce::String channelLabel (int channelCount, int index)
 {
     if (channelCount <= 1)
@@ -29,6 +18,29 @@ juce::String formatDbBare (float v)
         return "-inf";
 
     return juce::String (v, 1);
+}
+
+juce::String formatPeakReadout (float currentDb)
+{
+    return formatDbBare (currentDb);
+}
+
+juce::String formatMaxPeakReadout (float maxDb)
+{
+    return formatDbBare (maxDb);
+}
+
+juce::String formatRmsReadout (float rmsDb)
+{
+    return formatDbBare (rmsDb);
+}
+
+juce::String formatTruePeakReadout (float tpDb)
+{
+    if (! std::isfinite (tpDb) || tpDb <= -100.0f)
+        return "-inf";
+
+    return (tpDb > 0.0f ? juce::String ("+") : juce::String()) + juce::String (tpDb, 1);
 }
 } // namespace
 
@@ -194,6 +206,10 @@ void MeterGroupComponent::handlePeakReset() noexcept
     provider1_.resetPeakHold();
     maxPeakLDb_ = -200.0f;
     maxPeakRDb_ = -200.0f;
+    if (kind_ == BusKind::Input)
+        processor_.resetInputTruePeakHolds();
+    if (kind_ == BusKind::Output)
+        processor_.resetOutputTruePeakHolds();
     peakSmooth0_.reset();
     peakSmooth1_.reset();
     rmsSmooth0_.reset();
@@ -308,25 +324,70 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     provider1_.updateFromValues (displaySmooth1_.peakDb, displaySmooth1_.rmsDb, clippedR, false);
     pushLevelRenderStates();
 
-    const auto lCurrentText = formatDbBare (peakSmooth0_.duty);
-    const auto rCurrentText = formatDbBare (peakSmooth1_.duty);
-    const auto lMaxText = formatDbBare (maxPeakLDb_);
-    const auto rMaxText = formatDbBare (maxPeakRDb_);
+    const auto lPeakText = formatPeakReadout (peakSmooth0_.duty);
+    const auto rPeakText = formatPeakReadout (peakSmooth1_.duty);
+    const auto lMaxText = formatMaxPeakReadout (maxPeakLDb_);
+    const auto rMaxText = formatMaxPeakReadout (maxPeakRDb_);
+    const auto lRmsText = formatRmsReadout (rmsSmooth0_.duty);
+    const auto rRmsText = formatRmsReadout (rmsSmooth1_.duty);
+    const bool showTruePeak = kind_ == BusKind::Input || kind_ == BusKind::Output;
+    const float lTruePeak = kind_ == BusKind::Input ? processor_.getMaxInputTruePeakLDb()
+                           : kind_ == BusKind::Output ? processor_.getMaxOutputTruePeakLDb()
+                           : -200.0f;
+    const float rTruePeak = kind_ == BusKind::Input ? processor_.getMaxInputTruePeakRDb()
+                           : kind_ == BusKind::Output ? processor_.getMaxOutputTruePeakRDb()
+                           : -200.0f;
 
     if (meter0_ != nullptr)
-        meter0_->setNumericReadoutOverride (true, lCurrentText, lMaxText);
+    {
+        meter0_->setTruePeakReadout (showTruePeak, formatTruePeakReadout (lTruePeak), lTruePeak > 0.0f);
+        meter0_->setNumericReadoutOverride (true, lPeakText, lMaxText, lRmsText);
+    }
     if (meter1_ != nullptr)
-        meter1_->setNumericReadoutOverride (true, rCurrentText, rMaxText);
+    {
+        meter1_->setTruePeakReadout (showTruePeak, formatTruePeakReadout (rTruePeak), rTruePeak > 0.0f);
+        meter1_->setNumericReadoutOverride (true, rPeakText, rMaxText, rRmsText);
+    }
 }
 
 void MeterGroupComponent::paint (juce::Graphics& g)
 {
     const auto& theme = ui_.theme();
-    const auto& type = ui_.type();
 
-    g.setColour (theme.textMuted.withAlpha (0.7f));
-    g.setFont (type.labelFont());
-    g.drawText (titleFor (kind_), labelArea_, juce::Justification::centred);
+    if (kind_ != BusKind::Input && kind_ != BusKind::Output)
+        return;
+
+    const auto arrowBounds = labelArea_.withSizeKeepingCentre (22, 10).toFloat();
+    const float midX = arrowBounds.getCentreX();
+    const float top = arrowBounds.getY() + 1.0f;
+    const float bottom = arrowBounds.getBottom() - 1.0f;
+    const float left = arrowBounds.getX() + 3.0f;
+    const float right = arrowBounds.getRight() - 3.0f;
+
+    juce::Path arrow;
+    if (kind_ == BusKind::Input)
+    {
+        arrow.startNewSubPath (left, top);
+        arrow.lineTo (right, top);
+        arrow.lineTo (midX, bottom);
+    }
+    else
+    {
+        arrow.startNewSubPath (left, bottom);
+        arrow.lineTo (right, bottom);
+        arrow.lineTo (midX, top);
+    }
+    arrow.closeSubPath();
+
+    g.setColour (theme.textMuted.withAlpha (0.55f));
+    g.fillPath (arrow);
+
+    const float lineY = kind_ == BusKind::Input ? top + 1.0f : bottom - 1.0f;
+    const float labelLeft = static_cast<float> (labelArea_.getX());
+    const float labelRight = static_cast<float> (labelArea_.getRight());
+    g.setColour (theme.textMuted.withAlpha (0.36f));
+    g.drawLine (labelLeft + 9.0f, lineY, left - 6.0f, lineY, 1.0f);
+    g.drawLine (right + 6.0f, lineY, labelRight - 9.0f, lineY, 1.0f);
 }
 
 void MeterGroupComponent::resized()

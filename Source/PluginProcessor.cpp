@@ -23,7 +23,7 @@ float readFloatParam (juce::AudioProcessorValueTreeState& apvts, const char* par
 
 float mapBandColorToLink (float colorPct) noexcept
 {
-    return 0.5f * (1.0f - juce::jlimit (0.0f, 100.0f, colorPct) * 0.01f);
+    return 1.0f - juce::jlimit (0.0f, 100.0f, colorPct) * 0.01f;
 }
 
 mdsp_dsp::LimiterEnvelope::Mode mapCharacterIndexToMode (int index) noexcept
@@ -84,6 +84,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("plugin_bypass") != nullptr);
     jassert (apvts.getParameter ("clipper_drive_db") != nullptr);
     jassert (apvts.getParameter ("clipper_mode") != nullptr);
+    jassert (apvts.getParameter ("clipper_active") != nullptr);
     jassert (apvts.getParameter ("ceiling_db") != nullptr);
     jassert (apvts.getParameter ("io_input_l_db") != nullptr);
     jassert (apvts.getParameter ("io_input_r_db") != nullptr);
@@ -101,6 +102,10 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("stereo_link_pct") != nullptr);
     jassert (apvts.getParameter ("ms_link_pct") != nullptr);
     jassert (apvts.getParameter ("character") != nullptr);
+    jassert (apvts.getParameter (param::dev_low_band_release_scale.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_high_band_release_scale.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_sigma_attack_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_sigma_decay_scale.data()) != nullptr);
 
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
     jassert (pluginBypass_ != nullptr);
@@ -122,14 +127,30 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 {
     constexpr int osFactor = 4;
     constexpr double controlSmoothingSeconds = 0.02;
-    const int baseLookaheadSamples = static_cast<int> (std::llround (5.0e-3 * sampleRate));
+    const int baseLookaheadSamples = static_cast<int> (std::llround ((double) kLookaheadMs * 1.0e-3 * sampleRate));
+    constexpr int finalCeilingLookaheadSamples = 64;
     const int osLookaheadSamples = baseLookaheadSamples * osFactor;
     const int osMaxBlockSize = samplesPerBlock * osFactor;
     const double osSampleRate = sampleRate * (double) osFactor;
 
+    using OversamplingFilterType = juce::dsp::Oversampling<float>::FilterType;
+    limiterOversampler_.clearOversamplingStages();
+
+    // Stage 1 straddles the audible top octave, so keep its transition tight.
+    limiterOversampler_.addOversamplingStage (OversamplingFilterType::filterHalfBandFIREquiripple,
+                                              0.03f, -110.0f,
+                                              0.03f, -110.0f);
+    // Stage 2 runs at the higher rate, where a wider transition is transparent and cheaper.
+    limiterOversampler_.addOversamplingStage (OversamplingFilterType::filterHalfBandFIREquiripple,
+                                              0.10f, -100.0f,
+                                              0.10f, -100.0f);
+    limiterOversampler_.setUsingIntegerLatency (true);
     limiterOversampler_.initProcessing ((size_t) samplesPerBlock);
     limiterOversampler_.reset();
-    limiterOsLatencySamples_ = (int) std::llround ((double) limiterOversampler_.getLatencyInSamples());
+
+    const double osLatencySamples = static_cast<double> (limiterOversampler_.getLatencyInSamples());
+    limiterOsLatencySamples_ = static_cast<int> (std::llround (osLatencySamples));
+    jassert (std::abs (osLatencySamples - static_cast<double> (limiterOsLatencySamples_)) < 1.0e-3);
 
     lookahead_.prepare (2, osLookaheadSamples);
     lookahead_.setDelaySamples (osLookaheadSamples);
@@ -167,6 +188,22 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     gHighOutBuf_.setSize (1, osMaxBlockSize, false, true, true);
     bandLimitedBuf_.setSize (2, osMaxBlockSize, false, true, true);
 
+    mdsp_dsp::FinalCeilingLimiter::Spec finalCeilingSpec;
+    finalCeilingSpec.sampleRate = sampleRate;
+    finalCeilingSpec.numChannels = 2;
+    finalCeilingSpec.maxBlockSize = samplesPerBlock;
+    finalCeilingSpec.lookaheadSamples = finalCeilingLookaheadSamples;
+    finalCeiling_.prepare (finalCeilingSpec);
+    finalCeilingLatencySamples_ = finalCeiling_.getLatencyInSamples();
+
+    mdsp_dsp::TruePeakDetector::Spec outputTpSpec;
+    outputTpSpec.numChannels = 1;
+    outputTpSpec.maxBlockSize = samplesPerBlock;
+    inputTruePeakL_.prepare (outputTpSpec);
+    inputTruePeakR_.prepare (outputTpSpec);
+    outputTruePeakL_.prepare (outputTpSpec);
+    outputTruePeakR_.prepare (outputTpSpec);
+
     ceilingMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("ceiling_mode"));
     stereoMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("stereo_mode"));
     characterChoice_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("character"));
@@ -180,20 +217,30 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     limiterActive_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("limiter_active"));
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("plugin_bypass"));
+    clipperActive_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("clipper_active"));
     clipperDriveDb_ = apvts.getRawParameterValue ("clipper_drive_db");
     stereoLinkPct_ = apvts.getRawParameterValue ("stereo_link_pct");
     msLinkPct_ = apvts.getRawParameterValue ("ms_link_pct");
     bandColor_ = apvts.getRawParameterValue ("band_color");
     gainMatchAuto_ = apvts.getRawParameterValue ("gain_match_auto");
+    devLowBandReleaseScale_ = apvts.getRawParameterValue (param::dev_low_band_release_scale.data());
+    devHighBandReleaseScale_ = apvts.getRawParameterValue (param::dev_high_band_release_scale.data());
+    devSigmaAttackMs_ = apvts.getRawParameterValue (param::dev_sigma_attack_ms.data());
+    devSigmaDecayScale_ = apvts.getRawParameterValue (param::dev_sigma_decay_scale.data());
     jassert (limiterActive_ != nullptr);
     jassert (pluginBypass_ != nullptr);
+    jassert (clipperActive_ != nullptr);
     jassert (clipperDriveDb_ != nullptr);
     jassert (stereoLinkPct_ != nullptr);
     jassert (msLinkPct_ != nullptr);
     jassert (bandColor_ != nullptr);
     jassert (gainMatchAuto_ != nullptr);
+    jassert (devLowBandReleaseScale_ != nullptr);
+    jassert (devHighBandReleaseScale_ != nullptr);
+    jassert (devSigmaAttackMs_ != nullptr);
+    jassert (devSigmaDecayScale_ != nullptr);
     bandLinkSmoothed_.reset (osSampleRate, 0.02);
-    bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 50.0f));
+    bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 0.0f));
 
     releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
     releaseAuto_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("release_auto"));
@@ -218,8 +265,6 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     inputGainSmoothed_.reset (osSampleRate, controlSmoothingSeconds);
     inputGainSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_ != nullptr ? inputGainDbParam_->get() : 0.0f));
-    ceilingSmoothed_.reset (osSampleRate, controlSmoothingSeconds);
-    ceilingSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ceilingDbParam_ != nullptr ? ceilingDbParam_->get() : -1.0f));
     clipperDriveSmoothed_.reset (osSampleRate, controlSmoothingSeconds);
     clipperDriveSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (clipperDriveDb_ != nullptr ? -clipperDriveDb_->load (std::memory_order_relaxed) : 0.0f));
     ioInputGainLSmoothed_.reset (sampleRate, controlSmoothingSeconds);
@@ -231,7 +276,7 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     ioOutputGainRSmoothed_.reset (sampleRate, controlSmoothingSeconds);
     ioOutputGainRSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioOutputRDb_ != nullptr ? ioOutputRDb_->load (std::memory_order_relaxed) : 0.0f));
 
-    baseLatencySamples_ = (2 * baseLookaheadSamples) + limiterOsLatencySamples_;
+    baseLatencySamples_ = (2 * baseLookaheadSamples) + limiterOsLatencySamples_ + finalCeilingLatencySamples_;
     cachedCeilingMode_  = ceilingMode_->getIndex();
 
     limiterOversampler_.reset();
@@ -243,6 +288,13 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     applyCrossover_.reset();
     envelopeLow_.reset();
     envelopeHigh_.reset();
+    finalCeiling_.reset();
+    inputTruePeakL_.reset();
+    inputTruePeakR_.reset();
+    outputTruePeakL_.reset();
+    outputTruePeakR_.reset();
+    resetInputTruePeakHolds();
+    resetOutputTruePeakHolds();
 
     setLatencySamples (baseLatencySamples_);
 
@@ -544,8 +596,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
         || ceilingMode_ == nullptr || stereoMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
-        || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperDriveDb_ == nullptr || clipperMode_ == nullptr
+        || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperActive_ == nullptr || clipperDriveDb_ == nullptr || clipperMode_ == nullptr
         || releaseAuto_ == nullptr || autoReleaseMode_ == nullptr
+        || devLowBandReleaseScale_ == nullptr || devHighBandReleaseScale_ == nullptr
+        || devSigmaAttackMs_ == nullptr || devSigmaDecayScale_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
         || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
@@ -595,13 +649,27 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     updateLearnCapture (n);
 
     {
-        const float pL = buffer.getMagnitude (0, 0, n);
-        const float pR = (nch > 1) ? buffer.getMagnitude (1, 0, n) : pL;
+        const float pL = dryScratch_.getMagnitude (0, 0, n);
+        const float pR = (nch > 1) ? dryScratch_.getMagnitude (1, 0, n) : pL;
         inputPeakLDb_.store (juce::Decibels::gainToDecibels (pL, -120.0f), std::memory_order_relaxed);
         inputPeakRDb_.store (juce::Decibels::gainToDecibels (pR, -120.0f), std::memory_order_relaxed);
 
-        const float msL = meanSquareForChannel (buffer, 0, n);
-        const float msR = (nch > 1) ? meanSquareForChannel (buffer, 1, n) : msL;
+        float* tpLData[] = { dryScratch_.getWritePointer (0) };
+        float* tpRData[] = { dryScratch_.getWritePointer (nch > 1 ? 1 : 0) };
+        juce::AudioBuffer<float> tpLView (tpLData, 1, n);
+        juce::AudioBuffer<float> tpRView (tpRData, 1, n);
+        const float inTpLDb = juce::Decibels::gainToDecibels (inputTruePeakL_.measure (tpLView), -120.0f);
+        const float inTpRDb = juce::Decibels::gainToDecibels (inputTruePeakR_.measure (tpRView), -120.0f);
+        inputTruePeakLDb_.store (inTpLDb, std::memory_order_relaxed);
+        inputTruePeakRDb_.store (inTpRDb, std::memory_order_relaxed);
+
+        if (inTpLDb > maxInputTruePeakLDb_.load (std::memory_order_relaxed))
+            maxInputTruePeakLDb_.store (inTpLDb, std::memory_order_relaxed);
+        if (inTpRDb > maxInputTruePeakRDb_.load (std::memory_order_relaxed))
+            maxInputTruePeakRDb_.store (inTpRDb, std::memory_order_relaxed);
+
+        const float msL = meanSquareForChannel (dryScratch_, 0, n);
+        const float msR = (nch > 1) ? meanSquareForChannel (dryScratch_, 1, n) : msL;
         msInL_ += meterRmsMsCoeff_ * (msL - msInL_);
         msInR_ += meterRmsMsCoeff_ * (msR - msInR_);
         inputRmsLDb_.store (rmsDbFromMeanSquare (msInL_), std::memory_order_relaxed);
@@ -612,7 +680,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (modeIdx != cachedCeilingMode_)
     {
-        // Latency is the same in SP and TP after 9.6 OS consolidation.
+        // Final ceiling latency is fixed across SP and TP modes.
         setLatencySamples (baseLatencySamples_);
         cachedCeilingMode_ = modeIdx;
     }
@@ -623,54 +691,62 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         auto osBlock = limiterOversampler_.processSamplesUp (block);
         const int osN = (int) osBlock.getNumSamples();
 
-        clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
-        const int clipperModeIdx = clipperMode_->getIndex();
-        float maxAttenuationDb = 0.0f;
-
-        for (int i = 0; i < osN; ++i)
+        const bool clipperActive = clipperActive_ != nullptr && clipperActive_->get();
+        if (clipperActive)
         {
-            const float clipperDriveGain = clipperDriveSmoothed_.getNextValue();
-            for (int ch = 0; ch < nch; ++ch)
+            clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
+            const int clipperModeIdx = clipperMode_->getIndex();
+            float maxAttenuationDb = 0.0f;
+
+            for (int i = 0; i < osN; ++i)
             {
-                auto* d = osBlock.getChannelPointer ((size_t) ch);
-                const float x = d[i] * clipperDriveGain;
-                const float ax = std::abs (x);
-                float y = x;
+                const float clipperDriveGain = clipperDriveSmoothed_.getNextValue();
+                for (int ch = 0; ch < nch; ++ch)
+                {
+                    auto* d = osBlock.getChannelPointer ((size_t) ch);
+                    const float x = d[i] * clipperDriveGain;
+                    const float ax = std::abs (x);
+                    float y = x;
 
-                if (clipperModeIdx == 0)
-                {
-                    if (ax > 1.0f)
-                        y = std::copysign (1.0f, x);
-                }
-                else
-                {
-                    constexpr float kSoftKnee = 0.891f;
-                    if (ax > kSoftKnee)
+                    if (clipperModeIdx == 0)
                     {
-                        const float over = (ax - kSoftKnee) / (1.0f - kSoftKnee);
-                        y = std::copysign (kSoftKnee + (1.0f - kSoftKnee) * std::tanh (over), x);
+                        if (ax > 1.0f)
+                            y = std::copysign (1.0f, x);
                     }
+                    else
+                    {
+                        constexpr float kSoftKnee = 0.891f;
+                        if (ax > kSoftKnee)
+                        {
+                            const float over = (ax - kSoftKnee) / (1.0f - kSoftKnee);
+                            y = std::copysign (kSoftKnee + (1.0f - kSoftKnee) * std::tanh (over), x);
+                        }
+                    }
+
+                    if (ax > 1.0e-6f)
+                    {
+                        const float ay = std::abs (y);
+                        const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
+                        if (attDb < maxAttenuationDb)
+                            maxAttenuationDb = attDb;
+                    }
+
+                    if (clipperDriveGain > 0.0f)
+                        y /= clipperDriveGain;
+
+                    d[i] = y;
                 }
-
-                if (ax > 1.0e-6f)
-                {
-                    const float ay = std::abs (y);
-                    const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
-                    if (attDb < maxAttenuationDb)
-                        maxAttenuationDb = attDb;
-                }
-
-                if (clipperDriveGain > 0.0f)
-                    y /= clipperDriveGain;
-
-                d[i] = y;
             }
-        }
 
-        const float clipReadDb = -maxAttenuationDb;
-        currentClipDb_.store (clipReadDb, std::memory_order_relaxed);
-        if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
-            maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
+            const float clipReadDb = -maxAttenuationDb;
+            currentClipDb_.store (clipReadDb, std::memory_order_relaxed);
+            if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
+                maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
+        }
+        else
+        {
+            currentClipDb_.store (0.0f, std::memory_order_relaxed);
+        }
 
         inputGainSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
         for (int i = 0; i < osN; ++i)
@@ -683,21 +759,34 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             }
         }
 
-        ceilingSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (ceilingDbParam_->get()));
-        const float ceilingLin = ceilingSmoothed_.skip (osN);
-        const float thresholdLin = (modeIdx == 1) ? (ceilingLin * 0.965f) : ceilingLin;
+        const float ceilingLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
+        finalCeiling_.setMode (modeIdx == 1 ? mdsp_dsp::FinalCeilingLimiter::Mode::TruePeak
+                                             : mdsp_dsp::FinalCeilingLimiter::Mode::SamplePeak);
+        finalCeiling_.setCeilingLinear (ceilingLin);
+        const float thresholdLin = 1.0f;
         const float bandThresholdLin = thresholdLin * juce::Decibels::decibelsToGain (-kBandHeadroomDb);
         const float releaseMs = readFloatParam (apvts, "release_ms");
         const float releaseSustainRatio = releaseSustainRatio_->get();
         const bool autoRelease = releaseAuto_->get();
         const auto autoReleaseMode = mapAutoReleaseModeIndexToMode (autoReleaseMode_->getIndex());
         const auto envelopeMode = mapCharacterIndexToMode (characterChoice_->getIndex());
-        const float bandColor = bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 50.0f;
+        const float bandColor = bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 0.0f;
+        const float lowReleaseScale = devLowBandReleaseScale_ != nullptr ? devLowBandReleaseScale_->load (std::memory_order_relaxed)
+                                                                        : kLowBandAutoReleaseScale;
+        const float highReleaseScale = devHighBandReleaseScale_ != nullptr ? devHighBandReleaseScale_->load (std::memory_order_relaxed)
+                                                                          : kHighBandAutoReleaseScale;
+        const float sigmaAttackMs = devSigmaAttackMs_ != nullptr ? devSigmaAttackMs_->load (std::memory_order_relaxed)
+                                                                 : kAutoSigmaAttackMs;
+        const float sigmaDecayScale = devSigmaDecayScale_ != nullptr ? devSigmaDecayScale_->load (std::memory_order_relaxed)
+                                                                     : kAutoSigmaDecayScale;
         bandLinkSmoothed_.setTargetValue (mapBandColorToLink (bandColor));
 
-        auto configureEnvelope = [&] (mdsp_dsp::LimiterEnvelope& envelope, float envThresholdLin)
+        auto configureEnvelope = [&] (mdsp_dsp::LimiterEnvelope& envelope, float envThresholdLin, float autoReleaseScale)
         {
             envelope.setThresholdLinear (envThresholdLin);
+            envelope.setAutoReleaseScale (autoReleaseScale);
+            envelope.setAutoSigmaAttackMs (sigmaAttackMs);
+            envelope.setAutoSigmaDecayScale (sigmaDecayScale);
             envelope.setAutoRelease (autoRelease);
             envelope.setAutoReleaseMode (autoReleaseMode);
             if (! autoRelease)
@@ -706,10 +795,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             envelope.setMode (envelopeMode);
         };
 
-        configureEnvelope (envelope_, thresholdLin);
-        configureEnvelope (envelope_R_, thresholdLin);
-        configureEnvelope (envelopeLow_, bandThresholdLin);
-        configureEnvelope (envelopeHigh_, bandThresholdLin);
+        configureEnvelope (envelope_, thresholdLin, highReleaseScale);
+        configureEnvelope (envelope_R_, thresholdLin, highReleaseScale);
+        configureEnvelope (envelopeLow_, bandThresholdLin, lowReleaseScale);
+        configureEnvelope (envelopeHigh_, bandThresholdLin, highReleaseScale);
 
         auto* peakLow = peakLowBuf_.getWritePointer (0);
         auto* peakHigh = peakHighBuf_.getWritePointer (0);
@@ -757,12 +846,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             const float bl = bandLinkSmoothed_.getNextValue();
             const float oneMinusBandLink = 1.0f - bl;
             const float gLinked = std::min (gainLow[i], gainHigh[i]);
-            gLowOut[i] = bl * gLinked + oneMinusBandLink * gainLow[i];
-            gHighOut[i] = bl * gLinked + oneMinusBandLink * gainHigh[i];
-        }
+            const float linkedGain = bl * gLinked;
+            gLowOut[i] = linkedGain + oneMinusBandLink * gainLow[i];
+            gHighOut[i] = linkedGain + oneMinusBandLink * gainHigh[i];
 
-        for (int i = 0; i < osN; ++i)
-        {
             for (int ch = 0; ch < nch; ++ch)
             {
                 auto* d = osBlock.getChannelPointer ((size_t) ch);
@@ -771,7 +858,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                 float high = 0.0f;
                 applyCrossover_.processSample (ch, delayed, low, high);
 
-                bandLimitedBuf_.getWritePointer (ch)[i] = low * gLowOut[i] + high * gHighOut[i];
+                bandLimitedBuf_.getWritePointer (ch)[i] = linkedGain * delayed
+                    + oneMinusBandLink * (low * gainLow[i] + high * gainHigh[i]);
             }
         }
         applyCrossover_.snapToZero();
@@ -853,7 +941,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                     auto* d = osBlock.getChannelPointer ((size_t) ch);
                     const float delayed = lookaheadWide_.pushPop (ch, bandLimited[i]);
                     const float wideGain = (ch == 0) ? gainWideL[i] : gainWideR[i];
-                    d[i] = delayed * wideGain;
+                    d[i] = delayed * wideGain * ceilingLin;
 
                     const float totalGain = gDeepBand * wideGain;
                     if (ch == 0)
@@ -886,6 +974,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                     outR[i] *= msSafetyGain;
                 }
 
+                outL[i] *= ceilingLin;
+                outR[i] *= ceilingLin;
+
                 const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
                 minTotalL = std::min (minTotalL, gDeepBand * gainWideL[i] * msSafetyGain);
                 minTotalR = std::min (minTotalR, gDeepBand * gainWideR[i] * msSafetyGain);
@@ -907,6 +998,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             maxGrSinceResetDb_.store (frameMaxGr, std::memory_order_relaxed);
 
         limiterOversampler_.processSamplesDown (block);
+        finalCeiling_.process (buffer);
     }
     else
     {
@@ -914,6 +1006,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         currentGrLDb_.store (0.0f, std::memory_order_relaxed);
         currentGrRDb_.store (0.0f, std::memory_order_relaxed);
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
+
+        for (int ch = 0; ch < nch; ++ch)
+            buffer.copyFrom (ch, 0, dryScratch_, ch, 0, n);
     }
 
     loudnessTrack_.process (buffer);
@@ -942,7 +1037,21 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         const float outRdb = juce::Decibels::gainToDecibels (pR, -120.0f);
         outputPeakLDb_.store (outLdb, std::memory_order_relaxed);
         outputPeakRDb_.store (outRdb, std::memory_order_relaxed);
-        outputTpDb_.store (std::max (outLdb, outRdb), std::memory_order_relaxed);
+
+        float* tpLData[] = { buffer.getWritePointer (0) };
+        float* tpRData[] = { buffer.getWritePointer (nch > 1 ? 1 : 0) };
+        juce::AudioBuffer<float> tpLView (tpLData, 1, n);
+        juce::AudioBuffer<float> tpRView (tpRData, 1, n);
+        const float outTpLDb = juce::Decibels::gainToDecibels (outputTruePeakL_.measure (tpLView), -120.0f);
+        const float outTpRDb = juce::Decibels::gainToDecibels (outputTruePeakR_.measure (tpRView), -120.0f);
+        outputTruePeakLDb_.store (outTpLDb, std::memory_order_relaxed);
+        outputTruePeakRDb_.store (outTpRDb, std::memory_order_relaxed);
+        outputTpDb_.store (std::max (outTpLDb, outTpRDb), std::memory_order_relaxed);
+
+        if (outTpLDb > maxOutputTruePeakLDb_.load (std::memory_order_relaxed))
+            maxOutputTruePeakLDb_.store (outTpLDb, std::memory_order_relaxed);
+        if (outTpRDb > maxOutputTruePeakRDb_.load (std::memory_order_relaxed))
+            maxOutputTruePeakRDb_.store (outTpRDb, std::memory_order_relaxed);
 
         const float msL = meanSquareForChannel (buffer, 0, n);
         const float msR = (nch > 1) ? meanSquareForChannel (buffer, 1, n) : msL;
@@ -953,6 +1062,23 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
         loudness_.process (buffer);
     }
+}
+
+void MasterLimiterAudioProcessor::resetOutputTruePeakHolds() noexcept
+{
+    outputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
+    outputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
+    maxOutputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
+    maxOutputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
+    outputTpDb_.store (-100.0f, std::memory_order_relaxed);
+}
+
+void MasterLimiterAudioProcessor::resetInputTruePeakHolds() noexcept
+{
+    inputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
+    inputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
+    maxInputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
+    maxInputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
 }
 
 void MasterLimiterAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)

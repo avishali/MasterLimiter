@@ -86,6 +86,7 @@ private:
     };
 
     void styleRotary (ValueSlider& s) const;
+    void styleDevTuningSlider (ValueSlider& s) const;
     void styleIoTrimFader (ValueSlider& s) const;
     void setupValueEdit (ValueSlider& s, ValueSlider::ValueLabelMode mode);
     void beginValueEdit (ValueSlider& s);
@@ -96,6 +97,7 @@ private:
     void updateCeilingModeButton (int ceilingIdx);
     void updateStereoModeControls();
     void updateClipperModeButton (int clipperIdx);
+    void updateClipperActiveState();
     void updateCharacterModeControl (int characterIdx);
     void updateAutoReleaseModeControl (int modeIdx);
     void updateReleaseAutoControls (bool forceRepaint = false);
@@ -133,6 +135,7 @@ private:
     juce::Rectangle<int> maximizerPanelArea_;
     juce::Rectangle<int> ioPanelArea_;
     juce::Rectangle<int> footerArea_;
+    juce::Rectangle<int> devReleasePanelArea_;
     juce::Rectangle<int> gainMatchLabelArea_;
     juce::Rectangle<int> meterScaleColumnArea_;
 
@@ -147,6 +150,7 @@ private:
     juce::ToggleButton btnLimiterActive_ { "Limiter" };
 
     juce::Label lblClipperDrive_ { {}, "Clipper" };
+    juce::ToggleButton btnClipperActive_ { "Clipper" };
     juce::ToggleButton btnClipperMode_ { "Hard" };
     ValueSlider sldClipperDrive_;
     juce::Label lblClipperReadout_ { {}, "Clip 0.0 / 0.0" };
@@ -175,6 +179,16 @@ private:
     juce::Label lblCharacter_ { {}, "Character" };
     SegmentedChoice segCharacter_;
 
+    juce::Label lblDevReleaseTuning_ { {}, "DEV RELEASE - TEMP" };
+    juce::Label lblDevLowBandReleaseScale_ { {}, "Low x" };
+    ValueSlider sldDevLowBandReleaseScale_;
+    juce::Label lblDevHighBandReleaseScale_ { {}, "High/Wide x" };
+    ValueSlider sldDevHighBandReleaseScale_;
+    juce::Label lblDevSigmaAttackMs_ { {}, "Sigma Atk" };
+    ValueSlider sldDevSigmaAttackMs_;
+    juce::Label lblDevSigmaDecayScale_ { {}, "Sigma Decay x" };
+    ValueSlider sldDevSigmaDecayScale_;
+
     juce::ToggleButton btnGainMatchAutoTrack_ { "Auto / Track" };
     juce::Label lblGainMatchNote_ { {}, "+0.0 dB" };
     CompensationBar compGainBar_;
@@ -186,11 +200,15 @@ private:
     ValueSlider sldIoInputTrimR_;
     juce::ToggleButton btnIoInputLink_ { "L/R Link" };
     juce::Label lblIoInputReadout_ { {}, "0.0 dB" };
+    juce::Label lblIoInputReadoutL_ { {}, "0.0" };
+    juce::Label lblIoInputReadoutR_ { {}, "0.0" };
     juce::Label lblIoOutputTrim_ { {}, "Output" };
     ValueSlider sldIoOutputTrimL_;
     ValueSlider sldIoOutputTrimR_;
     juce::ToggleButton btnIoOutputLink_ { "L/R Link" };
     juce::Label lblIoOutputReadout_ { {}, "0.0 dB" };
+    juce::Label lblIoOutputReadoutL_ { {}, "0.0" };
+    juce::Label lblIoOutputReadoutR_ { {}, "0.0" };
 
     MeterGroupComponent meterIn_;
     GainReductionMeter meterGr_;
@@ -209,6 +227,7 @@ private:
     bool adjustingIoFaders_ { false };
     bool finishingValueEdit_ { false };
     bool lastLimiterActive_ { true };
+    bool lastClipperActive_ { true };
     bool lastReleaseAuto_ { false };
     int lastClipperModeIdx_ { -1 };
     int lastCharacterModeIdx_ { -1 };
@@ -225,6 +244,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attLimiterActive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attPluginBypass_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attClipperDrive_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attClipperActive_;
     std::unique_ptr<juce::ParameterAttachment> attClipperMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainCeilingLink_;
@@ -233,6 +253,10 @@ private:
     std::unique_ptr<juce::ParameterAttachment> attAutoReleaseMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLowBandReleaseScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevHighBandReleaseScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSigmaAttackMs_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSigmaDecayScale_;
     std::unique_ptr<juce::ParameterAttachment> attCharacter_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;

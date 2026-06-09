@@ -2,6 +2,594 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-09 — Slice 27: temporary DEV release tuning controls
+
+**Status:** 🔶 Implemented locally; debug build clean; system install blocked
+by non-interactive `sudo`; listening/analysis verification pending. Temporary
+dev-only APVTS parameters were appended and must be baked/removed before beta
+`0.4`.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter APVTS/MainView/PluginProcessor lookup; JUCE
+  `AudioProcessorValueTreeState`; shared `LimiterEnvelope` auto-release reuse
+  search.
+- FILES RETRIEVED: `ParameterIDs.h`, `Parameters.cpp`,
+  `LimiterEnvelope.{h,cpp}`, `PluginProcessor.{h,cpp}`, `MainView.{h,cpp}`,
+  `PROMPTS/PLAN.md`, `docs/PROGRESS.md`.
+- SECTIONS CITED: APVTS parameter layout append order, `MainView`
+  `SliderAttachment` setup, `processCore()` envelope configuration,
+  `LimiterEnvelope::recomputeAutoRelease()`, and auto-release sigma branch.
+- REUSE CHECK: reused the existing `mdsp_dsp::LimiterEnvelope` and product
+  envelope topology. MCP project/DSP indices returned no matches, so I checked
+  the local files directly; no separate reusable release tuning component
+  exists.
+
+**Deliverables**
+- Appended temporary APVTS floats:
+  `dev_low_band_release_scale` (`0.5..8.0`, default `3.0`),
+  `dev_high_band_release_scale` (`0.5..8.0`, default `1.0`),
+  `dev_sigma_attack_ms` (`1..50 ms`, default `5`), and
+  `dev_sigma_decay_scale` (`0.5..8.0`, default `1.0`).
+- Added `LimiterEnvelope::setAutoSigmaAttackMs()` and
+  `LimiterEnvelope::setAutoSigmaDecayScale()`. Setters clamp and recompute only
+  when the value changes.
+- `PluginProcessor` caches raw APVTS pointers and reads them with relaxed
+  atomics in `processCore()`. Low scale feeds `envelopeLow_`; high scale feeds
+  `envelopeHigh_`, `envelope_`, and `envelope_R_`; sigma attack/decay feed all
+  envelopes.
+- `MainView` exposes a compact labelled `DEV RELEASE - TEMP` slider strip for
+  real-time voicing.
+
+**RT / gate**
+- No allocations or re-prepare in the audio callback; steady-state block work is
+  atomic reads plus no-op guarded coefficient setters.
+- Defaults preserve Slice 26 tuning: low scale `3.0`, high/wide scale `1.0`,
+  sigma attack `5 ms`, sigma decay scale `1.0`.
+- [x] Debug build clean via `scripts/build.sh` (2026-06-09 12:59).
+- [ ] System install via `sudo bash scripts/install_system.sh` — blocked:
+      non-interactive `sudo` cannot read the password.
+- [ ] Moving each DEV slider audibly changes release in real time with no
+      clicks/dropouts.
+- [ ] At defaults, 60+7k multiband IMD and ceiling/TP remain unchanged.
+
+---
+
+## 2026-06-09 — Slice 26: auto-release bass cleanup
+
+**Status:** 🔶 Implemented locally; debug build clean; system install blocked
+by non-interactive `sudo`; listening/analysis verification pending. No
+parameter IDs changed.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter input/limiter envelope lookup; JUCE
+  `AudioBuffer`; shared `LimiterEnvelope`/auto-release reuse search.
+- FILES RETRIEVED: `mdsp_dsp/dynamics/LimiterEnvelope.{h,cpp}`,
+  `PluginProcessor.{h,cpp}`, `PROMPTS/PLAN.md`, `docs/PROGRESS.md`.
+- SECTIONS CITED: `LimiterEnvelope::timingForMode()`,
+  `LimiterEnvelope::recomputeAutoRelease()`, auto-release branch in
+  `LimiterEnvelope::process()`, `prepareToPlay()` lookahead/latency setup, and
+  `processCore()` envelope configuration.
+- REUSE CHECK: reused the existing `mdsp_dsp::LimiterEnvelope` and product
+  envelope topology. MCP project/DSP indices returned no matches, so I checked
+  the local library files directly; no separate reusable frequency-dependent
+  release component exists, so this extends the existing envelope in place.
+
+**Deliverables**
+- Added `LimiterEnvelope::setAutoReleaseScale (float)`, defaulting to `1.0f`.
+  It scales auto-release `fastMs`, `slowMs`, and `sigmaMs` by the supplied
+  factor during `recomputeAutoRelease()`.
+- Added asymmetric sigma tracking in the auto-release path:
+  fast attack coefficient from `5 ms`, slow decay from each mode's scaled
+  `sigmaMs`. The existing depth mapping, release-alpha blend, and two-stage
+  smoother are unchanged.
+- Added product constants:
+  `kLookaheadMs = 7.0f` and `kLowBandAutoReleaseScale = 3.0f`.
+- Set low-band auto-release scale to `3.0`; high band and both wideband
+  envelopes remain at `1.0`.
+- Increased the shared limiter lookahead from `5 ms` to `7 ms`, feeding
+  `osLookaheadSamples`, both lookahead delays, and all envelope specs through
+  the existing latency-derived path.
+
+**Latency / gate**
+- Expected 48 kHz latency: `2 * 336` lookahead samples + setup-2 OS latency
+  `137` + final ceiling latency `~125` = approximately `934` samples total.
+- [x] Debug build clean via `scripts/build.sh` (2026-06-09 12:30).
+- [ ] System install via `sudo bash scripts/install_system.sh` — blocked:
+      non-interactive `sudo` cannot read the password.
+- [ ] Acoustic/bass mix, Color 100, auto Transparent: no low-end pump and
+      transients/decays stay alive.
+- [ ] `basswave2.wav` / `Rumble50Hz.wav` at ~6 dB GR: per-cycle bass ripple
+      sidebands/harmonics drop vs current.
+- [ ] 60+7k multiband IMD remains ≤ −78.
+- [ ] Ceiling/TP behavior unchanged.
+- [ ] Plugin Doctor impulse IN/OUT meter alignment rechecked after latency
+      change.
+
+---
+
+## 2026-06-09 — Slice 25 addendum: real IN true-peak readout
+
+**Status:** 🔶 Implemented locally; built clean; system install and Plugin
+Doctor/analyze.py verification pending. Meter-only change; no limiting/ceiling
+behavior changed; no parameter IDs changed; no SDK files edited.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter input meter/dryScratch lookup; JUCE
+  `AudioBuffer`; shared `TruePeakDetector` reuse search.
+- FILES RETRIEVED: `PluginProcessor.{h,cpp}`, `MeterGroupComponent.cpp`,
+  `PROMPTS/PLAN.md`, `docs/PROGRESS.md`.
+- SECTIONS CITED: `prepareToPlay()` detector prepare/reset,
+  `processCore()` input meter block on latency-aligned `dryScratch_`,
+  `MeterGroupComponent::sync()` true-peak routing, and
+  `MeterGroupComponent::handlePeakReset()`.
+- REUSE CHECK: reused the existing `mdsp_dsp::TruePeakDetector` already used
+  for OUT; no new DSP and no SDK edits.
+
+**Deliverables**
+- Added two one-channel input true-peak detectors in `PluginProcessor`, prepared
+  with the same `numChannels = 1`, `maxBlockSize = samplesPerBlock` spec as OUT.
+- Measured input true peak at the same time reference as input sample peak/RMS:
+  the latency-aligned `dryScratch_` meter path.
+- Added current and max-since-reset input true-peak atomics and getters:
+  `getInputTruePeakLDb()`, `getInputTruePeakRDb()`,
+  `getMaxInputTruePeakLDb()`, `getMaxInputTruePeakRDb()`.
+- Existing input peak reset now clears held input TP values.
+- `MeterGroupComponent` now routes the same top `TP` row for both IN and OUT
+  meters, with red `+x.x` over indication above 0 dBFS.
+
+**Gate**
+- [x] Debug build clean via `scripts/build.sh` (`AU;VST3;Standalone`; one
+      JUCE/VST3 SDK deprecated `wstring_convert` warning, unrelated to changed
+      sources).
+- [ ] System install via `sudo bash scripts/install_system.sh` (attempted from
+      Cursor; blocked because sudo requires an interactive password prompt).
+- [ ] Pink noise at −6 dB sample peak: IN TP and OUT TP both read about −4.3
+      while sample-peak rows remain about −6.
+- [ ] IN overs above 0 dBFS render red with explicit `+`.
+- [ ] No I/O meter layout breakage.
+
+---
+
+## 2026-06-09 — Slice 25: real OUT true-peak readout
+
+**Status:** 🔶 Implemented locally; built clean; system install and Plugin
+Doctor/analyze.py verification pending. Meter-only change; no limiting/ceiling
+behavior changed; no parameter IDs changed; no SDK files edited.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter output meter/MainView/MeterComponent lookup;
+  JUCE `AudioBuffer`; shared `TruePeakDetector` reuse search.
+- FILES RETRIEVED: `PluginProcessor.{h,cpp}`, `MainView.{h,cpp}`,
+  `MeterGroupComponent.{h,cpp}`, `MeterComponent.{h,cpp}`,
+  `mdsp_dsp/dynamics/TruePeakDetector.{h,cpp}`, `PROMPTS/PLAN.md`,
+  `docs/PROGRESS.md`.
+- SECTIONS CITED: `prepareToPlay()` DSP prepare/reset, `processCore()` final
+  output meter block after `applyIoOutputGain()`, `TruePeakDetector::prepare()`
+  and `measure()`, `MeterGroupComponent::sync()` and `handlePeakReset()`,
+  `MeterComponent::paintLevel()`.
+- REUSE CHECK: reused existing `mdsp_dsp::TruePeakDetector` exactly as requested.
+  No new DSP was added and no SDK source was modified.
+
+**Deliverables**
+- Added two one-channel output true-peak detectors in `PluginProcessor`, prepared
+  with `numChannels = 1` and `maxBlockSize = samplesPerBlock`.
+- Measured true peak after the final output is ready, immediately after
+  `applyIoOutputGain()`, using one-channel `AudioBuffer` views into the output
+  L/R channels. No per-block sample storage is allocated.
+- Added current and max-since-reset output true-peak atomics and getters:
+  `getOutputTruePeakLDb()`, `getOutputTruePeakRDb()`,
+  `getMaxOutputTruePeakLDb()`, `getMaxOutputTruePeakRDb()`.
+- Existing peak-reset path now clears the output true-peak holds.
+- OUT L/R meters now draw a top `TP` row above the existing peak/max/RMS rows.
+  Values above 0 dBFS render red with an explicit `+`; values at or below 0 dBFS
+  render in muted text.
+- Hid the previous single SP/TP label so the visible TP readout is the real
+  per-channel output value.
+
+**Gate**
+- [x] Debug build clean via `scripts/build.sh` (`AU;VST3;Standalone`; one
+      JUCE/VST3 SDK deprecated `wstring_convert` warning, unrelated to changed
+      sources).
+- [ ] System install via `sudo bash scripts/install_system.sh` (attempted from
+      Cursor; blocked because sudo requires an interactive password prompt).
+- [ ] Inter-sample-over material: OUT TP readout shows the expected delta above
+      sample peak and matches `tools/analysis/analyze.py` TP on a render.
+- [ ] TP over 0 dBFS is red and displays with `+`.
+- [ ] Wideband clean case: OUT TP ~= sample peak and stays muted.
+- [ ] No I/O meter layout breakage.
+
+---
+
+## 2026-06-09 — Slice 24 hotfix: residual-only final ceiling + TP alignment
+
+**Status:** 🔶 Implemented locally; built clean; system install and Plugin
+Doctor/analyze.py verification pending. No parameter IDs changed.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter final-ceiling/processor lookup; JUCE
+  `Oversampling` and `AudioBlock`; shared final true-peak/lookahead limiter
+  reuse search.
+- FILES RETRIEVED: `FinalCeilingLimiter.{h,cpp}`,
+  `PluginProcessor.{h,cpp}`, `PROMPTS/PLAN.md`, `docs/PROGRESS.md`.
+- SECTIONS CITED: `FinalCeilingLimiter::fillTruePeakBuffer()`,
+  `FinalCeilingLimiter::applyGain()`, `processCore()` ceiling setup, Stereo
+  OS output loop, M/S output loop, and `limiterOversampler_.processSamplesDown()`.
+- REUSE CHECK: DSP index did not yet include the newly added
+  `FinalCeilingLimiter`; local SDK source was used. The hotfix preserves reuse
+  of `LimiterEnvelope`, `LookaheadDelay`, and JUCE `dsp::Oversampling`.
+
+**Deliverables**
+- Fixed TP detector/audio alignment in `FinalCeilingLimiter`: TP mode now delays
+  audio by the detector latency before the lookahead+gain stage, so the gain
+  generated from `peakScratch[i]` lands on the base-rate sample whose oversampled
+  true peak produced that detector value. SP mode keeps detector-latency
+  compensation after gain, preserving its sample-peak alignment and fixed
+  latency.
+- Restored the limiter-section ceiling as an OS output gain in
+  `PluginProcessor`: Stereo and M/S apply branches multiply by `ceilingLin`
+  before downsampling. The main limiter threshold remains `1.0f`, so GR metering
+  stays tied to the musical limiter rather than the ceiling trim.
+- Kept `FinalCeilingLimiter` threshold equal to the ceiling. With the main path
+  already at the ceiling, the final stage should only catch residual SP/TP overs,
+  including the measured Color-100 multiband ISP leak.
+
+**Gate**
+- [x] Debug build clean via `scripts/build.sh` (`AU;VST3;Standalone`; one
+      JUCE/VST3 SDK deprecated `wstring_convert` warning, unrelated to changed
+      sources).
+- [ ] System install via `sudo bash scripts/install_system.sh` (attempted from
+      Cursor; blocked because sudo requires an interactive password prompt).
+- [ ] `tools/analysis/analyze.py`: true peak −1.0 ± 0.05 dBTP for
+      `{SP, TP} x {Color 0, Color 100}` (not run: no WAV render artifacts are
+      present in the repo).
+- [ ] TP Color 100 60+7k drops from measured −0.4 dBTP to −1.0 dBTP.
+- [ ] TP Color 100 + auto-release at −4.5 LUFS IMD returns to ≤ −78 dB.
+- [ ] Wideband Color 0 remains at −1.0 dBTP.
+- [ ] Plugin Doctor impulse IN/OUT meter alignment unchanged with limiter on
+      and off.
+
+---
+
+## 2026-06-09 — Slice 24: setup-2 final true-peak ceiling
+
+**Status:** 🔶 Implemented locally; build/install and Plugin Doctor/analyze.py
+verification pending. No parameter IDs changed.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter processor/ceiling/latency lookup; JUCE
+  `Oversampling` and `AudioBuffer`; shared true-peak/ISP/brickwall,
+  `IspTrimStage`, `TruePeakDetector`, `LimiterEnvelope`, and `LookaheadDelay`
+  reuse search.
+- FILES RETRIEVED: `PluginProcessor.{h,cpp}`,
+  `mdsp_dsp/dynamics/IspTrimStage.{h,cpp}`,
+  `mdsp_dsp/dynamics/TruePeakDetector.{h,cpp}`,
+  `mdsp_dsp/dynamics/LimiterEnvelope.{h,cpp}`,
+  `mdsp_dsp/dynamics/LookaheadDelay.h`, `mdsp_dsp/CMakeLists.txt`,
+  `PROMPTS/PLAN.md`, `docs/PROGRESS.md`.
+- SECTIONS CITED: `prepareToPlay()` oversampler/lookahead/base-latency setup,
+  `processCore()` ceiling mode/threshold setup, OS apply loops, M/S safety
+  branch, `limiterOversampler_.processSamplesDown()`, output metering block,
+  and shared dynamics prepare/process contracts.
+- REUSE CHECK: shared DSP already had `IspTrimStage`, `TruePeakDetector`,
+  `LimiterEnvelope`, and `LookaheadDelay`. `IspTrimStage` is a 4x soft-knee
+  trim, not a lookahead brickwall; `TruePeakDetector` is block telemetry.
+  Slice 24 therefore adds reusable `mdsp_dsp::FinalCeilingLimiter` while
+  reusing `LimiterEnvelope`, `LookaheadDelay`, and JUCE `dsp::Oversampling`.
+
+**Deliverables**
+- Added `mdsp_dsp::FinalCeilingLimiter`, a stereo-linked final ceiling guard
+  with fixed latency across SP and TP modes. SP fills the detector from
+  base-rate sample peaks; TP fills it from 4x oversampled peaks. Both paths
+  apply the gain to the base-rate signal through preallocated lookahead and
+  latency-compensation delays.
+- Registered the new SDK source in `shared/mdsp_dsp/CMakeLists.txt`.
+- Wired MasterLimiter to prepare/reset the final stage, add its latency into
+  `baseLatencySamples_`, and keep `dryDelay_`/`setLatencySamples()` in lockstep.
+- Removed the fixed `0.965` TP headroom. The main limiter and band limiter now
+  target full scale (`thresholdLin = 1.0f`; `bandThresholdLin` remains derived).
+- Removed the per-sample `ceilingGain` multiply from the oversampled Stereo and
+  M/S apply loops. The final stage now owns the limiter-section ceiling after
+  `processSamplesDown()`. GR metering remains main-limiter-only.
+
+**Latency / gate**
+- Expected 48 kHz total latency: previous setup-2 `617` samples plus final
+  stage lookahead `64` samples plus the final 4x detector latency reported by
+  JUCE at prepare time (expected ~`61` samples), for approximately `742`
+  samples total and inside the ~`820` sample budget.
+- [x] Debug build clean via `scripts/build.sh` (`AU;VST3;Standalone`; one
+      JUCE/VST3 SDK deprecated `wstring_convert` warning, unrelated to changed
+      sources).
+- [ ] System install via `sudo bash scripts/install_system.sh` (attempted from
+      Cursor; blocked because sudo requires an interactive password prompt).
+- [ ] `tools/analysis/analyze.py`: true peak −1.0 ± 0.05 dBTP for
+      `{SP, TP} x {Color 0, Color 100}` with no output-gain fudge (not run:
+      no WAV render artifacts are present in the repo).
+- [ ] Color 100 + auto-release 60+7k IMD remains ≤ −78 dB.
+- [ ] Plugin Doctor impulse IN/OUT meter alignment unchanged with limiter on
+      and off.
+- [ ] CPU measured and reported.
+
+---
+
+## 2026-06-08 — Slice 23: setup-2 Color 0 peak transparency
+
+**Status:** 🔶 Implemented on `setup-2-flat-os`, built clean, awaiting system
+install and Plugin Doctor verification. Product-only DSP change; no parameter
+IDs changed.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter `PluginProcessor` band-link/crossover lookup;
+  JUCE `LinkwitzRileyFilter`; shared multiband/crossover/limiter reuse search.
+- FILES RETRIEVED: `PluginProcessor.cpp`, `PROMPTS/PLAN.md`,
+  `docs/PROGRESS.md`.
+- SECTIONS CITED: `processCore()` band detection, `gainLow/gainHigh`,
+  `gLowOut/gHighOut`, `bandLinkSmoothed_`, `lookahead_.pushPop()`,
+  `applyCrossover_.processSample()`, and `bandLimitedBuf_` formation.
+- REUSE CHECK: shared DSP search returned no product-ready recombination helper.
+  Existing `LimiterEnvelope`, `LookaheadDelay`, and JUCE
+  `LinkwitzRileyFilter` remain in use; the change is the product-local algebra
+  in `PluginProcessor`.
+
+**Deliverables**
+- Merged the band-link gain-output loop with the `bandLimitedBuf_` formation
+  loop so `bandLinkSmoothed_` is consumed exactly once per oversampled sample.
+- Preserved `gLowOut/gHighOut` values for GR semantics:
+  `linkedGain + (1-bl)*gainLow/High`.
+- Changed the audio recombination to:
+  `linkedGain * delayed + (1-bl) * (low*gainLow + high*gainHigh)`.
+  This makes Color 0 use the full-band delayed signal instead of the
+  crossover's allpass reconstruction, while Color 100 remains the exact
+  multiband path.
+- Applies before the wideband peak detector, so both Stereo and M/S wideband
+  modes consume the same corrected `bandLimitedBuf_`.
+
+**Gate result**
+- [x] Branch confirmed: `setup-2-flat-os`.
+- [x] Source diagnostics clean for `PluginProcessor.cpp`.
+- [x] Debug build clean via `scripts/build.sh`.
+- [ ] System install via `sudo scripts/install_system.sh` (attempted with
+      non-interactive sudo; blocked because a password is required).
+- [ ] Plugin Doctor Color 0 / limiter ON / broadband noise: IN peak equals OUT
+      peak within ~0.1 dB; RMS unchanged.
+- [ ] Plugin Doctor Color 100: A/B null vs current setup-2 on fixed seed.
+- [ ] Plugin Doctor Color sweep 0→100: peak delta rises smoothly from ~0 to the
+      current multiband amount.
+- [ ] Linear/Dynamics response sub-limiting unchanged; loudness unchanged.
+
+---
+
+## 2026-06-08 — Slice 22: setup-2 flat-HF oversampling + meter alignment
+
+**Status:** 🔶 Implemented on `setup-2-flat-os`, built clean, awaiting system
+install and Plugin Doctor LinearAnalysis/impulse confirmation. Baseline
+preserved as commit `53199c5` and tag `setup-1`; no parameter IDs changed.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-juce_rag`,
+  `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter processor/oversampling/latency lookup; JUCE
+  `Oversampling` constructor/stage/latency lookup; shared oversampling,
+  `IspTrimStage`, `TruePeakDetector`, limiter/lookahead reuse search.
+- FILES RETRIEVED: `PluginProcessor.{h,cpp}`, `PROMPTS/PLAN.md`,
+  `docs/PROGRESS.md`, JUCE `juce_Oversampling.{h,cpp}`.
+- SECTIONS CITED: `prepareToPlay()` oversampler/latency setup,
+  `processCore()` dry meter delay and limiter-active branch, JUCE
+  `Oversampling(size_t)`, `clearOversamplingStages()`,
+  `addOversamplingStage()`, `setUsingIntegerLatency()`,
+  `getLatencyInSamples()`.
+- REUSE CHECK: shared DSP has `LimiterEnvelope`, `LookaheadDelay`,
+  `IspTrimStage`, and `TruePeakDetector`, but no reusable custom halfband
+  oversampling stage component matched this product-local change. I checked the
+  local library but found no existing implementation, so this uses JUCE
+  `dsp::Oversampling` directly in `PluginProcessor`.
+
+**Deliverables**
+- Replaced the preset 4x FIR oversampler member with the channel-only
+  constructor and explicit stages in `prepareToPlay()`:
+  Stage 1 `filterHalfBandFIREquiripple`, `twUp/twDown = 0.03`, stopband
+  `-110 dB`; Stage 2 `twUp/twDown = 0.10`, stopband `-100 dB`.
+- Kept integer-latency behavior through `setUsingIntegerLatency (true)`, then
+  derives `limiterOsLatencySamples_` from `getLatencyInSamples()` with rounding
+  and an assertion that JUCE is reporting an integer-compensated value.
+- Confirmed the base latency formula remains the actual chain delay:
+  oversampler group delay plus `lookahead_` and `lookaheadWide_`, with the two
+  OS-rate lookahead delays equivalent to two base-rate `baseLookaheadSamples`.
+  At 48 kHz this is `137 + 240 + 240 = 617` samples.
+- Limiter-off now copies the latency-aligned `dryScratch_` path to `buffer`, so
+  the processor's reported latency, audio timing, and IN/OUT meter timing remain
+  constant when the Limiter power is off.
+
+**Measured with temporary JUCE probe**
+- Preset baseline: OS latency `61`, total latency `541` samples at 48 kHz,
+  20 kHz magnitude `-0.000655 dB` vs 1 kHz.
+- Custom setup-2: OS latency `137`, total latency `617` samples at 48 kHz,
+  20 kHz magnitude `-0.000043 dB` vs 1 kHz.
+
+**Gate result**
+- [x] `setup-1` baseline commit and tag created before edits.
+- [x] Branch `setup-2-flat-os` created from `setup-1`.
+- [x] Source diagnostics clean for `PluginProcessor.{h,cpp}`.
+- [x] Debug build clean via `scripts/build.sh`.
+- [ ] System install via `sudo scripts/install_system.sh` (attempted with
+      non-interactive sudo; blocked because a password is required).
+- [ ] Plugin Doctor LinearAnalysis: flat to 20 kHz (target ≤ −0.1 dB) and
+      phase linear.
+- [ ] Plugin Doctor impulse, limiter ON: IN and OUT meter peaks land in the same
+      processBlock/sample position.
+- [ ] Plugin Doctor impulse, limiter OFF: IN and OUT meter peaks remain aligned.
+- [ ] A/B against `setup-1`: only HF/latency changes; sub-20 kHz response and
+      loudness unchanged.
+
+---
+
+## 2026-06-08 — Slice 21: system install, ceiling default, clipper power
+
+**Status:** 🔶 Implemented, awaiting host/system-install and Plugin Doctor
+verification. Product-only build/install, parameter, DSP, and UI changes; no HQ
+commit. Existing parameter IDs untouched; one new parameter appended at the end
+of the layout: `clipper_active`.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter build/parameter/processor/MainView lookup;
+  JUCE `AudioParameterBool` and ButtonAttachment lookup; clipper/power-toggle
+  reuse search.
+- FILES RETRIEVED: `CMakeLists.txt`, `CMakePresets.json`, `scripts/build.sh`,
+  `ParameterIDs.h`, `Parameters.cpp`, `PluginProcessor.{h,cpp}`,
+  `MainView.{h,cpp}`, `MasterLimiterLookAndFeel.cpp`, `PROMPTS/PLAN.md`,
+  `docs/PROGRESS.md`.
+- SECTIONS CITED: `juce_add_plugin()` copy flag, `scripts/build.sh`,
+  APVTS layout end, `processCore()` clipper stage, `MainView` power button and
+  attachment wiring.
+- REUSE CHECK: no shared DSP/UI replacement matched this product-local clipper
+  power request. Reused the existing clipper loop, existing APVTS attachment
+  pattern, and existing `LimiterPower` look-and-feel glyph.
+
+**Deliverables**
+- Build/install: `MASTERLIMITER_COPY_AFTER_BUILD` now defaults OFF, and
+  `scripts/build.sh` explicitly configures it OFF so the build remains user-owned
+  and writes artifacts under `build-debug/`. `scripts/install_system.sh` installs
+  Debug AU/VST3 into `/Library/Audio/Plug-Ins/{Components,VST3}` with sudo,
+  failing clearly if artifacts are missing. `MASTERLIMITER_INSTALL_SYSTEM=1
+  ./scripts/build.sh` runs the sudo install after a successful non-sudo build.
+- Ceiling default: `ceiling_db` factory default is now `0.0f` (range unchanged).
+- Clipper power: appended new bool parameter `clipper_active` (`Clipper Active`,
+  default true). Processor caches it and gates only the clipper drive/curve/readout
+  loop. When off, the oversampled signal passes unchanged into the input-gain
+  stage, `currentClipDb_` is 0, and max-clip hold does not advance.
+- UI: added a small clipper power toggle by the clipper controls using the same
+  power glyph style as Limiter. The clipper drive and Hard/Soft controls are
+  disabled when the clipper is off.
+
+**Out of scope / future**
+- TP/SP metering user control remains parked for the next metering slice.
+- Ableton crash on Color knob remains watch-only until reproducible.
+- Oversampling HF-rolloff Task 3 remains deferred pending audition.
+
+**Gate result**
+- [x] Debug build clean via `scripts/build.sh`.
+- [x] `scripts/build.sh` does not auto-copy to `~/Library/Audio/Plug-Ins`.
+- [ ] `scripts/install_system.sh` places AU/VST3 in `/Library/Audio/Plug-Ins`
+      when run with sudo credentials (not run by Cursor to avoid prompting for
+      the admin password in-session).
+- [ ] Fresh instance shows Ceiling 0.0 dB.
+- [ ] Clipper Active off: Plugin Doctor HarmonicAnalysis shows no clipper-induced
+      change and clip readout stays 0.
+- [ ] Clipper Active on: current clipper behavior is preserved.
+
+---
+
+## 2026-06-08 — Slice 20: meter sync + RMS readout
+
+**Status:** 🔶 Implemented, awaiting avishali meter audition. Product-only
+metering change; no DSP/audio-path change, no HQ commit, no parameter changes.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter meter file lookup; JUCE `AudioBuffer`; shared
+  meter/ballistics reuse.
+- FILES RETRIEVED: `PluginProcessor.cpp`, `MeterGroupComponent.cpp`,
+  `MeterComponent.cpp`, `MainView.cpp`, `PROMPTS/PLAN.md`, `docs/PROGRESS.md`.
+- SECTIONS CITED: `processCore()` input/output meter measurement blocks,
+  `MeterGroupComponent::sync()`, `MeterComponent` numeric readout painting,
+  `MainView::setMeterScaleMode()` and `setMeterShowRms()`.
+- REUSE CHECK: shared DSP index returned no matching product-local meter group
+  replacement. The existing `MeterGroupComponent`/`MeterComponent` readout path
+  was reused; no new meter abstraction added.
+
+**Deliverables**
+- Input peak/RMS measurement now reads from `dryScratch_`, the post-input-gain
+  path delayed by `baseLatencySamples_`, instead of the live `buffer`. This
+  aligns the input meter's time reference with the output meter without touching
+  the audio path.
+- IN/OUT numeric readouts now use the existing two-line meter box with values
+  only: `current/max` on the first line and RMS current on the second line. GR
+  readout remains unchanged.
+- M3 parity check: IN and OUT are both `MeterGroupComponent` instances and share
+  the same provider display mode (`Rms`), hold enablement, scale mode setter,
+  RMS visibility setter, display smoothing, peak max tracking, clip latch logic,
+  and render-state push path. No IN/OUT config asymmetry found in code.
+
+**Out of scope / future**
+- True-peak / inter-sample meter readout remains a future slice, likely tied to
+  the existing TP ceiling mode.
+- Oversampling HF-rolloff Task 3 remains deferred pending audition.
+
+**Gate result**
+- [x] Debug build clean via `scripts/build.sh` (`AAX_SDK_PATH` unset, so
+      AU/VST3/Standalone only).
+- [ ] Transparent Ceiling 0 signal: IN/OUT meters read identically after meter
+      settling.
+- [ ] Ceiling −1 signal: OUT reads ~1 dB below IN.
+- [ ] Transients: IN/OUT meters move in lockstep; no visible desync.
+
+---
+
+## 2026-06-08 — Slice 19: Ozone transparency pass, Tasks 1+2
+
+**Status:** 🔶 Implemented, awaiting avishali Plugin Doctor audition. Product-only
+DSP/default change; no HQ commit, no parameter ID/range changes. Task 3
+oversampling HF-rolloff investigation is intentionally gated until this A/B pass
+is approved.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter processor/path lookup; JUCE
+  `SmoothedValue` and `Oversampling`; shared DSP limiter/ISP/true-peak reuse.
+- FILES RETRIEVED: `PluginProcessor.{h,cpp}`, `Parameters.cpp`,
+  `PROMPTS/PLAN.md`, `docs/PROGRESS.md`.
+- SECTIONS CITED: `processCore()` limiter-active block, `mapBandColorToLink()`,
+  `MDSP_BAND_HEADROOM_DB`, `band_color` parameter factory.
+- REUSE CHECK: shared `LimiterEnvelope`, `IspTrimStage`, and
+  `TruePeakDetector` exist, but no drop-in shared maximizer/multiband replacement
+  matched this product-local Ozone-transparency slice. Internal project index
+  returned no MasterLimiter entries, so file placement was verified directly in
+  the product repo.
+
+**Deliverables**
+- Ceiling model decoupled from gain reduction: limiter threshold is now fixed at
+  full-scale (`1.0f`) in SamplePeak mode and TP headroom (`0.965f`) in TruePeak
+  mode. `ceiling_db` now drives the final limiter-section output gain via the
+  existing `ceilingSmoothed_`.
+- Final output loops apply Ceiling once per oversampled sample after wideband
+  gain, and after `msSafetyGain` in M/S mode. GR metering remains based on
+  `gDeepBand * wideGain` (plus `msSafetyGain` in M/S), so Ceiling movement should
+  not move the GR meter.
+- Default flat limiting: `MDSP_BAND_HEADROOM_DB` stays overrideable but defaults
+  to `0.0f`; Color mapping is now `0% = fully linked / transparent` through
+  `100% = fully independent`; `band_color` APVTS default is now `0.0f`.
+
+**Notes for audition**
+- Expected: toggling Limiter power with a non-0 Ceiling changes output level,
+  because Ceiling is now part of the limiter section output stage.
+- Gain⇄Ceiling Link remains a control-coupling gesture only. It still moves the
+  paired knob inversely; DSP is decoupled, so audition whether that gesture still
+  feels right under the Ozone-style model before changing UX.
+- The factory preset values were not changed in this slice; only the frozen
+  `band_color` parameter default changed per task scope.
+- Reviewer sign-off requested on the Task 2 design decision: the always-on 2 dB
+  pre-shave is removed from the default path. If a pre-shave option is desired
+  later, bind depth to the Color macro in a follow-up slice.
+
+**Gate result**
+- [x] Debug build clean via `scripts/build.sh` with local `JUCE_PATH`
+      (`AAX_SDK_PATH` unset, so AU/VST3/Standalone only).
+- [ ] Plugin Doctor: moving Ceiling changes output level but not GR.
+- [ ] Plugin Doctor: Gain 0 / Ceiling 0 / 0 dBFS sine reports ~0 GR.
+- [ ] Plugin Doctor: default limiting response is flat, no 120 Hz step or
+      high-shelf cut; Color up progressively reintroduces multiband character.
+- [ ] Task 3: measure/choose oversampling HF-rolloff candidate only after this
+      Tasks 1+2 audition gate.
+
+---
+
 ## 2026-05-31 — Slice 18: distribution tooling
 
 **Status:** ✅ Shipped. Product-only distribution tooling; no DSP/parameter

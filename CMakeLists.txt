@@ -51,10 +51,8 @@ set(AAX_SDK_PATH "" CACHE PATH "Path to AAX SDK root (contains Interfaces/ACF)")
 
 option(PLUGIN_DEV_MODE "Fast iteration dev mode (limits formats, disables LTO)" ON)
 
-# Auto-install built plugins to system folders after build. ON for dev iteration.
-# Release builds set this OFF: AAX copies to the system Avid folder which needs
-# root ("Operation not permitted"), so release packaging handles install instead.
-option(MASTERLIMITER_COPY_AFTER_BUILD "Copy built plugins to system folders after build" ON)
+# Keep builds user-owned. Use scripts/install_system.sh for sudo install into /Library.
+option(MASTERLIMITER_COPY_AFTER_BUILD "Copy built plugins to user plugin folders after build" OFF)
 
 if(PLUGIN_DEV_MODE)
     set(PLUGIN_DEV_MODE_VALUE 1)
@@ -280,6 +278,39 @@ juce_add_plugin(${PLUGIN_NAME}
     BUNDLE_ID com.MelechDSP.MasterLimiter
 )
 
+set(MASTERLIMITER_GIT_SHA "nogit")
+set(MASTERLIMITER_GIT_BRANCH "nogit")
+
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+        OUTPUT_VARIABLE _masterlimiter_git_sha
+        RESULT_VARIABLE _masterlimiter_git_sha_result
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_masterlimiter_git_sha_result EQUAL 0 AND NOT _masterlimiter_git_sha STREQUAL "")
+        set(MASTERLIMITER_GIT_SHA "${_masterlimiter_git_sha}")
+    endif()
+
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+        OUTPUT_VARIABLE _masterlimiter_git_branch
+        RESULT_VARIABLE _masterlimiter_git_branch_result
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_masterlimiter_git_branch_result EQUAL 0 AND NOT _masterlimiter_git_branch STREQUAL "")
+        set(MASTERLIMITER_GIT_BRANCH "${_masterlimiter_git_branch}")
+    endif()
+endif()
+
+string(TIMESTAMP MASTERLIMITER_BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
+message(STATUS "MasterLimiter build marker: ${MASTERLIMITER_GIT_BRANCH}@${MASTERLIMITER_GIT_SHA} built ${MASTERLIMITER_BUILD_TIMESTAMP}")
+
 target_sources(${PLUGIN_NAME}
     PRIVATE
         Source/PluginProcessor.cpp
@@ -353,6 +384,9 @@ target_compile_definitions(${PLUGIN_NAME}
     PRIVATE
         $<$<BOOL:${PLUGIN_EDITOR_RESIZABLE}>:PLUGIN_EDITOR_RESIZABLE=1>
         PLUGIN_DEV_MODE=${PLUGIN_DEV_MODE_VALUE}
+        MASTERLIMITER_GIT_SHA="${MASTERLIMITER_GIT_SHA}"
+        MASTERLIMITER_GIT_BRANCH="${MASTERLIMITER_GIT_BRANCH}"
+        MASTERLIMITER_BUILD_TIMESTAMP="${MASTERLIMITER_BUILD_TIMESTAMP}"
 )
 
 target_link_libraries(${PLUGIN_NAME}

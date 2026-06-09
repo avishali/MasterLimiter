@@ -4,6 +4,7 @@
 #include <mdsp_ui/meters/MeterRenderStateProvider.h>
 
 #include <cmath>
+#include <iterator>
 #include <utility>
 
 namespace
@@ -13,9 +14,53 @@ constexpr float kDbScaleLineThin = 1.25f;
 constexpr float kDbScaleLine0Db = 1.75f;
 constexpr float kDbScaleLineDense = 0.75f;
 
+struct LevelScaleAnchor
+{
+    float db;
+    float norm;
+};
+
+constexpr LevelScaleAnchor kOzoneFullRangeAnchors[] {
+    { -120.0f, 0.00f },
+    { -50.0f,  0.10f },
+    { -40.0f,  0.25f },
+    { -30.0f,  0.42f },
+    { -20.0f,  0.59f },
+    { -15.0f,  0.68f },
+    { -10.0f,  0.77f },
+    { -6.0f,   0.84f },
+    { -3.0f,   0.89f },
+    { 0.0f,    0.94f },
+    { 6.0f,    1.00f }
+};
+
 static bool nearTick (float value, float target) noexcept
 {
     return std::abs (value - target) < 0.001f;
+}
+
+float normaliseFromAnchors (float db) noexcept
+{
+    if (! std::isfinite (db))
+        db = kOzoneFullRangeAnchors[0].db;
+
+    const float clamped = juce::jlimit (kOzoneFullRangeAnchors[0].db,
+                                        kOzoneFullRangeAnchors[std::size (kOzoneFullRangeAnchors) - 1].db,
+                                        db);
+
+    for (std::size_t i = 1; i < std::size (kOzoneFullRangeAnchors); ++i)
+    {
+        const auto& lower = kOzoneFullRangeAnchors[i - 1];
+        const auto& upper = kOzoneFullRangeAnchors[i];
+
+        if (clamped <= upper.db)
+        {
+            const float t = (clamped - lower.db) / (upper.db - lower.db);
+            return lower.norm + t * (upper.norm - lower.norm);
+        }
+    }
+
+    return kOzoneFullRangeAnchors[std::size (kOzoneFullRangeAnchors) - 1].norm;
 }
 } // namespace
 
@@ -103,7 +148,25 @@ void MeterComponent::setNumericReadoutOverride (bool active, juce::String line1,
 {
     numericOverrideActive_ = active;
     numericOverridePeak_ = std::move (line1);
+    numericOverrideMax_ = {};
     numericOverrideRms_ = std::move (line2);
+    repaint();
+}
+
+void MeterComponent::setNumericReadoutOverride (bool active, juce::String peak, juce::String maxPeak, juce::String rms) noexcept
+{
+    numericOverrideActive_ = active;
+    numericOverridePeak_ = std::move (peak);
+    numericOverrideMax_ = std::move (maxPeak);
+    numericOverrideRms_ = std::move (rms);
+    repaint();
+}
+
+void MeterComponent::setTruePeakReadout (bool active, juce::String text, bool over) noexcept
+{
+    truePeakReadoutActive_ = active;
+    truePeakReadoutText_ = std::move (text);
+    truePeakReadoutOver_ = over;
     repaint();
 }
 
@@ -121,6 +184,9 @@ void MeterComponent::setPeakResetCallback (Callback cb, void* ctx) noexcept
 
 float MeterComponent::dbToNormForScale (float db, mdsp_ui::meters::MeterScaleMode mode) noexcept
 {
+    if (mode == mdsp_ui::meters::MeterScaleMode::FullRange)
+        return normaliseFromAnchors (db);
+
     if (mode == mdsp_ui::meters::MeterScaleMode::Top48Db)
     {
         const float clamped = juce::jlimit (-48.0f, 6.0f, std::isfinite (db) ? db : -48.0f);
@@ -163,9 +229,17 @@ void MeterComponent::resized()
 {
     auto b = getLocalBounds();
 
-    labelArea_ = b.removeFromTop (16);
-    numericArea_ = b.removeFromBottom (kind_ == Kind::Level ? 34 : 20).reduced (2, 2);
+    if (kind_ == Kind::Level)
+    {
+        numericArea_ = b.removeFromTop (62).reduced (2, 2);
+        labelArea_ = {};
+        ledArea_ = {};
+        meterArea_ = b.reduced (6, 2);
+        return;
+    }
 
+    labelArea_ = b.removeFromTop (16);
+    numericArea_ = b.removeFromBottom (20).reduced (2, 2);
     auto ledRow = labelArea_;
     ledArea_ = ledRow.removeFromRight (14).withSizeKeepingCentre (10, 10);
     meterArea_ = b.reduced (6, 2);
@@ -327,9 +401,13 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     const float width = static_cast<float> (meterArea_.getWidth());
     const auto peakColour = theme.accent.brighter (0.55f);
 
-    const float peakH = renderState_.peakNorm * h;
+    const float peakNorm = dbToNormForScale (renderState_.peakDb, renderState_.scaleMode);
+    const float rmsNorm = dbToNormForScale (renderState_.rmsDb, renderState_.scaleMode);
+    const float maxPeakNorm = dbToNormForScale (renderState_.maxPeakDb, renderState_.scaleMode);
+
+    const float peakH = peakNorm * h;
     const float peakTop = yMax - peakH;
-    const bool hasPeakSignal = renderState_.peakNorm > 0.002f;
+    const bool hasPeakSignal = peakNorm > 0.002f;
 
     if (hasPeakSignal && peakH > 0.5f)
     {
@@ -350,16 +428,16 @@ void MeterComponent::paintLevel (juce::Graphics& g)
         g.fillRoundedRectangle (peakRectF, m.rSmall);
     }
 
-    const float rmsH = renderState_.rmsNorm * h;
+    const float rmsH = rmsNorm * h;
     const float rmsTop = yMax - rmsH;
-    if (showRms_ && renderState_.rmsNorm > 0.002f && rmsH > 0.5f)
+    if (showRms_ && rmsNorm > 0.002f && rmsH > 0.5f)
     {
         auto rmsRect = meterArea_.withTop (static_cast<int> (std::round (rmsTop)));
         g.setColour (theme.accent.withAlpha (0.74f));
         g.fillRoundedRectangle (rmsRect.toFloat().reduced (2.0f, 0.0f), m.rSmall);
     }
 
-    if (renderState_.peakNorm > 0.002f)
+    if (peakNorm > 0.002f)
     {
         g.setColour (peakColour.withAlpha (0.95f));
         g.drawLine (xLeft + m.strokeThick,
@@ -369,9 +447,9 @@ void MeterComponent::paintLevel (juce::Graphics& g)
                     m.strokeMed);
     }
 
-    if (renderState_.maxPeakNorm > 0.001f)
+    if (maxPeakNorm > 0.001f)
     {
-        const float maxPeakY = yMax - (renderState_.maxPeakNorm * h);
+        const float maxPeakY = yMax - (maxPeakNorm * h);
         g.setColour (theme.warning.withAlpha (0.9f));
         g.drawLine (xLeft + 1.0f,
                     maxPeakY,
@@ -456,7 +534,7 @@ void MeterComponent::paintLevel (juce::Graphics& g)
         }
         else
         {
-            static constexpr float kTicksFull[] = { 6.0f, 0.0f, -6.0f, -12.0f, -24.0f, -48.0f, -72.0f, -96.0f, -120.0f };
+            static constexpr float kTicksFull[] = { 0.0f, -3.0f, -6.0f, -10.0f, -15.0f, -20.0f, -30.0f, -40.0f, -50.0f, -120.0f };
             for (const auto db : kTicksFull)
             {
                 const float norm = dbToNormForScale (db, renderState_.scaleMode);
@@ -479,13 +557,16 @@ void MeterComponent::paintLevel (juce::Graphics& g)
                 }
 
                 const char* label = nullptr;
-                if (nearTick (db, 6.0f)) label = "+6";
-                else if (nearTick (db, 0.0f)) label = "0";
+                if (nearTick (db, 0.0f)) label = "0";
+                else if (nearTick (db, -3.0f)) label = "-3";
                 else if (nearTick (db, -6.0f)) label = "-6";
-                else if (nearTick (db, -12.0f)) label = "-12";
-                else if (nearTick (db, -24.0f)) label = "-24";
-                else if (nearTick (db, -48.0f)) label = "-48";
-                else if (nearTick (db, -96.0f)) label = "-96";
+                else if (nearTick (db, -10.0f)) label = "-10";
+                else if (nearTick (db, -15.0f)) label = "-15";
+                else if (nearTick (db, -20.0f)) label = "-20";
+                else if (nearTick (db, -30.0f)) label = "-30";
+                else if (nearTick (db, -40.0f)) label = "-40";
+                else if (nearTick (db, -50.0f)) label = "-50";
+                else if (nearTick (db, -120.0f)) label = "-inf";
 
                 if (label != nullptr)
                 {
@@ -498,15 +579,14 @@ void MeterComponent::paintLevel (juce::Graphics& g)
         }
     }
 
-    g.setColour (theme.text.withAlpha (0.9f));
-    g.setFont (ui_.type().labelFont());
-    g.drawText (label_, labelArea_, juce::Justification::centred);
-
-    const auto ledColour = renderState_.clipLatched ? theme.danger : theme.textMuted.withAlpha (0.25f);
-    g.setColour (ledColour);
-    g.fillEllipse (ledArea_.toFloat());
-    g.setColour (theme.background.withAlpha (0.7f));
-    g.drawEllipse (ledArea_.toFloat(), m.strokeThin);
+    if (! ledArea_.isEmpty())
+    {
+        const auto ledColour = renderState_.clipLatched ? theme.danger : theme.textMuted.withAlpha (0.25f);
+        g.setColour (ledColour);
+        g.fillEllipse (ledArea_.toFloat());
+        g.setColour (theme.background.withAlpha (0.7f));
+        g.drawEllipse (ledArea_.toFloat(), m.strokeThin);
+    }
 
     const auto boxR = numericArea_.toFloat();
     g.setColour (theme.background.withAlpha (0.55f));
@@ -514,17 +594,43 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     g.setColour (theme.grid.withAlpha (0.35f));
     g.drawRoundedRectangle (boxR, m.rMed, m.strokeThin);
 
-    g.setFont (juce::Font (juce::FontOptions().withHeight (12.0f)));
-
     const juce::String peakLine = numericOverrideActive_ ? numericOverridePeak_ : numericTextPeak_;
+    const juce::String maxLine = numericOverrideActive_ ? numericOverrideMax_ : juce::String();
     const juce::String rmsLine = numericOverrideActive_ ? numericOverrideRms_ : numericTextRms_;
 
-    auto numBounds = numericArea_.translated (0, 3);
-    auto peakBounds = numBounds.removeFromTop (numBounds.getHeight() / 2);
+    auto numBounds = numericArea_.reduced (3, 3);
+    juce::Rectangle<int> tpBounds;
+    if (truePeakReadoutActive_)
+        tpBounds = numBounds.removeFromTop (13);
+
+    const int rowH = numBounds.getHeight() / 3;
+    auto peakBounds = numBounds.removeFromTop (rowH);
+    auto peakMaxBounds = numBounds.removeFromTop (rowH);
     auto rmsBounds = numBounds;
+
+    if (truePeakReadoutActive_)
+    {
+        const auto tpColour = truePeakReadoutOver_ ? theme.danger : theme.textMuted.withAlpha (0.78f);
+        auto caption = tpBounds.removeFromLeft (15);
+        g.setFont (juce::Font (juce::FontOptions().withHeight (8.0f)).boldened());
+        g.setColour (tpColour.withAlpha (truePeakReadoutOver_ ? 0.95f : 0.62f));
+        g.drawText ("TP", caption, juce::Justification::centredLeft);
+
+        g.setFont (juce::Font (juce::FontOptions().withHeight (9.4f)).boldened());
+        g.setColour (tpColour);
+        g.drawText (truePeakReadoutText_, tpBounds, juce::Justification::centredRight);
+    }
+
+    g.setFont (juce::Font (juce::FontOptions().withHeight (9.4f)));
 
     g.setColour (peakColour.withAlpha (0.9f));
     g.drawText (peakLine, peakBounds, juce::Justification::centred);
+
+    if (maxLine.isNotEmpty())
+    {
+        g.setColour (theme.warning.withAlpha (0.82f));
+        g.drawText (maxLine, peakMaxBounds, juce::Justification::centred);
+    }
 
     g.setColour (theme.text.withAlpha (0.68f));
     g.drawText (rmsLine, rmsBounds, juce::Justification::centred);

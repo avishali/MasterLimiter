@@ -19,9 +19,15 @@ if [ ! -d "$JUCE_PATH" ]; then
 fi
 
 echo "Configuring MasterLimiter (preset: debug)..."
-cmake --preset debug
+cmake --preset debug -DMASTERLIMITER_COPY_AFTER_BUILD=OFF
 
 echo "Building..."
 cmake --build build-debug -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 echo "Build complete."
+echo "System install: run ./scripts/install_system.sh"
+echo "Or set MASTERLIMITER_INSTALL_SYSTEM=1 before running this script to install after build."
+
+if [ "${MASTERLIMITER_INSTALL_SYSTEM:-0}" = "1" ]; then
+    "$SCRIPT_DIR/install_system.sh"
+fi

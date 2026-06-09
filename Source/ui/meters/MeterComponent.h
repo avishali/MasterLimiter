@@ -37,6 +37,8 @@ public:
     void setGrSingleBarMode (bool single) noexcept;
 
     void setNumericReadoutOverride (bool active, juce::String line1, juce::String line2) noexcept;
+    void setNumericReadoutOverride (bool active, juce::String peak, juce::String maxPeak, juce::String rms) noexcept;
+    void setTruePeakReadout (bool active, juce::String text, bool over) noexcept;
 
     void setClipResetCallback (Callback cb, void* ctx) noexcept;
     void setPeakResetCallback (Callback cb, void* ctx) noexcept;
@@ -69,7 +71,11 @@ private:
     juce::String numericTextRms_ { "-inf" };
     bool numericOverrideActive_ { false };
     juce::String numericOverridePeak_;
+    juce::String numericOverrideMax_;
     juce::String numericOverrideRms_;
+    bool truePeakReadoutActive_ { false };
+    bool truePeakReadoutOver_ { false };
+    juce::String truePeakReadoutText_;
 
     Callback onClipReset_ = nullptr;
     Callback onPeakReset_ = nullptr;

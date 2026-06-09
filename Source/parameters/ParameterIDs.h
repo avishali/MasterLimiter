@@ -30,5 +30,10 @@ inline constexpr std::string_view stereo_link_pct { "stereo_link_pct" };
 inline constexpr std::string_view ms_link_pct { "ms_link_pct" };
 inline constexpr std::string_view band_color { "band_color" };
 inline constexpr std::string_view character { "character" };
+inline constexpr std::string_view clipper_active { "clipper_active" };
+inline constexpr std::string_view dev_low_band_release_scale { "dev_low_band_release_scale" };
+inline constexpr std::string_view dev_high_band_release_scale { "dev_high_band_release_scale" };
+inline constexpr std::string_view dev_sigma_attack_ms { "dev_sigma_attack_ms" };
+inline constexpr std::string_view dev_sigma_decay_scale { "dev_sigma_decay_scale" };
 
 } // namespace param

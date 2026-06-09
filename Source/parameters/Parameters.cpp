@@ -54,7 +54,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (ceiling_db, 1),
         "Ceiling",
         NormalisableRange<float> (-24.0f, 0.0f, 0.01f),
-        -1.0f,
+        0.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
 
     layout.add (std::make_unique<AudioParameterBool> (
@@ -185,7 +185,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (band_color, 1),
         "Color",
         NormalisableRange<float> (0.0f, 100.0f, 0.1f),
-        50.0f,
+        0.0f,
         AudioParameterFloatAttributes()
             .withLabel ("%")
             .withStringFromValueFunction ([] (float v, int) { return juce::String (v, 0) + "%"; })));
@@ -196,6 +196,40 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         StringArray { "Clean", "Tight", "Aggressive" },
         0,
         AudioParameterChoiceAttributes()));
+
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (clipper_active, 1),
+        "Clipper Active",
+        true,
+        AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_low_band_release_scale, 1),
+        "DEV Low Release Scale",
+        NormalisableRange<float> (0.5f, 8.0f, 0.01f),
+        3.0f,
+        AudioParameterFloatAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_high_band_release_scale, 1),
+        "DEV High/Wide Release Scale",
+        NormalisableRange<float> (0.5f, 8.0f, 0.01f),
+        1.0f,
+        AudioParameterFloatAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_sigma_attack_ms, 1),
+        "DEV Sigma Attack",
+        NormalisableRange<float> (1.0f, 50.0f, 0.1f),
+        5.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_sigma_decay_scale, 1),
+        "DEV Sigma Decay Scale",
+        NormalisableRange<float> (0.5f, 8.0f, 0.01f),
+        1.0f,
+        AudioParameterFloatAttributes()));
 
     return layout;
 }
