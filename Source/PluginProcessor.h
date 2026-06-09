@@ -139,6 +139,7 @@ private:
     static constexpr float kCrossoverHz = 120.0f;
     static constexpr float kBandHeadroomDb = MDSP_BAND_HEADROOM_DB;
     static constexpr float kLookaheadMs = 7.0f;
+    static constexpr float kMaxLookaheadMs = 12.0f;
     static constexpr float kLowBandAutoReleaseScale = 3.0f;
     static constexpr float kHighBandAutoReleaseScale = 1.0f;
     static constexpr float kAutoSigmaAttackMs = 5.0f;
@@ -146,6 +147,7 @@ private:
 
     mdsp_dsp::LookaheadDelay<float> lookahead_;
     mdsp_dsp::LookaheadDelay<float> lookaheadWide_;
+    mdsp_dsp::LookaheadDelay<float> lookaheadPad_;
     mdsp_dsp::PeakDetector peakDetector_;
     mdsp_dsp::LimiterEnvelope envelope_;
     mdsp_dsp::LimiterEnvelope envelope_R_;
@@ -213,6 +215,8 @@ private:
     std::atomic<float>* devReleaseEngine_ = nullptr;
     std::atomic<float>* devLaReleaseMs_ = nullptr;
     std::atomic<float>* devLaReleasePoles_ = nullptr;
+    std::atomic<float>* devLookaheadBandMs_ = nullptr;
+    std::atomic<float>* devLookaheadWideMs_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 
@@ -220,6 +224,8 @@ private:
     int  limiterOsLatencySamples_ = 0;
     int  finalCeilingLatencySamples_ = 0;
     int  cachedCeilingMode_   = 0;
+    int  osMaxLookaheadSamples_ = 0;
+    double osSampleRate_ = 0.0;
 
     std::atomic<float> currentGrDb_ { 0.0f };
     std::atomic<float> currentGrLDb_ { 0.0f };

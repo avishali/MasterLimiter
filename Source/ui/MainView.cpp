@@ -473,6 +473,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblDevHighBandReleaseScale_);
     setupLabel (lblDevSigmaAttackMs_);
     setupLabel (lblDevSigmaDecayScale_);
+    setupLabel (lblDevLookaheadBandMs_);
+    setupLabel (lblDevLookaheadWideMs_);
+    setupLabel (lblDevSustainRatio_);
     setupLabel (lblGainMatchNote_);
     setupLabel (lblLearnInputLufs_);
     setupLabel (lblIoInputTrim_);
@@ -500,6 +503,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     styleDevTuningSlider (sldDevHighBandReleaseScale_);
     styleDevTuningSlider (sldDevSigmaAttackMs_);
     styleDevTuningSlider (sldDevSigmaDecayScale_);
+    styleDevTuningSlider (sldDevLookaheadBandMs_);
+    styleDevTuningSlider (sldDevLookaheadWideMs_);
+    styleDevTuningSlider (sldDevSustainRatio_);
     styleIoTrimFader (sldIoInputTrimL_);
     styleIoTrimFader (sldIoInputTrimR_);
     styleIoTrimFader (sldIoOutputTrimL_);
@@ -575,6 +581,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldDevHighBandReleaseScale_);
     addAndMakeVisible (sldDevSigmaAttackMs_);
     addAndMakeVisible (sldDevSigmaDecayScale_);
+    addAndMakeVisible (sldDevLookaheadBandMs_);
+    addAndMakeVisible (sldDevLookaheadWideMs_);
+    addAndMakeVisible (sldDevSustainRatio_);
     addAndMakeVisible (btnGainMatchAutoTrack_);
     addAndMakeVisible (compGainBar_);
     addAndMakeVisible (btnLearnInputGain_);
@@ -645,6 +654,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attDevHighBandReleaseScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_high_band_release_scale), sldDevHighBandReleaseScale_);
     attDevSigmaAttackMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_sigma_attack_ms), sldDevSigmaAttackMs_);
     attDevSigmaDecayScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_sigma_decay_scale), sldDevSigmaDecayScale_);
+    attDevLookaheadBandMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_band_ms), sldDevLookaheadBandMs_);
+    attDevLookaheadWideMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_wide_ms), sldDevLookaheadWideMs_);
+    attDevSustainRatio_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldDevSustainRatio_);
     if (auto* characterParam = apvts_.getParameter (pid (param::character)))
     {
         attCharacter_ = std::make_unique<juce::ParameterAttachment> (*characterParam,
@@ -681,6 +693,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     useSliderTextboxFormat (sldDevHighBandReleaseScale_, 2, juce::String());
     useSliderTextboxFormat (sldDevSigmaAttackMs_, 1, " ms");
     useSliderTextboxFormat (sldDevSigmaDecayScale_, 2, juce::String());
+    useSliderTextboxFormat (sldDevLookaheadBandMs_, 1, " ms");
+    useSliderTextboxFormat (sldDevLookaheadWideMs_, 1, " ms");
+    useSliderTextboxFormat (sldDevSustainRatio_, 2, juce::String());
     sldStereoLink_.textFromValueFunction = [] (double v) { return juce::String (v, 0) + "%"; };
     sldBandColor_.textFromValueFunction = [] (double v) { return juce::String (v, 0) + "%"; };
     useSliderTextboxFormat (sldIoInputTrimL_, 2, " dB");
@@ -698,6 +713,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupValueEdit (sldDevHighBandReleaseScale_, ValueSlider::ValueLabelMode::Below);
     setupValueEdit (sldDevSigmaAttackMs_, ValueSlider::ValueLabelMode::Below);
     setupValueEdit (sldDevSigmaDecayScale_, ValueSlider::ValueLabelMode::Below);
+    setupValueEdit (sldDevLookaheadBandMs_, ValueSlider::ValueLabelMode::Below);
+    setupValueEdit (sldDevLookaheadWideMs_, ValueSlider::ValueLabelMode::Below);
+    setupValueEdit (sldDevSustainRatio_, ValueSlider::ValueLabelMode::Below);
     sldGainDrive_.setRange (sldGainDrive_.getMinimum(), sldGainDrive_.getMaximum(), 0.1);
     sldClipperDrive_.setRange (sldClipperDrive_.getMinimum(), sldClipperDrive_.getMaximum(), 0.1);
     sldCeiling_.setRange (sldCeiling_.getMinimum(), sldCeiling_.getMaximum(), 0.1);
@@ -879,6 +897,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldDevHighBandReleaseScale_.setTooltip ("DEV temporary: scales high-band and wideband auto-release fast/slow/sigma timings.");
     sldDevSigmaAttackMs_.setTooltip ("DEV temporary: sigma tracker attack time in milliseconds, applied to all auto-release envelopes.");
     sldDevSigmaDecayScale_.setTooltip ("DEV temporary: extra sigma decay multiplier, applied to all auto-release envelopes.");
+    sldDevLookaheadBandMs_.setTooltip ("DEV temporary: per-band audio delay and envelope lookahead window in milliseconds.");
+    sldDevLookaheadWideMs_.setTooltip ("DEV temporary: wideband audio delay and envelope lookahead window in milliseconds.");
+    sldDevSustainRatio_.setTooltip ("DEV temporary: manual-release sustain ratio. Active only when Release Auto is Off.");
     presetMenu_.setTooltip ("Factory presets. Selecting one updates the processing controls.");
     lblTruePeak_.setTooltip ({});
     btnResetPeaks_.setTooltip ("Resets held peaks, maximum gain reduction, and clip maximums.");
@@ -1088,11 +1109,15 @@ void MainView::updateReleaseAutoControls (bool forceRepaint)
 
     sldRelease_.setEnabled (! autoRelease);
     lblRelease_.setEnabled (! autoRelease);
+    sldDevSustainRatio_.setEnabled (! autoRelease);
+    lblDevSustainRatio_.setEnabled (! autoRelease);
     segAutoReleaseMode_.setEnabled (autoRelease);
 
     if (changed || forceRepaint)
         repaint (sldRelease_.getBounds()
                      .getUnion (lblRelease_.getBounds())
+                     .getUnion (sldDevSustainRatio_.getBounds())
+                     .getUnion (lblDevSustainRatio_.getBounds())
                      .getUnion (btnReleaseAuto_.getBounds())
                      .getUnion (segAutoReleaseMode_.getBounds())
                      .expanded (8, 8));
@@ -1412,30 +1437,36 @@ void MainView::resized()
     lblBandColor_.setBounds (526, 314, knobW, 18);
     sldBandColor_.setBounds (526, 332, knobW, knobH);
 
-    devReleasePanelArea_ = { 34, 468, 704, 58 };
-    lblDevReleaseTuning_.setBounds (48, 472, 82, 14);
-    lblDevReleaseEngine_.setBounds (138, 472, 106, 14);
-    segDevReleaseEngine_.setBounds (138, 492, 106, 22);
-    lblDevLaReleaseMs_.setBounds (252, 472, 78, 14);
-    sldDevLaReleaseMs_.setBounds (252, 488, 78, 34);
-    lblDevLaReleasePoles_.setBounds (338, 472, 58, 14);
-    segDevLaReleasePoles_.setBounds (338, 492, 58, 22);
-    lblDevLowBandReleaseScale_.setBounds (406, 472, 60, 14);
-    sldDevLowBandReleaseScale_.setBounds (406, 488, 60, 34);
-    lblDevHighBandReleaseScale_.setBounds (476, 472, 78, 14);
-    sldDevHighBandReleaseScale_.setBounds (476, 488, 78, 34);
-    lblDevSigmaAttackMs_.setBounds (564, 472, 68, 14);
-    sldDevSigmaAttackMs_.setBounds (564, 488, 68, 34);
-    lblDevSigmaDecayScale_.setBounds (642, 472, 78, 14);
-    sldDevSigmaDecayScale_.setBounds (642, 488, 78, 34);
+    devReleasePanelArea_ = { 34, 460, 704, 88 };
+    lblDevReleaseTuning_.setBounds (48, 466, 82, 14);
+    lblDevReleaseEngine_.setBounds (138, 466, 106, 14);
+    segDevReleaseEngine_.setBounds (138, 486, 106, 22);
+    lblDevLaReleaseMs_.setBounds (252, 466, 74, 14);
+    sldDevLaReleaseMs_.setBounds (252, 482, 74, 34);
+    lblDevLaReleasePoles_.setBounds (334, 466, 58, 14);
+    segDevLaReleasePoles_.setBounds (334, 486, 58, 22);
+    lblDevLowBandReleaseScale_.setBounds (402, 466, 58, 14);
+    sldDevLowBandReleaseScale_.setBounds (402, 482, 58, 34);
+    lblDevHighBandReleaseScale_.setBounds (470, 466, 76, 14);
+    sldDevHighBandReleaseScale_.setBounds (470, 482, 76, 34);
+    lblDevSigmaAttackMs_.setBounds (556, 466, 66, 14);
+    sldDevSigmaAttackMs_.setBounds (556, 482, 66, 34);
+    lblDevSigmaDecayScale_.setBounds (632, 466, 86, 14);
+    sldDevSigmaDecayScale_.setBounds (632, 482, 86, 34);
+    lblDevLookaheadBandMs_.setBounds (138, 516, 88, 14);
+    sldDevLookaheadBandMs_.setBounds (138, 530, 88, 18);
+    lblDevLookaheadWideMs_.setBounds (238, 516, 88, 14);
+    sldDevLookaheadWideMs_.setBounds (238, 530, 88, 18);
+    lblDevSustainRatio_.setBounds (338, 516, 88, 14);
+    sldDevSustainRatio_.setBounds (338, 530, 88, 18);
 
-    btnGainMatchAutoTrack_.setBounds (152, 550, 126, 30);
-    gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (528).withHeight (18);
-    lblGainMatchNote_.setBounds (288, 550, 76, 30);
-    compGainBar_.setBounds (372, 562, 48, 8);
+    btnGainMatchAutoTrack_.setBounds (152, 568, 126, 30);
+    gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (546).withHeight (18);
+    lblGainMatchNote_.setBounds (288, 568, 76, 30);
+    compGainBar_.setBounds (372, 580, 48, 8);
     // Slice 11b2.1: Learn sits with Auto/Track so the LUFS feature reads as one group.
-    btnLearnInputGain_.setBounds (432, 550, 84, 30);
-    lblLearnInputLufs_.setBounds (524, 550, 96, 30);
+    btnLearnInputGain_.setBounds (432, 568, 84, 30);
+    lblLearnInputLufs_.setBounds (524, 568, 96, 30);
 
     meterGr_.setBounds (650, 104, 88, 354);
 
@@ -1509,6 +1540,12 @@ void MainView::resized()
     sldDevSigmaAttackMs_.toFront (false);
     lblDevSigmaDecayScale_.toFront (false);
     sldDevSigmaDecayScale_.toFront (false);
+    lblDevLookaheadBandMs_.toFront (false);
+    sldDevLookaheadBandMs_.toFront (false);
+    lblDevLookaheadWideMs_.toFront (false);
+    sldDevLookaheadWideMs_.toFront (false);
+    lblDevSustainRatio_.toFront (false);
+    sldDevSustainRatio_.toFront (false);
     compGainBar_.toFront (false);
     valueEditor_.toFront (false);
 

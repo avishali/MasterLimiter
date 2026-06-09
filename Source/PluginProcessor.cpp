@@ -109,6 +109,8 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_release_engine.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_la_release_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_la_release_poles.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_lookahead_band_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_lookahead_wide_ms.data()) != nullptr);
 
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
     jassert (pluginBypass_ != nullptr);
@@ -131,10 +133,14 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     constexpr int osFactor = 4;
     constexpr double controlSmoothingSeconds = 0.02;
     const int baseLookaheadSamples = static_cast<int> (std::llround ((double) kLookaheadMs * 1.0e-3 * sampleRate));
+    const int baseMaxLookaheadSamples = static_cast<int> (std::llround ((double) kMaxLookaheadMs * 1.0e-3 * sampleRate));
     constexpr int finalCeilingLookaheadSamples = 64;
     const int osLookaheadSamples = baseLookaheadSamples * osFactor;
+    const int osMaxLookaheadSamples = baseMaxLookaheadSamples * osFactor;
     const int osMaxBlockSize = samplesPerBlock * osFactor;
     const double osSampleRate = sampleRate * (double) osFactor;
+    osMaxLookaheadSamples_ = juce::jmax (1, osMaxLookaheadSamples);
+    osSampleRate_ = osSampleRate;
 
     using OversamplingFilterType = juce::dsp::Oversampling<float>::FilterType;
     limiterOversampler_.clearOversamplingStages();
@@ -155,15 +161,16 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     limiterOsLatencySamples_ = static_cast<int> (std::llround (osLatencySamples));
     jassert (std::abs (osLatencySamples - static_cast<double> (limiterOsLatencySamples_)) < 1.0e-3);
 
-    lookahead_.prepare (2, osLookaheadSamples);
+    lookahead_.prepare (2, osMaxLookaheadSamples_);
     lookahead_.setDelaySamples (osLookaheadSamples);
-    lookaheadWide_.prepare (2, osLookaheadSamples);
+    lookaheadWide_.prepare (2, osMaxLookaheadSamples_);
     lookaheadWide_.setDelaySamples (osLookaheadSamples);
+    lookaheadPad_.prepare (2, 2 * osMaxLookaheadSamples_);
     peakDetector_.prepare (2);
 
     mdsp_dsp::LimiterEnvelope::Spec spec;
     spec.sampleRate = osSampleRate;
-    spec.lookaheadSamples = osLookaheadSamples;
+    spec.lookaheadSamples = osMaxLookaheadSamples_;
     spec.maxBlockSize = osMaxBlockSize;
     envelope_.prepare (spec);
     envelope_R_.prepare (spec);
@@ -233,6 +240,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devReleaseEngine_ = apvts.getRawParameterValue (param::dev_release_engine.data());
     devLaReleaseMs_ = apvts.getRawParameterValue (param::dev_la_release_ms.data());
     devLaReleasePoles_ = apvts.getRawParameterValue (param::dev_la_release_poles.data());
+    devLookaheadBandMs_ = apvts.getRawParameterValue (param::dev_lookahead_band_ms.data());
+    devLookaheadWideMs_ = apvts.getRawParameterValue (param::dev_lookahead_wide_ms.data());
     jassert (limiterActive_ != nullptr);
     jassert (pluginBypass_ != nullptr);
     jassert (clipperActive_ != nullptr);
@@ -248,6 +257,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devReleaseEngine_ != nullptr);
     jassert (devLaReleaseMs_ != nullptr);
     jassert (devLaReleasePoles_ != nullptr);
+    jassert (devLookaheadBandMs_ != nullptr);
+    jassert (devLookaheadWideMs_ != nullptr);
     bandLinkSmoothed_.reset (osSampleRate, 0.02);
     bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 0.0f));
 
@@ -285,12 +296,13 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     ioOutputGainRSmoothed_.reset (sampleRate, controlSmoothingSeconds);
     ioOutputGainRSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioOutputRDb_ != nullptr ? ioOutputRDb_->load (std::memory_order_relaxed) : 0.0f));
 
-    baseLatencySamples_ = (2 * baseLookaheadSamples) + limiterOsLatencySamples_ + finalCeilingLatencySamples_;
+    baseLatencySamples_ = (2 * baseMaxLookaheadSamples) + limiterOsLatencySamples_ + finalCeilingLatencySamples_;
     cachedCeilingMode_  = ceilingMode_->getIndex();
 
     limiterOversampler_.reset();
     lookahead_.reset();
     lookaheadWide_.reset();
+    lookaheadPad_.reset();
     envelope_.reset();
     envelope_R_.reset();
     detectCrossover_.reset();
@@ -666,6 +678,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         || devLowBandReleaseScale_ == nullptr || devHighBandReleaseScale_ == nullptr
         || devSigmaAttackMs_ == nullptr || devSigmaDecayScale_ == nullptr
         || devReleaseEngine_ == nullptr || devLaReleaseMs_ == nullptr || devLaReleasePoles_ == nullptr
+        || devLookaheadBandMs_ == nullptr || devLookaheadWideMs_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
         || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
@@ -857,10 +870,25 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                                                              : 80.0f;
         const int laReleasePoles = 2 + (devLaReleasePoles_ != nullptr ? (int) devLaReleasePoles_->load (std::memory_order_relaxed)
                                                                       : 1);
+        const float devLaBandMs = devLookaheadBandMs_ != nullptr ? devLookaheadBandMs_->load (std::memory_order_relaxed)
+                                                                 : kLookaheadMs;
+        const float devLaWideMs = devLookaheadWideMs_ != nullptr ? devLookaheadWideMs_->load (std::memory_order_relaxed)
+                                                                 : kLookaheadMs;
+        const int osMaxLookahead = juce::jmax (1, osMaxLookaheadSamples_);
+        const double activeOsRate = osSampleRate_ > 0.0 ? osSampleRate_ : (getSampleRate() * 4.0);
+        const int laBandActive = juce::jlimit (1, osMaxLookahead, static_cast<int> (std::llround ((double) devLaBandMs * 1.0e-3 * activeOsRate)));
+        const int laWideActive = juce::jlimit (1, osMaxLookahead, static_cast<int> (std::llround ((double) devLaWideMs * 1.0e-3 * activeOsRate)));
         const auto laEngine = laReleaseEngineIdx == 1
             ? mdsp_dsp::LimiterEnvelope::ReleaseEngine::LookaheadFollower
             : mdsp_dsp::LimiterEnvelope::ReleaseEngine::AdaptiveSigma;
         bandLinkSmoothed_.setTargetValue (mapBandColorToLink (bandColor));
+
+        lookahead_.setDelaySamples (laBandActive);
+        lookaheadWide_.setDelaySamples (laWideActive);
+        envelopeLow_.setActiveLookaheadSamples (laBandActive);
+        envelopeHigh_.setActiveLookaheadSamples (laBandActive);
+        envelope_.setActiveLookaheadSamples (laWideActive);
+        envelope_R_.setActiveLookaheadSamples (laWideActive);
 
         auto configureEnvelope = [&] (mdsp_dsp::LimiterEnvelope& envelope, float envThresholdLin, float autoReleaseScale)
         {
@@ -1087,6 +1115,20 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                                            currentGrRDb_.load (std::memory_order_relaxed));
         if (frameMaxGr > maxGrSinceResetDb_.load (std::memory_order_relaxed))
             maxGrSinceResetDb_.store (frameMaxGr, std::memory_order_relaxed);
+
+        const int padSamples = (osMaxLookahead - laBandActive) + (osMaxLookahead - laWideActive);
+        lookaheadPad_.setDelaySamples (padSamples);
+        for (int i = 0; i < osN; ++i)
+        {
+            for (int ch = 0; ch < nch; ++ch)
+            {
+                auto* d = osBlock.getChannelPointer ((size_t) ch);
+                d[i] = lookaheadPad_.pushPop (ch, d[i]);
+            }
+
+            if (nch == 1)
+                (void) lookaheadPad_.pushPop (1, 0.0f);
+        }
 
         limiterOversampler_.processSamplesDown (block);
         finalCeiling_.process (buffer);

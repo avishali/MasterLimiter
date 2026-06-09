@@ -144,13 +144,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         0,
         AudioParameterChoiceAttributes()));
 
-    layout.add (std::make_unique<AudioParameterFloat> (
-        pid (lookahead_ms, 1),
-        "Lookahead",
-        NormalisableRange<float> (4.0f, 6.0f, 0.01f),
-        5.0f,
-        AudioParameterFloatAttributes().withLabel ("ms")));
-
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (ceiling_mode, 1),
         "Ceiling Mode",
@@ -251,6 +244,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         StringArray { "2", "3", "4" },
         1,
         AudioParameterChoiceAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_lookahead_band_ms, 1),
+        "DEV LA Band",
+        NormalisableRange<float> (1.0f, 12.0f, 0.1f),
+        7.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_lookahead_wide_ms, 1),
+        "DEV LA Wide",
+        NormalisableRange<float> (1.0f, 12.0f, 0.1f),
+        7.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
 
     return layout;
 }

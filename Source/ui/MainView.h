@@ -199,6 +199,12 @@ private:
     ValueSlider sldDevSigmaAttackMs_;
     juce::Label lblDevSigmaDecayScale_ { {}, "Sigma Decay x" };
     ValueSlider sldDevSigmaDecayScale_;
+    juce::Label lblDevLookaheadBandMs_ { {}, "LA Band" };
+    ValueSlider sldDevLookaheadBandMs_;
+    juce::Label lblDevLookaheadWideMs_ { {}, "LA Wide" };
+    ValueSlider sldDevLookaheadWideMs_;
+    juce::Label lblDevSustainRatio_ { {}, "Sustain" };
+    ValueSlider sldDevSustainRatio_;
 
     juce::ToggleButton btnGainMatchAutoTrack_ { "Auto / Track" };
     juce::Label lblGainMatchNote_ { {}, "+0.0 dB" };
@@ -274,6 +280,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevHighBandReleaseScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSigmaAttackMs_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSigmaDecayScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLookaheadBandMs_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLookaheadWideMs_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSustainRatio_;
     std::unique_ptr<juce::ParameterAttachment> attCharacter_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;

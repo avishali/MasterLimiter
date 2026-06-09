@@ -17,8 +17,8 @@ MasterLimiter is a **mastering maximizer**. Audio comes in, optionally gets soft
   - **Stage 2** — transition width `0.10`, attenuation `−100 dB`. Wider/cheaper, transparent at the higher rate.
   - Flat to 20 kHz; `setUsingIntegerLatency(true)` so latency is a whole number of samples.
 - **Why 4×:** limiting is a nonlinear operation; doing it at 4× pushes the aliasing products far above the audible band so they can be filtered on the way down. (Known limit: at 4× some limiter harmonics still fold back — see §8.)
-- **Total plugin latency** = `2 × lookahead` + oversampler latency + FinalCeiling (lookahead 64 + its detector). It's reported to the host so the DAW delay-compensates. (~934 samples at 48 kHz with the current 7 ms lookahead.)
-- **Lookahead** is the compile-time constant **`kLookaheadMs` (~7 ms)**, used twice in series (per-band delay + wideband delay). ⚠️ The visible `lookahead_ms` APVTS parameter (4–6 ms) is **currently vestigial** — it does *not* drive the actual delay. Flagged in §8.
+- **Total plugin latency** = `2 × max lookahead` + oversampler latency + FinalCeiling (lookahead 64 + its detector). The reported latency is fixed at the 12 ms maximum lookahead so DEV tuning does not force host PDC changes.
+- **Lookahead** has two DEV-tunable active windows, both defaulting to the shipped 7 ms voicing: `dev_lookahead_band_ms` drives the per-band delay/envelope window, and `dev_lookahead_wide_ms` drives the wideband delay/envelope window. The wet path is padded by the unused slack so total latency stays constant.
 
 ---
 
@@ -56,11 +56,11 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
   - **Color 100% → independent** (`bl = 0`): each band keeps its own gain → multiband character (the loudness-cap-breaking, low-IMD mode).
   The blend is applied both to the gains and to the audio reconstruction.
 
-**2.12 — Lookahead delay + band gain application.** The audio is delayed by `lookahead_` (so the gain curve, computed from the *future* peak, lands *before* the peak arrives — that's the lookahead attack). `applyCrossover_` re-splits the delayed audio and applies `gainLow`/`gainHigh`, blended by `bl` against the un-split delayed signal → `bandLimitedBuf_`.
+**2.12 — Lookahead delay + band gain application.** The audio is delayed by `lookahead_` using the active `dev_lookahead_band_ms` window (so the gain curve, computed from the *future* peak, lands *before* the peak arrives — that's the lookahead attack). `applyCrossover_` re-splits the delayed audio and applies `gainLow`/`gainHigh`, blended by `bl` against the un-split delayed signal → `bandLimitedBuf_`.
 
 **2.13 — Wideband limiter.** The band-limited signal is peak-detected again (or M/S-encoded if **Stereo Mode = M/S**) and run through `envelope_` (and `envelope_R_` when stereo unlinked). **Stereo Link / M/S Link** (%) blends L/R gain toward `min(L,R)`; at ≥99.95% it takes a single-envelope fast path. This is the safety stage that catches anything the per-band stage let through.
 
-**2.14 — Wideband lookahead + Ceiling + GR tap.** Audio is delayed by `lookaheadWide_`, multiplied by the wideband gain and by **`ceilingLin`** (the output ceiling gain). In M/S mode a per-sample decoded-peak safety clamp guarantees the reconstructed L/R never exceeds threshold. The **total gain reduction** (`min(bandGain × wideGain)` over the block, L/R) is published to `currentGrDb_/LDb_/RDb_` and the max-since-reset is latched — **this is the GR the meters and the new history graph read.**
+**2.14 — Wideband lookahead + Ceiling + GR tap.** Audio is delayed by `lookaheadWide_` using the active `dev_lookahead_wide_ms` window, multiplied by the wideband gain and by **`ceilingLin`** (the output ceiling gain). In M/S mode a per-sample decoded-peak safety clamp guarantees the reconstructed L/R never exceeds threshold. The **total gain reduction** (`min(bandGain × wideGain)` over the block, L/R) is published to `currentGrDb_/LDb_/RDb_` and the max-since-reset is latched — **this is the GR the meters and the new history graph read.** `lookaheadPad_` then adds `(max−band) + (max−wide)` samples of wet-path delay before downsampling so the active windows remain latency-constant.
 
 **2.15 — Downsample.** `processSamplesDown` returns to host rate.
 
@@ -87,8 +87,8 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 ### 4.1 Crossover (`detectCrossover_` / `applyCrossover_`)
 `juce::dsp::LinkwitzRileyFilter`, 120 Hz, complementary low/high that sum back to flat. **Two instances on purpose:** one drives *detection* (measuring band peaks), the other drives *application* (splitting the delayed audio to apply gain) — separating them avoids state bleed between the measure and apply paths. `snapToZero()` flushes filter state at block boundaries.
 
-### 4.2 LookaheadDelay (`lookahead_`, `lookaheadWide_`, plus `dryDelay_`)
-Simple per-channel circular buffers. `pushPop()` writes the new sample and returns the one from `delaySamples` ago — RT-safe, no allocation. Used so the gain curve (computed from upcoming peaks) is applied to audio that has been delayed to match, giving a smooth pre-emptive attack instead of catching the peak late.
+### 4.2 LookaheadDelay (`lookahead_`, `lookaheadWide_`, `lookaheadPad_`, plus `dryDelay_`)
+Simple per-channel circular buffers. `pushPop()` writes the new sample and returns the one from `delaySamples` ago — RT-safe, no allocation. `lookahead_` and `lookaheadWide_` make each gain curve line up with its active envelope window; `lookaheadPad_` absorbs the unused max-window slack so reported latency never changes while sweeping DEV lookahead.
 
 ### 4.3 LimiterEnvelope (the heart — gain computer)
 Input = peak stream, output = gain coefficient stream (≤1). No audio delay here; the caller does the delaying.
@@ -126,10 +126,9 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 | Gain/Ceiling Link | `gain_ceiling_link` | bool | off | Move gain & ceiling together. |
 | Auto/Track gain-match | `gain_match_auto` | bool | off | Loudness-match output to reference. |
 | Release | `release_ms` | 1…1000 ms | 30 | Manual release (only when Auto off). |
-| Release Sustain Ratio | `release_sustain_ratio` | 1…10 | 4 | Slow/fast split in Clean mode. |
+| Release Sustain Ratio | `release_sustain_ratio` | 1…10 | 4 | Slow/fast split in Clean mode; exposed in the DEV strip for manual-release audition. |
 | Release Auto | `release_auto` | Off/Auto | Off | Program-dependent release. |
 | Auto Release | `auto_release_mode` | Transparent/Balanced/Reactive | Transparent | Picks the timing table (§4.3). |
-| Lookahead | `lookahead_ms` | 4…6 ms | 5 | ⚠️ currently vestigial (see §8). |
 | Ceiling Mode | `ceiling_mode` | SamplePeak/TruePeak | SamplePeak | Final brickwall mode. |
 | Stereo Mode | `stereo_mode` | Stereo/M-S | Stereo | Wideband detection domain. |
 | Stereo Link | `stereo_link_pct` | 0…100% | 100 | L/R gain linking (Stereo). |
@@ -157,6 +156,9 @@ Live, RT-safe tuning knobs in the orange "DEV RELEASE" strip. They drive the rel
 | **High/Wide Release Scale** | `dev_high_band_release_scale` | 0.5…8.0× | 1.0 | High/wideband release multiplier | Nominal 1×. |
 | **Sigma Attack** | `dev_sigma_attack_ms` | 1…50 ms | 5 | AdaptiveSigma: how fast `sigma` rises | Legacy-engine only. |
 | **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | Legacy-engine only. |
+| **LA Band** | `dev_lookahead_band_ms` | 1…12 ms | 7 | Per-band audio delay + low/high envelope window | Latency stays fixed via wet-path padding. |
+| **LA Wide** | `dev_lookahead_wide_ms` | 1…12 ms | 7 | Wideband audio delay + wide envelope window | Latency stays fixed via wet-path padding. |
+| **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | Active only when Release Auto is Off. |
 
 **Plan:** once the LA Release ms + Poles are chosen by ear, Claude bakes them as constants, maps the time onto the Transparent/Balanced/Reactive selector, and deletes all DEV params for 0.4.
 
@@ -176,8 +178,7 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 ---
 
 ## 8. Known discrepancies & backlog (so the doc stays honest)
-1. **`lookahead_ms` param is vestigial** — the real lookahead is the compile-time `kLookaheadMs` (~7 ms). Either wire the param to the delay or hide it. (Doc/UX bug.)
-2. **Multiband true-peak leak:** at Color 100 + TruePeak, output TP can leak to ~−0.4 (over ceiling). Root cause = 4× OS headroom. Grouped with harmonic aliasing in the "OS-quality" slice (raise OS to 8×+ and/or proper ISP control).
-3. **Color intermediate (0<x<100):** low end dips from phase cancellation between the full-band and allpass-split paths; endpoints (0/100) are clean. Fix = linear-phase complementary crossover (adds latency).
-4. **DEV params** are shipping in the beta build — must be removed for 0.4.
-5. **Metering history depth** — history graph storage is fixed at 65536 frames for the 30 s max view; extend only if a future UI window needs more.
+1. **Multiband true-peak leak:** at Color 100 + TruePeak, output TP can leak to ~−0.4 (over ceiling). Root cause = 4× OS headroom. Grouped with harmonic aliasing in the "OS-quality" slice (raise OS to 8×+ and/or proper ISP control).
+2. **Color intermediate (0<x<100):** low end dips from phase cancellation between the full-band and allpass-split paths; endpoints (0/100) are clean. Fix = linear-phase complementary crossover (adds latency).
+3. **DEV params** are shipping in the beta build — must be removed for 0.4.
+4. **Metering history depth** — history graph storage is fixed at 65536 frames for the 30 s max view; extend only if a future UI window needs more.

@@ -2,6 +2,57 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-10 — Slice: lookahead time DEV knobs
+
+**Status:** 🔶 Implemented locally; SDK and plugin Release builds clean; SDK
+committed/pushed first; AU/VST3 installed; AU validation clean.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_dsp`, `user-juce_docs`, local file reads/search.
+- QUERIES ISSUED: shared `LimiterEnvelope` active-lookahead/reuse search;
+  JUCE `AudioParameterFloat`; JUCE APVTS slider attachment lookup.
+- FILES RETRIEVED: SDK `LimiterEnvelope.{h,cpp}`;
+  product `ParameterIDs.h`, `Parameters.cpp`, `PluginProcessor.{h,cpp}`,
+  `MainView.{h,cpp}`, `docs/SIGNAL_FLOW.md`, `PROMPTS/PLAN.md`.
+- SECTIONS CITED: `LimiterEnvelope::prepare()` allocation, `LimiterEnvelope::process()`
+  active lookahead use, `prepareToPlay()` lookahead/latency setup,
+  `processCore()` envelope configuration and downsample boundary, and
+  `MainView` DEV strip attachment/layout.
+- REUSE CHECK: reused `mdsp_dsp::LimiterEnvelope` and `mdsp_dsp::LookaheadDelay`.
+  I checked the local library but found no separate runtime lookahead-window
+  manager, so the existing limiter envelope was extended to support an active
+  window within its prepared max allocation.
+
+**Deliverables**
+- SDK `LimiterEnvelope` now separates prepared max lookahead allocation from
+  the active lookahead window. `setActiveLookaheadSamples()` clamps to the max,
+  recomputes attack shaping, and clears carried post history without allocating.
+- Plugin reports constant latency sized to `kMaxLookaheadMs = 12 ms` for both
+  band and wide stages. Active `dev_lookahead_band_ms` and
+  `dev_lookahead_wide_ms` drive their matching audio delays and envelope
+  windows, while `lookaheadPad_` delays the wet OS signal by the unused slack.
+- Removed the dead `lookahead_ms` parameter and added DEV APVTS params for
+  `dev_lookahead_band_ms` and `dev_lookahead_wide_ms` (1..12 ms, default 7 ms).
+- Exposed LA Band, LA Wide, and Sustain Ratio in the orange DEV strip; Sustain
+  is attached to the existing `release_sustain_ratio` parameter and is disabled
+  when Release Auto is On.
+
+**RT / gate**
+- No allocations are added to the audio callback. New SDK buffers are allocated
+  in `prepare()`, plugin delay buffers in `prepareToPlay()`, and runtime changes
+  are scalar clamps/state updates plus delay push/pop.
+- Defaults preserve the current 7 ms voicing while reported latency stays fixed
+  at the 12 ms max-window path.
+- [x] SDK Release build clean via `cmake --build build` (2026-06-10).
+- [x] SDK committed and pushed first: `3bda543`.
+- [x] Plugin Release build clean via `cmake --build build` (2026-06-10).
+- [x] AU/VST3 copied to user plug-in folders.
+- [x] AU validation clean via `auval -v aufx MaLm Melc`.
+- [ ] Audition: sweep LA Band/LA Wide, confirm host PDC does not change, and
+  check true-peak ceiling at the window extremes.
+
+---
+
 ## 2026-06-09 — Slice: history graph v2
 
 **Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed; AU

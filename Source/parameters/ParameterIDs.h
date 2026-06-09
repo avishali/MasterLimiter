@@ -23,7 +23,6 @@ inline constexpr std::string_view release_ms { "release_ms" };
 inline constexpr std::string_view release_sustain_ratio { "release_sustain_ratio" };
 inline constexpr std::string_view release_auto { "release_auto" };
 inline constexpr std::string_view auto_release_mode { "auto_release_mode" };
-inline constexpr std::string_view lookahead_ms { "lookahead_ms" };
 inline constexpr std::string_view ceiling_mode { "ceiling_mode" };
 inline constexpr std::string_view stereo_mode { "stereo_mode" };
 inline constexpr std::string_view stereo_link_pct { "stereo_link_pct" };
@@ -38,5 +37,7 @@ inline constexpr std::string_view dev_sigma_decay_scale { "dev_sigma_decay_scale
 inline constexpr std::string_view dev_release_engine { "dev_release_engine" };
 inline constexpr std::string_view dev_la_release_ms { "dev_la_release_ms" };
 inline constexpr std::string_view dev_la_release_poles { "dev_la_release_poles" };
+inline constexpr std::string_view dev_lookahead_band_ms { "dev_lookahead_band_ms" };
+inline constexpr std::string_view dev_lookahead_wide_ms { "dev_lookahead_wide_ms" };
 
 } // namespace param
