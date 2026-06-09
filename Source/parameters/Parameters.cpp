@@ -231,5 +231,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         1.0f,
         AudioParameterFloatAttributes()));
 
+    layout.add (std::make_unique<AudioParameterChoice> (
+        pid (dev_release_engine, 1),
+        "DEV Release Engine",
+        StringArray { "Adaptive", "Lookahead" },
+        0,
+        AudioParameterChoiceAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_la_release_ms, 1),
+        "DEV LA Release",
+        NormalisableRange<float> (5.0f, 400.0f, 0.1f, 0.4f),
+        80.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<AudioParameterChoice> (
+        pid (dev_la_release_poles, 1),
+        "DEV LA Poles",
+        StringArray { "2", "3", "4" },
+        1,
+        AudioParameterChoiceAttributes()));
+
     return layout;
 }

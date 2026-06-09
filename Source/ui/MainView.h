@@ -100,6 +100,8 @@ private:
     void updateClipperActiveState();
     void updateCharacterModeControl (int characterIdx);
     void updateAutoReleaseModeControl (int modeIdx);
+    void updateDevReleaseEngineControl (int engineIdx);
+    void updateDevLaReleasePolesControl (int polesIdx);
     void updateReleaseAutoControls (bool forceRepaint = false);
     void updateLimiterActiveState();
     void updateBypassButtonState();
@@ -180,6 +182,12 @@ private:
     SegmentedChoice segCharacter_;
 
     juce::Label lblDevReleaseTuning_ { {}, "DEV RELEASE - TEMP" };
+    juce::Label lblDevReleaseEngine_ { {}, "Engine" };
+    SegmentedChoice segDevReleaseEngine_;
+    juce::Label lblDevLaReleaseMs_ { {}, "LA Release" };
+    ValueSlider sldDevLaReleaseMs_;
+    juce::Label lblDevLaReleasePoles_ { {}, "Poles" };
+    SegmentedChoice segDevLaReleasePoles_;
     juce::Label lblDevLowBandReleaseScale_ { {}, "Low x" };
     ValueSlider sldDevLowBandReleaseScale_;
     juce::Label lblDevHighBandReleaseScale_ { {}, "High/Wide x" };
@@ -232,6 +240,8 @@ private:
     int lastClipperModeIdx_ { -1 };
     int lastCharacterModeIdx_ { -1 };
     int lastAutoReleaseModeIdx_ { -1 };
+    int lastDevReleaseEngineIdx_ { -1 };
+    int lastDevLaReleasePolesIdx_ { -1 };
     bool ignoreNextEditorClickAway_ { false };
     ValueSlider* editingSlider_ { nullptr };
     juce::TextEditor valueEditor_ { "Value Entry" };
@@ -253,6 +263,9 @@ private:
     std::unique_ptr<juce::ParameterAttachment> attAutoReleaseMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;
+    std::unique_ptr<juce::ParameterAttachment> attDevReleaseEngine_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLaReleaseMs_;
+    std::unique_ptr<juce::ParameterAttachment> attDevLaReleasePoles_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLowBandReleaseScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevHighBandReleaseScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSigmaAttackMs_;

@@ -2,6 +2,57 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-09 — Slice: lookahead envelope-follower release A/B
+
+**Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed for
+audition. Listening/analysis verification pending. Temporary dev-only APVTS
+parameters were appended and must be baked/removed before beta `0.4`.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: `LimiterEnvelope`, `PluginProcessor.cpp`,
+  `PluginEditor.cpp`, JUCE `AudioProcessorValueTreeState`,
+  `AudioParameterChoice`, `AudioParameterFloat`, shared DSP
+  `LimiterEnvelope` and lookahead/release reuse searches.
+- FILES RETRIEVED: `LimiterEnvelope.{h,cpp}`, `ParameterIDs.h`,
+  `Parameters.cpp`, `PluginProcessor.{h,cpp}`, `MainView.{h,cpp}`,
+  `PROMPTS/PLAN.md`, `docs/PROGRESS.md`, and
+  `PROMPTS/SLICE_LOOKAHEAD_RELEASE.md`.
+- SECTIONS CITED: `LimiterEnvelope::process()` attack/release split,
+  `LimiterEnvelope::prepare()` preallocation, `processCore()` envelope
+  configuration lambda, APVTS dev parameter block, and `MainView` DEV RELEASE
+  strip attachments/layout.
+- REUSE CHECK: reused the existing `mdsp_dsp::LimiterEnvelope` and product
+  envelope topology. I checked the local library but found no separate existing
+  lookahead release/sliding-window-min implementation, so I added the new
+  release mode inside `LimiterEnvelope`.
+
+**Deliverables**
+- Added `LimiterEnvelope::ReleaseEngine` with default `AdaptiveSigma` and a new
+  `LookaheadFollower` auto-release path.
+- Added preallocated lookahead minimum buffers plus a fixed-time 2..4 pole
+  release cascade. The existing lookahead attack scan and Adaptive/manual
+  release paths remain the default behavior.
+- Appended dev params: `dev_release_engine`, `dev_la_release_ms`, and
+  `dev_la_release_poles`.
+- Wired all four envelopes through the existing `configureEnvelope()` lambda;
+  low band keeps the existing dev low-release scale multiplier.
+- Extended the `DEV RELEASE - TEMP` strip with Engine, LA Release, and Poles
+  controls while keeping the legacy sigma tuning controls visible.
+
+**RT / gate**
+- No allocations in `LimiterEnvelope::process()`; lookahead min output/deque
+  storage is allocated in `prepare()`.
+- Defaults preserve current behavior: Engine `Adaptive`, LA Release `80 ms`,
+  Poles `3`.
+- [x] Release build clean via `cmake --build build` (2026-06-09).
+- [x] AU/VST3 copied to user plug-in folders.
+- [ ] Engine `Adaptive` null/bit-identity check against pre-slice binary.
+- [ ] Engine `Lookahead` audition: no zipper/clicks; LA Release changes speed;
+      Poles changes smoothness without obvious time shift.
+
+---
+
 ## 2026-06-09 — Slice 27: temporary DEV release tuning controls
 
 **Status:** 🔶 Implemented locally; debug build clean; system install blocked
