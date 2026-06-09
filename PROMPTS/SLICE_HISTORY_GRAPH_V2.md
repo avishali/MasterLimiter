@@ -150,6 +150,7 @@ Keep selector styling consistent with the existing `windowSelector_` (same palet
 - **Threshold line:** draw a horizontal line at `levelY(getClipThresholdDbForGraph())` in a **distinct clip color** (e.g. a red `0xff5a4f` — clearly different from the GR orange `warning`). Skip drawing when the getter returns the off-scale sentinel (clipper bypassed) or the value is above the top of the scale. Label it "Clip".
 - **Clipped regions:** for each pixel where `frame.clipDb > 0`, draw a **clip overlay in the same red**: a vertical tick/segment from the top of the graph down proportional to `clipDb` (use a small fixed range, e.g. 0…6 dB → top 0…20% of height), OR a solid red marker band at the top. Make clipped moments unmistakable and distinct from GR.
 - **Default window size:** in `PluginEditor.cpp toggleHistoryGraph()`, bump `centreWithSize(720, 320)` → **`centreWithSize(940, 460)`** and raise the resize-limits max if needed, so there are more pixels for detail.
+- **Always on top:** the graph window currently drops behind the host (Ableton) when focus leaves the plugin. Make it a floating window: in `toggleHistoryGraph()` call **`window->setAlwaysOnTop (true);`** before `setVisible(true)`. It should stay above the DAW until the user closes it.
 
 ---
 
