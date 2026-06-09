@@ -85,6 +85,7 @@ void MasterLimiterAudioProcessorEditor::toggleHistoryGraph()
     window->setResizeLimits (520, 240, 2000, 1000);
     window->setContentOwned (new HistoryGraphComponent (processor_, ui_), true);
     window->centreWithSize (940, 460);
+    window->setAlwaysOnTop (true);
     window->setVisible (true);
     window->toFront (true);
     historyWindow_ = std::move (window);
