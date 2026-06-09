@@ -84,7 +84,7 @@ void MasterLimiterAudioProcessorEditor::toggleHistoryGraph()
     window->setResizable (true, true);
     window->setResizeLimits (520, 240, 2000, 1000);
     window->setContentOwned (new HistoryGraphComponent (processor_, ui_), true);
-    window->centreWithSize (720, 320);
+    window->centreWithSize (940, 460);
     window->setVisible (true);
     window->toFront (true);
     historyWindow_ = std::move (window);
@@ -92,5 +92,11 @@ void MasterLimiterAudioProcessorEditor::toggleHistoryGraph()
 
 void MasterLimiterAudioProcessorEditor::closeHistoryGraphWindow()
 {
-    historyWindow_.reset();
+    // Defer deletion when called from HistoryWindow::closeButtonPressed(), so JUCE can
+    // finish unwinding its internal button callback before the window is destroyed.
+    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MasterLimiterAudioProcessorEditor> (this)]
+    {
+        if (safe != nullptr)
+            safe->historyWindow_.reset();
+    });
 }

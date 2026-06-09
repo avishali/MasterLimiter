@@ -57,6 +57,7 @@ slice or split a follow-up slice.
 | 18 | ✅ **Shipped — Distribution tooling** | — | signing/build scripts/config/docs | Shipped 2026-05-31. Conditional AAX in CMake: SDK-less builds stay `AU;VST3;Standalone`; setting `AAX_SDK_PATH` enables AAX via `juce_set_aax_sdk_path`. Ported macOS sign/notarize, PACE wraptool, build, installer, and release orchestration scripts from AnalyzerPro. Real `scripts/.env` and `scripts/.aax_wraptool.env` stay gitignored; only templates/docs are committed. AAX Product GUID = `75B5E420-5C80-11F1-9221-00505692C25A` (catalog product GUID; verify whether it doubles as the wraptool wrap-config GUID). Manual shipped. |
 | Dev | 🔶 **Implemented — Lookahead release A/B** | `LimiterEnvelope` | 3 dev params + DEV RELEASE strip | Added a temporary `Adaptive`/`Lookahead` release-engine switch. Lookahead mode gates release against the minimum gain visible in the lookahead window and recovers through a fixed-time 2..4 pole cascade. Default remains Adaptive for existing behavior. Release build clean and AU/VST3 installed 2026-06-09; audition picks LA Release + Poles before baking constants and removing dev params for `0.4`. |
 | Dev | 🔶 **Implemented — History graph window** | — | processor history ring + separate graph window | Added a fixed 4096-frame, ~2 ms cadence SPSC metering ring for GR/output/input history plus a non-modal Pro-L-style graph window opened by a header `Graph` button. Release build clean and AU/VST3 installed 2026-06-09; audition pending. |
+| Dev | 🔶 **Implemented — History graph v2** | — | per-sample history capture + graph controls + clip overlay | Upgraded the graph to a 65536-frame, ~0.5 ms cadence ring with per-sample GR/output/input/clip capture, 0.75..30 s windows, level-floor and GR-range selectors, clip threshold/clip markers, larger default window, and clip LED repaint fix. Release build clean, AU/VST3 installed, and AU validation clean 2026-06-09; audition pending. |
 | Beta | **Remaining — signed/notarized beta build** | — | release artifacts | avishali builds AAX with the SDK, registers/signs it with PACE, tests in Pro Tools, then cuts the signed + notarized beta build (VST3 + AU, plus AAX once signed) for the tester. |
 
 Note: Auto-release shipped 2026-05-30 (ADR-0011). The dead-control sweep
@@ -66,9 +67,9 @@ visual look in place, Slice 17 packaged the beta defaults/presets/version, and
 Slice 18 shipped distribution tooling plus the beta manual. A temporary
 lookahead envelope-follower release A/B slice is installed for audition; after
 avishali picks LA Release + Poles, bake constants and remove the dev params for
-`0.4`. A separate history graph window is now implemented for release/time-
-constant audition. Remaining to beta: avishali builds/signs/registers AAX,
-tests in Pro Tools, then cuts the signed + notarized tester build. STFT "Max
+`0.4`. The history graph window has a v2 accuracy/range pass for release/time-
+constant audition. Remaining to beta: avishali builds/signs/registers AAX, tests
+in Pro Tools, then cuts the signed + notarized tester build. STFT "Max
 Transparency" remains the backlog path to fuller Ozone parity if real-world use
 demands it. Slice 6 (saturator) remains backlogged.
 

@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <limits>
+#include <vector>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
@@ -66,6 +67,7 @@ public:
         float grDb = 0.0f;
         float outDb = -120.0f;
         float inDb = -120.0f;
+        float clipDb = 0.0f;
     };
 
     int readHistorySince (uint32_t& inOutCursor, HistoryFrame* out, int maxOut) const noexcept;
@@ -73,6 +75,7 @@ public:
     double getHistorySampleRate() const noexcept;
     int getHistoryFrameSamples() const noexcept { return historyFrameSamples_; }
     float getCeilingDbForGraph() const noexcept;
+    float getClipThresholdDbForGraph() const noexcept;
 
     float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
     float getCurrentGrLDb() const noexcept { return currentGrLDb_.load (std::memory_order_relaxed); }
@@ -247,14 +250,17 @@ private:
     std::atomic<bool> gainCeilingLinkWasEnabled_ { false };
     std::atomic<bool> couplingInProgress_ { false };
 
-    static constexpr int kHistoryRingSize = 4096;
+    static constexpr int kHistoryRingSize = 65536;
     HistoryFrame historyRing_[kHistoryRingSize] {};
     std::atomic<uint32_t> historyWriteIdx_ { 0 };
+    std::vector<float> grEnvBuf_;
+    std::vector<float> clipEnvBuf_;
     int historyFrameSamples_ = 0;
     int historySampleCounter_ = 0;
     float frameMaxGrDb_ = 0.0f;
     float frameMaxOutDb_ = -120.0f;
     float frameMaxInDb_ = -120.0f;
+    float frameMaxClipDb_ = 0.0f;
 
     mdsp_dsp::LoudnessAnalyzer loudness_;
     mdsp_dsp::LoudnessAnalyzer loudnessRef_;

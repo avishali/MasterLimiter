@@ -17,12 +17,11 @@ const juce::Colour textMuted    = juce::Colour::fromRGB (0x8c, 0x97, 0xa6);
 const juce::Colour accent       = juce::Colour::fromRGB (0x33, 0xd2, 0xbe);
 const juce::Colour accentBright = juce::Colour::fromRGB (0x5b, 0xe7, 0xd6);
 const juce::Colour warning      = juce::Colour::fromRGB (0xe8, 0x70, 0x4f);
+const juce::Colour clip         = juce::Colour::fromRGB (0xff, 0x5a, 0x4f);
 } // namespace palette
 
 constexpr float kLevelTopDb = 0.0f;
-constexpr float kLevelBottomDb = -24.0f;
-constexpr float kGrRangeDb = 18.0f;
-constexpr float kDbGrid[] { 0.0f, -3.0f, -6.0f, -9.0f, -12.0f, -18.0f };
+constexpr float kClipOverlayRangeDb = 6.0f;
 
 juce::String formatTimeLabel (double seconds)
 {
@@ -38,26 +37,65 @@ HistoryGraphComponent::HistoryGraphComponent (MasterLimiterAudioProcessor& proce
     : processor_ (processor),
       ui_ (uiContext)
 {
-    windowSelector_.addItem ("1.5 s", 1);
-    windowSelector_.addItem ("3 s", 2);
-    windowSelector_.addItem ("6 s", 3);
-    windowSelector_.setSelectedId (2, juce::dontSendNotification);
-    windowSelector_.setJustificationType (juce::Justification::centred);
-    windowSelector_.setColour (juce::ComboBox::backgroundColourId, palette::control);
-    windowSelector_.setColour (juce::ComboBox::textColourId, palette::text);
-    windowSelector_.setColour (juce::ComboBox::outlineColourId, palette::border);
-    windowSelector_.setColour (juce::ComboBox::focusedOutlineColourId, palette::accent.withAlpha (0.8f));
-    windowSelector_.setColour (juce::ComboBox::arrowColourId, palette::accentBright);
+    styleSelector (windowSelector_);
+    windowSelector_.addItem ("0.75 s", 1);
+    windowSelector_.addItem ("1.5 s", 2);
+    windowSelector_.addItem ("3 s", 3);
+    windowSelector_.addItem ("6 s", 4);
+    windowSelector_.addItem ("10 s", 5);
+    windowSelector_.addItem ("15 s", 6);
+    windowSelector_.addItem ("30 s", 7);
+    windowSelector_.setSelectedId (3, juce::dontSendNotification);
     windowSelector_.onChange = [this]
     {
         switch (windowSelector_.getSelectedId())
         {
-            case 1:  setWindowSeconds (1.5); break;
-            case 3:  setWindowSeconds (6.0); break;
+            case 1:  setWindowSeconds (0.75); break;
+            case 2:  setWindowSeconds (1.5); break;
+            case 4:  setWindowSeconds (6.0); break;
+            case 5:  setWindowSeconds (10.0); break;
+            case 6:  setWindowSeconds (15.0); break;
+            case 7:  setWindowSeconds (30.0); break;
             default: setWindowSeconds (3.0); break;
         }
     };
     addAndMakeVisible (windowSelector_);
+
+    styleSelector (levelRangeSelector_);
+    levelRangeSelector_.addItem ("-24 dB", 1);
+    levelRangeSelector_.addItem ("-36 dB", 2);
+    levelRangeSelector_.addItem ("-48 dB", 3);
+    levelRangeSelector_.addItem ("-60 dB", 4);
+    levelRangeSelector_.setSelectedId (3, juce::dontSendNotification);
+    levelRangeSelector_.onChange = [this]
+    {
+        switch (levelRangeSelector_.getSelectedId())
+        {
+            case 1:  setLevelBottomDb (-24.0f); break;
+            case 2:  setLevelBottomDb (-36.0f); break;
+            case 4:  setLevelBottomDb (-60.0f); break;
+            default: setLevelBottomDb (-48.0f); break;
+        }
+    };
+    addAndMakeVisible (levelRangeSelector_);
+
+    styleSelector (grRangeSelector_);
+    grRangeSelector_.addItem ("6 dB GR", 1);
+    grRangeSelector_.addItem ("12 dB GR", 2);
+    grRangeSelector_.addItem ("18 dB GR", 3);
+    grRangeSelector_.addItem ("24 dB GR", 4);
+    grRangeSelector_.setSelectedId (3, juce::dontSendNotification);
+    grRangeSelector_.onChange = [this]
+    {
+        switch (grRangeSelector_.getSelectedId())
+        {
+            case 1:  setGrRangeDb (6.0f); break;
+            case 2:  setGrRangeDb (12.0f); break;
+            case 4:  setGrRangeDb (24.0f); break;
+            default: setGrRangeDb (18.0f); break;
+        }
+    };
+    addAndMakeVisible (grRangeSelector_);
 
     resetToLive();
     updateVisibleCapacity();
@@ -92,6 +130,28 @@ void HistoryGraphComponent::setWindowSeconds (double seconds)
     windowSeconds_ = seconds;
     updateVisibleCapacity();
     repaint();
+}
+
+void HistoryGraphComponent::setLevelBottomDb (float bottomDb)
+{
+    levelBottomDb_ = bottomDb;
+    repaint();
+}
+
+void HistoryGraphComponent::setGrRangeDb (float rangeDb)
+{
+    grRangeDb_ = rangeDb;
+    repaint();
+}
+
+void HistoryGraphComponent::styleSelector (juce::ComboBox& selector) const
+{
+    selector.setJustificationType (juce::Justification::centred);
+    selector.setColour (juce::ComboBox::backgroundColourId, palette::control);
+    selector.setColour (juce::ComboBox::textColourId, palette::text);
+    selector.setColour (juce::ComboBox::outlineColourId, palette::border);
+    selector.setColour (juce::ComboBox::focusedOutlineColourId, palette::accent.withAlpha (0.8f));
+    selector.setColour (juce::ComboBox::arrowColourId, palette::accentBright);
 }
 
 void HistoryGraphComponent::updateVisibleCapacity()
@@ -156,6 +216,7 @@ HistoryGraphComponent::PixelFrame HistoryGraphComponent::frameForPixel (int x, i
         result.grDb = std::max (result.grDb, frame.grDb);
         result.outDb = std::max (result.outDb, frame.outDb);
         result.inDb = std::max (result.inDb, frame.inDb);
+        result.clipDb = std::max (result.clipDb, frame.clipDb);
         result.valid = true;
     }
 
@@ -165,10 +226,10 @@ HistoryGraphComponent::PixelFrame HistoryGraphComponent::frameForPixel (int x, i
 float HistoryGraphComponent::levelY (float db, juce::Rectangle<float> graph) const noexcept
 {
     if (! std::isfinite (db))
-        db = kLevelBottomDb;
+        db = levelBottomDb_;
 
-    const float clamped = juce::jlimit (kLevelBottomDb, kLevelTopDb, db);
-    const float norm = (kLevelTopDb - clamped) / (kLevelTopDb - kLevelBottomDb);
+    const float clamped = juce::jlimit (levelBottomDb_, kLevelTopDb, db);
+    const float norm = (kLevelTopDb - clamped) / (kLevelTopDb - levelBottomDb_);
     return graph.getY() + norm * graph.getHeight();
 }
 
@@ -177,7 +238,7 @@ float HistoryGraphComponent::grY (float db, juce::Rectangle<float> graph) const 
     if (! std::isfinite (db))
         db = 0.0f;
 
-    const float norm = juce::jlimit (0.0f, 1.0f, db / kGrRangeDb);
+    const float norm = juce::jlimit (0.0f, 1.0f, db / grRangeDb_);
     return graph.getY() + norm * graph.getHeight();
 }
 
@@ -206,7 +267,12 @@ void HistoryGraphComponent::paint (juce::Graphics& g)
 void HistoryGraphComponent::resized()
 {
     auto bounds = getLocalBounds().reduced (18);
-    windowSelector_.setBounds (bounds.removeFromTop (26).removeFromRight (96));
+    auto controls = bounds.removeFromTop (26);
+    windowSelector_.setBounds (controls.removeFromRight (96));
+    controls.removeFromRight (8);
+    levelRangeSelector_.setBounds (controls.removeFromRight (96));
+    controls.removeFromRight (8);
+    grRangeSelector_.setBounds (controls.removeFromRight (104));
 }
 
 void HistoryGraphComponent::drawGrid (juce::Graphics& g, juce::Rectangle<float> graph)
@@ -216,7 +282,8 @@ void HistoryGraphComponent::drawGrid (juce::Graphics& g, juce::Rectangle<float> 
 
     g.setFont (ui_.type().labelFont().withHeight (10.0f));
 
-    for (float db : kDbGrid)
+    const float dbStep = levelBottomDb_ >= -24.0f ? 3.0f : 6.0f;
+    for (float db = 0.0f; db >= levelBottomDb_ - 0.001f; db -= dbStep)
     {
         const float y = levelY (db, graph);
         g.setColour (palette::grid.withAlpha (db == 0.0f ? 0.55f : 0.35f));
@@ -227,17 +294,18 @@ void HistoryGraphComponent::drawGrid (juce::Graphics& g, juce::Rectangle<float> 
                     juce::Justification::centredLeft);
     }
 
-    for (double t = 0.5; t <= windowSeconds_ + 0.001; t += 0.5)
+    const double timeStep = windowSeconds_ <= 6.0 ? 0.5 : (windowSeconds_ <= 15.0 ? 1.0 : 5.0);
+    for (double t = timeStep; t <= windowSeconds_ + 0.001; t += timeStep)
     {
         const float x = graph.getRight() - (float) (t / windowSeconds_) * graph.getWidth();
         if (x < graph.getX() || x > graph.getRight())
             continue;
 
-        const bool fullSecond = std::abs (t - std::round (t)) < 0.01;
-        g.setColour (palette::grid.withAlpha (fullSecond ? 0.42f : 0.24f));
+        const bool labelledTick = timeStep >= 1.0 || std::abs (t - std::round (t)) < 0.01;
+        g.setColour (palette::grid.withAlpha (labelledTick ? 0.42f : 0.24f));
         g.drawVerticalLine ((int) std::round (x), graph.getY(), graph.getBottom());
 
-        if (fullSecond)
+        if (labelledTick)
         {
             g.setColour (palette::textMuted.withAlpha (0.8f));
             g.drawText (formatTimeLabel (t),
@@ -252,6 +320,17 @@ void HistoryGraphComponent::drawGrid (juce::Graphics& g, juce::Rectangle<float> 
     g.drawText ("Ceiling",
                 juce::Rectangle<float> (graph.getRight() - 58.0f, ceilingY - 16.0f, 54.0f, 14.0f),
                 juce::Justification::centredRight);
+
+    const float clipThresholdDb = processor_.getClipThresholdDbForGraph();
+    if (std::isfinite (clipThresholdDb) && clipThresholdDb <= kLevelTopDb && clipThresholdDb >= levelBottomDb_)
+    {
+        const float clipY = levelY (clipThresholdDb, graph);
+        g.setColour (palette::clip.withAlpha (0.85f));
+        g.drawHorizontalLine ((int) std::round (clipY), graph.getX(), graph.getRight());
+        g.drawText ("Clip",
+                    juce::Rectangle<float> (graph.getRight() - 42.0f, clipY + 2.0f, 38.0f, 14.0f),
+                    juce::Justification::centredRight);
+    }
 }
 
 void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float> graph)
@@ -264,9 +343,11 @@ void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float
     juce::Path grFill;
     juce::Path grStroke;
     juce::Path inputLine;
+    juce::Path clipOverlay;
     bool hasOutput = false;
     bool hasGr = false;
     bool hasInput = false;
+    bool hasClip = false;
 
     outputFill.startNewSubPath (left, bottom);
     grFill.startNewSubPath (left, graph.getY());
@@ -307,6 +388,14 @@ void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float
         {
             inputLine.lineTo (px, inY);
         }
+
+        if (frame.clipDb > 0.0f)
+        {
+            const float clipNorm = juce::jlimit (0.0f, 1.0f, frame.clipDb / kClipOverlayRangeDb);
+            const float clipH = juce::jmax (2.0f, graph.getHeight() * 0.20f * clipNorm);
+            clipOverlay.addRectangle (px, graph.getY(), 1.0f, clipH);
+            hasClip = true;
+        }
     }
 
     if (hasOutput)
@@ -325,12 +414,20 @@ void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float
         g.fillPath (grFill);
         g.setColour (palette::warning.withAlpha (0.95f));
         g.strokePath (grStroke, juce::PathStrokeType (1.5f));
+        g.setColour (palette::warning.brighter (0.25f).withAlpha (0.55f));
+        g.strokePath (grStroke, juce::PathStrokeType (1.0f));
     }
 
     if (hasInput)
     {
         g.setColour (palette::text.withAlpha (0.35f));
         g.strokePath (inputLine, juce::PathStrokeType (1.0f));
+    }
+
+    if (hasClip)
+    {
+        g.setColour (palette::clip.withAlpha (0.78f));
+        g.fillPath (clipOverlay);
     }
 
     if (! hasOutput && ! hasGr && ! hasInput)

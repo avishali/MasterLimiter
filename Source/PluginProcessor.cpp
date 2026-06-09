@@ -331,6 +331,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     dryScratch_.setSize (2, std::max (samplesPerBlock, 4096), false, false, true);
     dryScratch_.clear();
+    grEnvBuf_.assign ((size_t) samplesPerBlock, 1.0f);
+    clipEnvBuf_.assign ((size_t) samplesPerBlock, 0.0f);
 
     bypassFade_.reset (sampleRate, 5.0e-3);
     bypassFade_.setCurrentAndTargetValue (0.0f);
@@ -338,11 +340,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     dryCompGainDbSmoothed_ = 0.0f;
     dryCompGainDbMirror_.store (0.0f, std::memory_order_relaxed);
 
-    historyFrameSamples_ = juce::jmax (1, static_cast<int> (std::llround (sampleRate * 0.002)));
+    historyFrameSamples_ = juce::jmax (1, static_cast<int> (std::llround (sampleRate * 0.0005)));
     historySampleCounter_ = 0;
     frameMaxGrDb_ = 0.0f;
     frameMaxOutDb_ = -120.0f;
     frameMaxInDb_ = -120.0f;
+    frameMaxClipDb_ = 0.0f;
     historyWriteIdx_.store (0, std::memory_order_release);
 
     msInL_ = 0.0f;
@@ -392,6 +395,15 @@ double MasterLimiterAudioProcessor::getHistorySampleRate() const noexcept
 float MasterLimiterAudioProcessor::getCeilingDbForGraph() const noexcept
 {
     return ceilingDbParam_ != nullptr ? ceilingDbParam_->get() : -1.0f;
+}
+
+float MasterLimiterAudioProcessor::getClipThresholdDbForGraph() const noexcept
+{
+    const bool clipperEnabled = clipperActive_ != nullptr && clipperActive_->get();
+    if (! clipperEnabled || clipperDriveDb_ == nullptr)
+        return 1.0e9f;
+
+    return clipperDriveDb_->load (std::memory_order_relaxed);
 }
 
 void MasterLimiterAudioProcessor::cacheGainCeilingLinkParameters()
@@ -666,11 +678,14 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     if (nch <= 0)
         return;
 
-    if (dryScratch_.getNumSamples() < n)
+    if (dryScratch_.getNumSamples() < n || (int) grEnvBuf_.size() < n || (int) clipEnvBuf_.size() < n)
     {
         jassertfalse;
         return;
     }
+
+    std::fill_n (grEnvBuf_.data(), n, 1.0f);
+    std::fill_n (clipEnvBuf_.data(), n, 0.0f);
 
     const bool wantBypass = forceBypass || pluginBypass_->get();
     bypassFade_.setTargetValue (wantBypass ? 1.0f : 0.0f);
@@ -755,6 +770,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             for (int i = 0; i < osN; ++i)
             {
                 const float clipperDriveGain = clipperDriveSmoothed_.getNextValue();
+                const int hostIdx = juce::jmin (n - 1, i * n / osN);
                 for (int ch = 0; ch < nch; ++ch)
                 {
                     auto* d = osBlock.getChannelPointer ((size_t) ch);
@@ -783,6 +799,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                         const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
                         if (attDb < maxAttenuationDb)
                             maxAttenuationDb = attDb;
+                        if (attDb < 0.0f)
+                            clipEnvBuf_[(size_t) hostIdx] = std::max (clipEnvBuf_[(size_t) hostIdx], -attDb);
                     }
 
                     if (clipperDriveGain > 0.0f)
@@ -1001,6 +1019,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             for (int i = 0; i < osN; ++i)
             {
                 const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
+                const int hostIdx = juce::jmin (n - 1, i * n / osN);
                 for (int ch = 0; ch < nch; ++ch)
                 {
                     const auto* bandLimited = bandLimitedBuf_.getReadPointer (ch);
@@ -1014,6 +1033,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                         minTotalL = std::min (minTotalL, totalGain);
                     else
                         minTotalR = std::min (minTotalR, totalGain);
+
+                    grEnvBuf_[(size_t) hostIdx] = std::min (grEnvBuf_[(size_t) hostIdx], totalGain);
                 }
             }
         }
@@ -1044,8 +1065,12 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                 outR[i] *= ceilingLin;
 
                 const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
-                minTotalL = std::min (minTotalL, gDeepBand * gainWideL[i] * msSafetyGain);
-                minTotalR = std::min (minTotalR, gDeepBand * gainWideR[i] * msSafetyGain);
+                const float totalGainL = gDeepBand * gainWideL[i] * msSafetyGain;
+                const float totalGainR = gDeepBand * gainWideR[i] * msSafetyGain;
+                const int hostIdx = juce::jmin (n - 1, i * n / osN);
+                minTotalL = std::min (minTotalL, totalGainL);
+                minTotalR = std::min (minTotalR, totalGainR);
+                grEnvBuf_[(size_t) hostIdx] = std::min (grEnvBuf_[(size_t) hostIdx], std::min (totalGainL, totalGainR));
             }
         }
 
@@ -1126,27 +1151,33 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         outputRmsLDb_.store (rmsDbFromMeanSquare (msOutL_), std::memory_order_relaxed);
         outputRmsRDb_.store (rmsDbFromMeanSquare (msOutR_), std::memory_order_relaxed);
 
-        const float blkGrDb = std::max (currentGrLDb_.load (std::memory_order_relaxed),
-                                        currentGrRDb_.load (std::memory_order_relaxed));
-        const float blkOutDb = std::max (outLdb, outRdb);
-        const float blkInDb = std::max (inputPeakLDb_.load (std::memory_order_relaxed),
-                                       inputPeakRDb_.load (std::memory_order_relaxed));
+        const float* outL = buffer.getReadPointer (0);
+        const float* outR = nch > 1 ? buffer.getReadPointer (1) : outL;
+        const float* dryL = dryScratch_.getReadPointer (0);
+        const float* dryR = nch > 1 ? dryScratch_.getReadPointer (1) : dryL;
 
         for (int i = 0; i < n; ++i)
         {
-            frameMaxGrDb_ = std::max (frameMaxGrDb_, blkGrDb);
-            frameMaxOutDb_ = std::max (frameMaxOutDb_, blkOutDb);
-            frameMaxInDb_ = std::max (frameMaxInDb_, blkInDb);
+            const float outDb = juce::Decibels::gainToDecibels (std::max (std::abs (outL[i]), std::abs (outR[i])), -120.0f);
+            const float inDb = juce::Decibels::gainToDecibels (std::max (std::abs (dryL[i]), std::abs (dryR[i])), -120.0f);
+            const float grDb = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (grEnvBuf_[(size_t) i], -120.0f));
+            const float clipDb = clipEnvBuf_[(size_t) i];
+
+            frameMaxGrDb_ = std::max (frameMaxGrDb_, grDb);
+            frameMaxOutDb_ = std::max (frameMaxOutDb_, outDb);
+            frameMaxInDb_ = std::max (frameMaxInDb_, inDb);
+            frameMaxClipDb_ = std::max (frameMaxClipDb_, clipDb);
 
             if (++historySampleCounter_ >= historyFrameSamples_)
             {
                 const uint32_t w = historyWriteIdx_.load (std::memory_order_relaxed);
-                historyRing_[w & static_cast<uint32_t> (kHistoryRingSize - 1)] = { frameMaxGrDb_, frameMaxOutDb_, frameMaxInDb_ };
+                historyRing_[w & static_cast<uint32_t> (kHistoryRingSize - 1)] = { frameMaxGrDb_, frameMaxOutDb_, frameMaxInDb_, frameMaxClipDb_ };
                 historyWriteIdx_.store (w + 1, std::memory_order_release);
                 historySampleCounter_ = 0;
                 frameMaxGrDb_ = 0.0f;
                 frameMaxOutDb_ = -120.0f;
                 frameMaxInDb_ = -120.0f;
+                frameMaxClipDb_ = 0.0f;
             }
         }
 

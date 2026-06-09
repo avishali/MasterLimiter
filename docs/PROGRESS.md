@@ -2,6 +2,58 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-09 — Slice: history graph v2
+
+**Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed; AU
+validation clean. Audition pending.
+Improves graph accuracy and audition ergonomics: per-sample capture, longer
+windows, selectable vertical ranges, clip threshold/overlay, and the clip LED
+repaint fix.
+
+**Retrieval log**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`.
+- QUERIES ISSUED: MasterLimiter processor/history graph/main view/editor/doc
+  lookup; JUCE `AudioBuffer`, `Decibels`, `ComboBox`; shared DSP
+  `history graph ring buffer clip overlay gain reduction envelope metering`.
+- FILES RETRIEVED: `PluginProcessor.{h,cpp}`,
+  `HistoryGraphComponent.{h,cpp}`, `PluginEditor.cpp`, `MainView.cpp`,
+  `docs/SIGNAL_FLOW.md`, `docs/PROGRESS.md`, `PROMPTS/PLAN.md`, and
+  `PROMPTS/SLICE_HISTORY_GRAPH_V2.md`.
+- SECTIONS CITED: `processCore()` clipper and gain-apply loops, history frame
+  accumulator tail, `HistoryGraphComponent` selectors/rendering, `MainView`
+  clip LED paint/sync paths, and `PluginEditor::toggleHistoryGraph()`.
+- REUSE CHECK: reused existing product clipper/limiter per-sample values and
+  the product-local history component. I checked the local library but found no
+  existing implementation for the requested history graph ring/clip overlay, so
+  I extended the product-local graph path.
+
+**Deliverables**
+- History frames now carry `clipDb`, use a 65536-frame ring, and publish at
+  ~0.5 ms cadence.
+- `processCore()` fills preallocated per-host-sample GR and clip scratch from
+  the existing clipper and limiter gain loops, then writes per-sample-derived
+  input/output/GR/clip maxima into history frames.
+- Graph controls now include 0.75/1.5/3/6/10/15/30 s windows, level floors
+  -24/-36/-48/-60 dB, and 6/12/18/24 dB GR ranges.
+- Graph renders a clip threshold line and red clip activity markers, and the
+  default graph window opens larger.
+- Clip LED repaint invalidation now includes the LED region outside the meter
+  strip.
+- History window close deletion remains deferred with `MessageManager::callAsync`
+  and `SafePointer`.
+
+**RT / gate**
+- Audio-thread storage for per-sample GR/clip scratch is allocated in
+  `prepareToPlay()`; process-time work is fill/max/min/math and history
+  store-release, with no locks or allocations added to the callback.
+- [x] Release build clean via `cmake --build build` (2026-06-09).
+- [x] AU/VST3 copied to user plug-in folders.
+- [x] AU validation clean via `auval -v aufx MaLm Melc`.
+- [ ] Audition: smoother traces, range selectors, 30 s window, clip threshold
+      line/markers, and clip LED flashing.
+
+---
+
 ## 2026-06-09 — Slice: history graph window
 
 **Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed for

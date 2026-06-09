@@ -1552,9 +1552,12 @@ void MainView::syncMetersFromProcessor()
     const float clipDb = processor_.getCurrentClipDb();
     const float maxClipDb = processor_.getMaxClipSinceResetDb();
     master_limiter_ui::processClipReadout (*clipBallistics_, clipDb, dt);
+    const float prevLed = clipLedLevel_;
     clipLedLevel_ = master_limiter_ui::processClipLed (*clipBallistics_, clipDb > 0.0f, dt);
     lblClipperReadout_.setText (formatClipReadout (master_limiter_ui::getClipReadoutCurrent (*clipBallistics_), maxClipDb), juce::dontSendNotification);
     repaint (lblClipperReadout_.getBounds().expanded (12, 2));
+    if (clipLedLevel_ > 0.001f || prevLed > 0.001f)
+        repaint (lblClipperDrive_.getBounds().removeFromRight (12));
 
 }
 

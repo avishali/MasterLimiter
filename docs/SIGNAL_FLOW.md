@@ -163,7 +163,7 @@ Live, RT-safe tuning knobs in the orange "DEV RELEASE" strip. They drive the rel
 ---
 
 ## 7. Metering taps (what's measured where — read this before the history graph)
-Most metering is **instantaneous scalar atomics** written by the audio thread and read by the UI at **30 Hz** (`PluginEditor` timer → `MainView::syncMetersFromProcessor`). The history graph additionally drains a lock-free SPSC ring of ~2 ms frames (`grDb`, `outDb`, `inDb`) from the processor on the UI thread.
+Most metering is **instantaneous scalar atomics** written by the audio thread and read by the UI at **30 Hz** (`PluginEditor` timer → `MainView::syncMetersFromProcessor`). The history graph additionally drains a lock-free SPSC ring of ~0.5 ms frames (`grDb`, `outDb`, `inDb`, `clipDb`) captured from per-sample GR/clip envelopes and sample values.
 
 | Quantity | Atomic(s) | Tapped at step |
 |---|---|---|
@@ -180,4 +180,4 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 2. **Multiband true-peak leak:** at Color 100 + TruePeak, output TP can leak to ~−0.4 (over ceiling). Root cause = 4× OS headroom. Grouped with harmonic aliasing in the "OS-quality" slice (raise OS to 8×+ and/or proper ISP control).
 3. **Color intermediate (0<x<100):** low end dips from phase cancellation between the full-band and allpass-split paths; endpoints (0/100) are clean. Fix = linear-phase complementary crossover (adds latency).
 4. **DEV params** are shipping in the beta build — must be removed for 0.4.
-5. **Metering history depth** — history graph storage is fixed at 4096 frames; extend only if a future UI window needs more than the current max view.
+5. **Metering history depth** — history graph storage is fixed at 65536 frames for the 30 s max view; extend only if a future UI window needs more.
