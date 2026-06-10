@@ -1,21 +1,75 @@
-# MasterLimiter 0.3.1-beta
+MasterLimiter 0.3.1-beta
+========================
 
-A mastering maximizer — early tuning beta. This build exposes extra **DEV controls** so testers can help voice the attack/release. See the included **Beta Tester Guide** for the full workflow.
+A mastering maximizer — early TUNING beta. This build exposes extra "DEV"
+controls so you can help voice the attack/release. Your job: find voicings you
+like, SAVE them as presets, and email the preset files back.
 
-## What's in this build
-- **New lookahead-follower release** (smoother, program-dependent) — selectable in the DEV window vs the legacy adaptive release.
-- **History Graph** window — see gain-reduction over time while you tune.
-- **DEV tuning window** — Attack, Lookahead (Band/Wide), Release (Time/Poles), all grouped by section.
-- **User presets** — save/load named voicings; **A/B** compare two settings instantly.
-- Trimmed lookahead (max 6 ms) → lower latency (~14 ms).
-- All four formats: **AU, VST3, AAX (Pro Tools), Standalone** — universal (Apple Silicon + Intel), signed & notarized.
+Install
+-------
+- macOS, Apple Silicon + Intel (universal). Formats: AU, VST3, AAX (Pro Tools), Standalone.
+- Run the installer (signed + notarized). Rescan plugins in your DAW if needed.
+- Shows as: MelechDSP -> MasterLimiter.
+- ~14 ms latency (lookahead) — your DAW compensates automatically.
 
-## How to help
-Tune a voicing you like (Engine = Lookahead, then sweep Attack / LA Band-Wide / LA Release / Poles), **save it as a preset**, and email the `.mlpreset` files back. Each preset captures the complete setting.
+What's new in this build
+------------------------
+- New lookahead-follower release (smoother, program-dependent) — selectable in the DEV window.
+- History Graph window — see gain-reduction over time while you tune.
+- DEV tuning window — Attack, Lookahead (Band/Wide), Release (Time/Poles), grouped by section.
+- User presets — save/load named voicings; A/B compare two settings instantly.
+- Lower latency, all four formats signed.
 
-## Known beta notes
+60-second mental model
+----------------------
+Audio in -> optional Clipper -> Input Gain (drives the limiting) -> 2-band
+limiter -> Ceiling (output level) -> true-peak safety. The Color knob morphs
+from transparent (0%) to punchy multiband (100%).
+To make it work: raise Input Gain until you see gain reduction; set Ceiling to
+your target (e.g. -1 dB).
+
+Your mission: voice the attack & release
+----------------------------------------
+1. Open the History Graph (top bar) so you can SEE the gain reduction.
+2. Open the DEV window (top bar). In RELEASE - Engine, set Engine = Lookahead.
+3. Push Input Gain so the limiter does ~3-6 dB on real music.
+4. Sweep these while listening AND watching the GR trace:
+   - DEV -> ATTACK: how fast transients are caught (short = punchier; capped by Lookahead).
+   - DEV -> LOOKAHEAD -> Band / Wide (0-6 ms): how far ahead it sees.
+   - DEV -> RELEASE - Lookahead -> Time + Poles: release speed (Time) and smoothness (Poles 2/3/4).
+5. Try several sources (drums, full mix, vocal, bass-heavy).
+
+What we're chasing: maximum loudness that stays CLEAN and natural — no pumping,
+no dulled transients, no audible "breathing" on release. Loud AND transparent = the win.
+(The Adaptive-engine, band-scaling, and sustain controls are secondary — ignore unless curious.
+Character is intentionally inactive while attack is tuned via the DEV knob.)
+
+Save the voicings you like — and send them back (IMPORTANT)
+----------------------------------------------------------
+When you find a setting you like:
+1. Top-bar Presets menu -> "Save current as..." -> name it (e.g. "Punchy drums").
+2. Use the A / B buttons to compare two voicings (set one, hit A->B to copy, tweak, flip A/B).
+
+Send me the preset files. They live here:
+   ~/Library/Audio/Presets/MelechDSP/MasterLimiter/
+(Finder -> Go -> Go to Folder -> paste that path.)
+Email me the .mlpreset files for the voicings you liked. Each captures the
+COMPLETE setting, so I get exactly what you heard.
+
+Feedback that helps most
+------------------------
+With each preset, a few words:
+- Source/genre it was for.
+- Loud enough? Too aggressive or too soft?
+- Any pumping, breathing, or dulled transients? Where?
+- vs your usual limiter (Pro-L, Ozone, L2) at matched loudness?
+- Anything that sounded wrong (distortion, clicks, weird stereo).
+
+Known beta notes
+----------------
 - DEV controls are temporary (they'll be baked into simpler controls for release).
-- Character is intentionally inactive while attack is tuned via the DEV knob.
-- Intermediate Color (between 0% and 100%) can shift the low end slightly — known, being reworked.
+- At intermediate Color (between 0 and 100%) the low end can shift slightly — known, being reworked. Endpoints (0/100) are clean.
+- It's a beta — save your DAW session often; report any crash with what you were doing.
 
-Thanks for testing — your ears are shaping this. 🎚️
+Thanks — your ears are doing real work here. Send the .mlpreset files + notes.
+— avishali / MelechDSP
