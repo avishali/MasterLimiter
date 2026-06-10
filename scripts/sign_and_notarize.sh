@@ -21,7 +21,7 @@ TEAM_ID="${TEAM_ID:-C5UC779LGC}"
 NOTARYTOOL_KEYCHAIN_PROFILE="${NOTARYTOOL_KEYCHAIN_PROFILE:-AC_PASSWORD}"
 
 PLUGIN_NAME="${PLUGIN_NAME:-MasterLimiter}"
-PLUGIN_VERSION="${PLUGIN_VERSION:-0.3.0}"
+PLUGIN_VERSION="${PLUGIN_VERSION:-0.3.1}"
 BUILD_DIR="${MASTERLIMITER_RELEASE_BUILD_DIR:-${BUILD_DIR:-build-release}}"
 CONFIG="${CONFIG:-Release}"
 ARTIFACTS_DIR="${BUILD_DIR}/${PLUGIN_NAME}_artefacts/${CONFIG}"
@@ -53,7 +53,6 @@ sign_bundle() {
   local bundle_path="$1"
   local entitlements="${2:-}"
   local bundle_name
-  local entitlements_args=()
 
   bundle_name="$(basename "$bundle_path")"
 
@@ -62,16 +61,23 @@ sign_bundle() {
       echo "ERROR: Entitlements file not found: $entitlements"
       exit 1
     fi
-    entitlements_args=(--entitlements "$entitlements")
   fi
 
   echo "Signing: $bundle_name"
-  codesign --deep --force --verify --verbose \
-    --sign "$DEVELOPER_ID_APP" \
-    --options runtime \
-    --timestamp \
-    "${entitlements_args[@]}" \
-    "$bundle_path"
+  if [[ -n "$entitlements" ]]; then
+    codesign --deep --force --verify --verbose \
+      --sign "$DEVELOPER_ID_APP" \
+      --options runtime \
+      --timestamp \
+      --entitlements "$entitlements" \
+      "$bundle_path"
+  else
+    codesign --deep --force --verify --verbose \
+      --sign "$DEVELOPER_ID_APP" \
+      --options runtime \
+      --timestamp \
+      "$bundle_path"
+  fi
 
   codesign --verify --deep --strict --verbose=2 "$bundle_path"
   spctl --assess --verbose=4 --type install "$bundle_path" 2>&1 | sed -n '1,3p' || true

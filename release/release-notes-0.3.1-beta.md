@@ -1,4 +1,4 @@
-# MasterLimiter 0.3.0-beta
+# MasterLimiter 0.3.1-beta
 
 A mastering maximizer — early tuning beta. This build exposes extra **DEV controls** so testers can help voice the attack/release. See the included **Beta Tester Guide** for the full workflow.
 

@@ -16,7 +16,7 @@ BUILD_DIR="${MASTERLIMITER_RELEASE_BUILD_DIR:-build-release}"
 CONFIG="Release"
 
 PLUGIN_NAME="MasterLimiter"
-PLUGIN_VERSION="0.3.0"
+PLUGIN_VERSION="0.3.1"
 COMPANY_NAME="MelechDSP"
 
 echo "=========================================="
