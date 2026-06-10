@@ -7,7 +7,7 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pedalboard import load_plugin
 
-VST3 = "/Library/Audio/Plug-Ins/VST3/MasterLimiter.vst3"
+VST3 = "/Users/avishaylidani/Library/Audio/Plug-Ins/Components/MasterLimiter.component"
 SR, DUR, F0, F1 = 48000, 6.0, 20.0, 24000.0
 OUT = os.path.dirname(__file__) + "/out"; os.makedirs(OUT, exist_ok=True)
 

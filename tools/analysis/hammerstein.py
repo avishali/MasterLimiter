@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from pedalboard import load_plugin
 from scipy.signal import fftconvolve
 
-VST3 = "/Library/Audio/Plug-Ins/VST3/MasterLimiter.vst3"
+VST3 = "/Users/avishaylidani/Library/Audio/Plug-Ins/Components/MasterLimiter.component"
 SR, DUR = 48000, 4.0
 OUT = os.path.dirname(__file__) + "/out"; os.makedirs(OUT, exist_ok=True)
 bh = lambda N: (0.35875 - 0.48829*np.cos(2*np.pi*np.arange(N)/N)
