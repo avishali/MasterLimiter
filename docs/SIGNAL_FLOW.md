@@ -128,7 +128,7 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 | Gain/Ceiling Link | `gain_ceiling_link` | bool | off | Move gain & ceiling together. |
 | Auto/Track gain-match | `gain_match_auto` | bool | off | Loudness-match output to reference. |
 | Release | `release_ms` | 1…1000 ms | 30 | Manual release (only when Auto off). |
-| Release Sustain Ratio | `release_sustain_ratio` | 1…10 | 4 | Slow/fast split in Clean mode; exposed in the DEV strip for manual-release audition. |
+| Release Sustain Ratio | `release_sustain_ratio` | 1…10 | 4 | Slow/fast split in Clean mode; exposed in the DEV window for manual-release audition. |
 | Release Auto | `release_auto` | Off/Auto | Off | Program-dependent release. |
 | Auto Release | `auto_release_mode` | Transparent/Balanced/Reactive | Transparent | Picks the timing table (§4.3). |
 | Ceiling Mode | `ceiling_mode` | SamplePeak/TruePeak | SamplePeak | Final brickwall mode. |
@@ -147,7 +147,17 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 ---
 
 ## 6. DEV controls (TEMPORARY — remove before 0.4)
-Live, RT-safe tuning knobs in the orange "DEV RELEASE" strip. They drive release/lookahead/attack voicing experiments; defaults reproduce the baked constants where applicable.
+Live, RT-safe tuning knobs now live in the separate header **DEV** window, grouped by operating section. They drive release/lookahead/attack voicing experiments; defaults reproduce the baked constants where applicable. The main view intentionally has no inline DEV strip.
+
+| Window section | Controls |
+|---|---|
+| ATTACK | `dev_attack_ms` |
+| LOOKAHEAD | `dev_lookahead_band_ms`, `dev_lookahead_wide_ms` |
+| RELEASE · Engine | `dev_release_engine` |
+| RELEASE · Lookahead engine | `dev_la_release_ms`, `dev_la_release_poles` |
+| RELEASE · Adaptive engine | `dev_sigma_attack_ms`, `dev_sigma_decay_scale` |
+| RELEASE · Band scaling | `dev_low_band_release_scale`, `dev_high_band_release_scale` |
+| RELEASE · Manual | `release_sustain_ratio` |
 
 | DEV control | ID | Range | Default | Drives | Notes |
 |---|---|---|---|---|---|

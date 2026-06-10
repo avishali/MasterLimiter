@@ -29,6 +29,8 @@ private:
     void timerCallback() override;
     void toggleHistoryGraph();
     void closeHistoryGraphWindow();
+    void toggleDevControls();
+    void closeDevControlsWindow();
 
     class HistoryWindow : public juce::DocumentWindow
     {
@@ -42,12 +44,25 @@ private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HistoryWindow)
     };
 
+    class DevWindow : public juce::DocumentWindow
+    {
+    public:
+        explicit DevWindow (juce::Colour backgroundColour);
+        void closeButtonPressed() override;
+
+        std::function<void()> onClose;
+
+    private:
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DevWindow)
+    };
+
     mdsp_ui::UiContext ui_;
     MasterLimiterLookAndFeel lnf_;
     juce::ComponentBoundsConstrainer constrainer_;
     MasterLimiterAudioProcessor& processor_;
     MainView mainView;
     std::unique_ptr<HistoryWindow> historyWindow_;
+    std::unique_ptr<DevWindow> devWindow_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterLimiterAudioProcessorEditor)
 };

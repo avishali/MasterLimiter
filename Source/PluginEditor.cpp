@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ui/DevControlsComponent.h"
 #include "ui/HistoryGraphComponent.h"
 #include "util/PlatformOcclusion.h"
 
@@ -13,6 +14,20 @@ MasterLimiterAudioProcessorEditor::HistoryWindow::HistoryWindow (juce::Colour ba
 }
 
 void MasterLimiterAudioProcessorEditor::HistoryWindow::closeButtonPressed()
+{
+    if (onClose)
+        onClose();
+}
+
+MasterLimiterAudioProcessorEditor::DevWindow::DevWindow (juce::Colour backgroundColour)
+    : juce::DocumentWindow ("MasterLimiter DEV Controls",
+                            backgroundColour,
+                            juce::DocumentWindow::closeButton | juce::DocumentWindow::minimiseButton)
+{
+    setUsingNativeTitleBar (true);
+}
+
+void MasterLimiterAudioProcessorEditor::DevWindow::closeButtonPressed()
 {
     if (onClose)
         onClose();
@@ -35,6 +50,7 @@ MasterLimiterAudioProcessorEditor::MasterLimiterAudioProcessorEditor (MasterLimi
 
     addAndMakeVisible (mainView);
     mainView.onToggleHistoryGraph = [this] { toggleHistoryGraph(); };
+    mainView.onToggleDevControls = [this] { toggleDevControls(); };
 
     setResizable (true, true);
     setSize (1100, 620);
@@ -44,6 +60,7 @@ MasterLimiterAudioProcessorEditor::MasterLimiterAudioProcessorEditor (MasterLimi
 
 MasterLimiterAudioProcessorEditor::~MasterLimiterAudioProcessorEditor()
 {
+    devWindow_.reset();
     historyWindow_.reset();
     stopTimer();
     juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
@@ -99,5 +116,36 @@ void MasterLimiterAudioProcessorEditor::closeHistoryGraphWindow()
     {
         if (safe != nullptr)
             safe->historyWindow_.reset();
+    });
+}
+
+void MasterLimiterAudioProcessorEditor::toggleDevControls()
+{
+    if (devWindow_ != nullptr)
+    {
+        closeDevControlsWindow();
+        return;
+    }
+
+    auto window = std::make_unique<DevWindow> (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    window->onClose = [this] { closeDevControlsWindow(); };
+    window->setResizable (true, true);
+    window->setResizeLimits (420, 420, 900, 1000);
+    window->setContentOwned (new DevControlsComponent (processor_, ui_), true);
+    window->centreWithSize (520, 560);
+    window->setAlwaysOnTop (true);
+    window->setVisible (true);
+    window->toFront (true);
+    devWindow_ = std::move (window);
+}
+
+void MasterLimiterAudioProcessorEditor::closeDevControlsWindow()
+{
+    // Defer deletion when called from DevWindow::closeButtonPressed(), so JUCE can
+    // finish unwinding its internal button callback before the window is destroyed.
+    juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MasterLimiterAudioProcessorEditor> (this)]
+    {
+        if (safe != nullptr)
+            safe->devWindow_.reset();
     });
 }

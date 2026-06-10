@@ -30,6 +30,7 @@ public:
     void resetPeakHolds();
 
     std::function<void()> onToggleHistoryGraph;
+    std::function<void()> onToggleDevControls;
 
 private:
     static constexpr const char* kPlaceholderTooltip = "Placeholder - wired in a later slice.";
@@ -89,7 +90,6 @@ private:
     };
 
     void styleRotary (ValueSlider& s) const;
-    void styleDevTuningSlider (ValueSlider& s) const;
     void styleIoTrimFader (ValueSlider& s) const;
     void setupValueEdit (ValueSlider& s, ValueSlider::ValueLabelMode mode);
     void beginValueEdit (ValueSlider& s);
@@ -103,8 +103,6 @@ private:
     void updateClipperActiveState();
     void updateCharacterModeControl (int characterIdx);
     void updateAutoReleaseModeControl (int modeIdx);
-    void updateDevReleaseEngineControl (int engineIdx);
-    void updateDevLaReleasePolesControl (int polesIdx);
     void updateReleaseAutoControls (bool forceRepaint = false);
     void updateLimiterActiveState();
     void updateBypassButtonState();
@@ -140,7 +138,6 @@ private:
     juce::Rectangle<int> maximizerPanelArea_;
     juce::Rectangle<int> ioPanelArea_;
     juce::Rectangle<int> footerArea_;
-    juce::Rectangle<int> devReleasePanelArea_;
     juce::Rectangle<int> gainMatchLabelArea_;
     juce::Rectangle<int> meterScaleColumnArea_;
 
@@ -184,30 +181,6 @@ private:
     juce::Label lblCharacter_ { {}, "Character" };
     SegmentedChoice segCharacter_;
 
-    juce::Label lblDevReleaseTuning_ { {}, "DEV RELEASE - TEMP" };
-    juce::Label lblDevReleaseEngine_ { {}, "Engine" };
-    SegmentedChoice segDevReleaseEngine_;
-    juce::Label lblDevLaReleaseMs_ { {}, "LA Release" };
-    ValueSlider sldDevLaReleaseMs_;
-    juce::Label lblDevLaReleasePoles_ { {}, "Poles" };
-    SegmentedChoice segDevLaReleasePoles_;
-    juce::Label lblDevLowBandReleaseScale_ { {}, "Low x" };
-    ValueSlider sldDevLowBandReleaseScale_;
-    juce::Label lblDevHighBandReleaseScale_ { {}, "High/Wide x" };
-    ValueSlider sldDevHighBandReleaseScale_;
-    juce::Label lblDevSigmaAttackMs_ { {}, "Sigma Atk" };
-    ValueSlider sldDevSigmaAttackMs_;
-    juce::Label lblDevSigmaDecayScale_ { {}, "Sigma Decay x" };
-    ValueSlider sldDevSigmaDecayScale_;
-    juce::Label lblDevAttackMs_ { {}, "Attack" };
-    ValueSlider sldDevAttackMs_;
-    juce::Label lblDevLookaheadBandMs_ { {}, "LA Band" };
-    ValueSlider sldDevLookaheadBandMs_;
-    juce::Label lblDevLookaheadWideMs_ { {}, "LA Wide" };
-    ValueSlider sldDevLookaheadWideMs_;
-    juce::Label lblDevSustainRatio_ { {}, "Sustain" };
-    ValueSlider sldDevSustainRatio_;
-
     juce::ToggleButton btnGainMatchAutoTrack_ { "Auto / Track" };
     juce::Label lblGainMatchNote_ { {}, "+0.0 dB" };
     CompensationBar compGainBar_;
@@ -240,6 +213,7 @@ private:
     juce::Label lblMeterScaleRange_ { {}, "Full" };
 
     juce::TextButton btnBypass_ { "Bypass" };
+    juce::TextButton btnDev_ { "DEV" };
     juce::TextButton btnHistory_ { "Graph" };
     juce::TextButton btnResetPeaks_ { "Reset peaks" };
 
@@ -252,8 +226,6 @@ private:
     int lastClipperModeIdx_ { -1 };
     int lastCharacterModeIdx_ { -1 };
     int lastAutoReleaseModeIdx_ { -1 };
-    int lastDevReleaseEngineIdx_ { -1 };
-    int lastDevLaReleasePolesIdx_ { -1 };
     bool ignoreNextEditorClickAway_ { false };
     ValueSlider* editingSlider_ { nullptr };
     juce::TextEditor valueEditor_ { "Value Entry" };
@@ -275,17 +247,6 @@ private:
     std::unique_ptr<juce::ParameterAttachment> attAutoReleaseMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;
-    std::unique_ptr<juce::ParameterAttachment> attDevReleaseEngine_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLaReleaseMs_;
-    std::unique_ptr<juce::ParameterAttachment> attDevLaReleasePoles_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLowBandReleaseScale_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevHighBandReleaseScale_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSigmaAttackMs_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSigmaDecayScale_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevAttackMs_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLookaheadBandMs_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevLookaheadWideMs_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attDevSustainRatio_;
     std::unique_ptr<juce::ParameterAttachment> attCharacter_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;

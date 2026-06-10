@@ -2,6 +2,50 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-10 — Slice: DEV controls window
+
+**Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed
+including system VST3; AU validation clean. Audition pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`,
+  local file reads/search.
+- QUERIES ISSUED: MasterLimiter `PluginEditor`/`MainView`/History Graph path
+  lookup; JUCE `DocumentWindow`; JUCE `AudioProcessorValueTreeState::SliderAttachment`;
+  shared DSP `DEV controls UI APVTS slider attachment window`.
+- FILES RETRIEVED: `PROMPTS/SLICE_DEV_WINDOW.md`,
+  `Source/PluginEditor.{h,cpp}`, `Source/ui/MainView.{h,cpp}`,
+  `Source/ui/HistoryGraphComponent.{h,cpp}`, `CMakeLists.txt`,
+  `docs/SIGNAL_FLOW.md`, `docs/PROGRESS.md`, and `PROMPTS/PLAN.md`.
+- SECTIONS CITED: History Graph editor-owned `DocumentWindow` plumbing and
+  deferred close pattern, old `MainView` DEV strip attachment/layout, and
+  `SIGNAL_FLOW.md` §6 DEV controls.
+- REUSE CHECK: reused the existing History Graph window ownership/deferred-close
+  pattern and all existing APVTS parameters. I checked the local library but
+  found no DSP implementation to reuse because this slice is UI-only.
+
+**Deliverables**
+- Added `DevControlsComponent`, a self-contained scrollable component grouping
+  all temporary DEV controls by section: Attack, Lookahead, Release Engine,
+  Lookahead engine, Adaptive engine, Band scaling, and Manual.
+- Moved DEV sliders/combos and their APVTS attachments out of `MainView`; the
+  main view now has no inline orange DEV strip.
+- Added a header `DEV` button and editor-owned, always-on-top, resizable
+  `DocumentWindow` using the same deferred close safety pattern as the History
+  Graph window.
+- Registered `Source/ui/DevControlsComponent.{h,cpp}` in CMake.
+
+**RT / gate**
+- UI-only. No DSP, parameter ID/range, latency, or audio-thread changes.
+- [x] Plugin Release build clean via `cmake --build build` (2026-06-10).
+- [x] AU/VST3 copied to user plug-in folders, including system VST3.
+- [x] AU validation clean via `auval -v aufx MaLm Melc`.
+- [ ] Audition: main view is clean, DEV window opens/closes repeatedly without
+  crash, all DEV controls still drive/persist their APVTS values, and Graph +
+  DEV windows coexist independently.
+
+---
+
 ## 2026-06-10 — Slice: lookahead trim + fine increments
 
 **Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed
