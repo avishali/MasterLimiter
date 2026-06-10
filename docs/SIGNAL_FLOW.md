@@ -92,7 +92,9 @@ Simple per-channel circular buffers. `pushPop()` writes the new sample and retur
 
 ### 4.3 LimiterEnvelope (the heart — gain computer)
 Input = peak stream, output = gain coefficient stream (≤1). No audio delay here; the caller does the delaying.
-- **Attack** = a **half-cosine ramp** (`attackTable_`, `0.5·(1−cos(π·k/n))`) applied across the lookahead window so gain eases down *into* each peak. Attack length depends on **Character**:
+- **Attack** = a **half-cosine ramp** (`attackTable_`, `0.5·(1−cos(π·k/n))`) applied across the lookahead window so gain eases down *into* each peak. The temporary **DEV Attack** knob now overrides Character-derived attack for all envelopes while tuning:
+  - **DEV Attack** = `dev_attack_ms`, clamped per envelope to `1..active lookahead samples` so it can never exceed the LA Band/LA Wide window.
+  - With the DEV override removed/disabled, attack length returns to **Character**:
   - **Clean** ≈ 3 ms · **Tight** ≈ 1 ms · **Aggressive** ≈ 0.3 ms.
 - **Release — two selectable engines** (chosen by the DEV Release Engine toggle, §6):
   - **AdaptiveSigma (legacy):** two cascaded one-pole smoothers whose time-constant is blended between a *fast* and *slow* value by **`sigma`** (an estimate of how *sustained* the limiting is). Asymmetric: sigma rises fast (attack), decays slow. Per-mode timing table:
@@ -134,7 +136,7 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 | Stereo Link | `stereo_link_pct` | 0…100% | 100 | L/R gain linking (Stereo). |
 | M/S Link | `ms_link_pct` | 0…100% | 100 | M/S gain linking. |
 | Color | `band_color` | 0…100% | 0 | 0 = linked/transparent, 100 = independent/multiband. |
-| Character | `character` | Clean/Tight/Aggressive | Clean | Attack speed (§4.3). |
+| Character | `character` | Clean/Tight/Aggressive | Clean | Temporarily greyed out/inert while DEV Attack overrides attack speed (§4.3). |
 | Clipper | `clipper_drive_db` | −12…0 dB | 0 | Pre-limiter clip drive. |
 | Clipper Mode | `clipper_mode` | Hard/Soft | Hard | Clip shape. |
 | Clipper Active | `clipper_active` | bool | on | Clipper power. |
@@ -145,7 +147,7 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 ---
 
 ## 6. DEV controls (TEMPORARY — remove before 0.4)
-Live, RT-safe tuning knobs in the orange "DEV RELEASE" strip. They drive the release voicing experiment; defaults reproduce the baked constants.
+Live, RT-safe tuning knobs in the orange "DEV RELEASE" strip. They drive release/lookahead/attack voicing experiments; defaults reproduce the baked constants where applicable.
 
 | DEV control | ID | Range | Default | Drives | Notes |
 |---|---|---|---|---|---|
@@ -158,9 +160,10 @@ Live, RT-safe tuning knobs in the orange "DEV RELEASE" strip. They drive the rel
 | **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | Legacy-engine only. |
 | **LA Band** | `dev_lookahead_band_ms` | 1…12 ms | 7 | Per-band audio delay + low/high envelope window | Latency stays fixed via wet-path padding. |
 | **LA Wide** | `dev_lookahead_wide_ms` | 1…12 ms | 7 | Wideband audio delay + wide envelope window | Latency stays fixed via wet-path padding. |
+| **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | All limiter envelope attack ramps | Overrides Character; capped by each active lookahead window. |
 | **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | Active only when Release Auto is Off. |
 
-**Plan:** once the LA Release ms + Poles are chosen by ear, Claude bakes them as constants, maps the time onto the Transparent/Balanced/Reactive selector, and deletes all DEV params for 0.4.
+**Plan:** once Attack, LA Band/Wide, LA Release ms, and Poles are chosen by ear, Claude bakes them as constants or promotes any keeper to a real user parameter, then deletes the temporary DEV params for 0.4.
 
 ---
 

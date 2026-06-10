@@ -224,6 +224,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         1.0f,
         AudioParameterFloatAttributes()));
 
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_attack_ms, 1),
+        "DEV Attack",
+        NormalisableRange<float> (0.05f, 10.0f, 0.01f, 0.35f),
+        3.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (dev_release_engine, 1),
         "DEV Release Engine",

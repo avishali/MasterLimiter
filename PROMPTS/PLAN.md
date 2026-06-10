@@ -59,18 +59,19 @@ slice or split a follow-up slice.
 | Dev | 🔶 **Implemented — History graph window** | — | processor history ring + separate graph window | Added a fixed 4096-frame, ~2 ms cadence SPSC metering ring for GR/output/input history plus a non-modal Pro-L-style graph window opened by a header `Graph` button. Release build clean and AU/VST3 installed 2026-06-09; audition pending. |
 | Dev | 🔶 **Implemented — History graph v2** | — | per-sample history capture + graph controls + clip overlay | Upgraded the graph to a 65536-frame, ~0.5 ms cadence ring with per-sample GR/output/input/clip capture, 0.75..30 s windows, level-floor and GR-range selectors, clip threshold/clip markers, larger default window, and clip LED repaint fix. Release build clean, AU/VST3 installed, and AU validation clean 2026-06-09; audition pending. |
 | Dev | 🔶 **Implemented — Lookahead time DEV knobs** | `LimiterEnvelope` active window | constant-latency band/wide lookahead + DEV strip | Added runtime active lookahead windows to SDK `LimiterEnvelope`; plugin now reports fixed latency for the 12 ms max window and pads the wet path while `dev_lookahead_band_ms` and `dev_lookahead_wide_ms` tune the per-band and wideband stages independently. Removed vestigial `lookahead_ms`. Exposed LA Band, LA Wide, and Sustain Ratio in the DEV strip. SDK committed/pushed first 2026-06-10; plugin build/install/AU validation clean. |
+| Dev | 🔶 **Implemented — Attack DEV knob** | `LimiterEnvelope` attack override | `dev_attack_ms` + DEV strip | Added a temporary `dev_attack_ms` override that drives all low/high/wide envelopes directly and clamps to the active LA Band/Wide window. Character remains wired but is greyed out/inert while attack is tuned. SDK committed/pushed first (`0434a17`); plugin Release build/install/AU validation clean 2026-06-10; audition pending. |
 | Beta | **Remaining — signed/notarized beta build** | — | release artifacts | avishali builds AAX with the SDK, registers/signs it with PACE, tests in Pro Tools, then cuts the signed + notarized beta build (VST3 + AU, plus AAX once signed) for the tester. |
 
 Note: Auto-release shipped 2026-05-30 (ADR-0011). The dead-control sweep
 has turned M/S and auto-release into real features, Slice 16 hid the remaining
 Lookahead + T/S controls while preserving frozen defaults, Slice 16b put the
 visual look in place, Slice 17 packaged the beta defaults/presets/version, and
-Slice 18 shipped distribution tooling plus the beta manual. A temporary
-lookahead envelope-follower release A/B slice is installed for audition, with
-DEV controls now also exposing independent band/wide lookahead time and the
-manual-release sustain ratio. After avishali picks LA Release + Poles and the
-lookahead times, bake constants and remove the dev params for `0.4`. The history
-graph window has a v2 accuracy/range pass for release/time-constant audition.
+Slice 18 shipped distribution tooling plus the beta manual. Temporary
+lookahead/release/attack DEV controls are installed for audition, with Character
+greyed out while `dev_attack_ms` overrides envelope attack. After avishali picks
+Attack, LA Release + Poles, and the lookahead times, bake constants and remove
+the dev params for `0.4`. The history graph window has a v2 accuracy/range pass
+for release/time-constant audition.
 Remaining to beta: avishali builds/signs/registers AAX, tests in Pro Tools, then
 cuts the signed + notarized tester build. STFT "Max Transparency" remains the
 backlog path to fuller Ozone parity if real-world use demands it. Slice 6

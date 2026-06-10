@@ -212,6 +212,7 @@ private:
     std::atomic<float>* devHighBandReleaseScale_ = nullptr;
     std::atomic<float>* devSigmaAttackMs_ = nullptr;
     std::atomic<float>* devSigmaDecayScale_ = nullptr;
+    std::atomic<float>* devAttackMs_ = nullptr;
     std::atomic<float>* devReleaseEngine_ = nullptr;
     std::atomic<float>* devLaReleaseMs_ = nullptr;
     std::atomic<float>* devLaReleasePoles_ = nullptr;

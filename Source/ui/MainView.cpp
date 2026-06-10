@@ -473,6 +473,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblDevHighBandReleaseScale_);
     setupLabel (lblDevSigmaAttackMs_);
     setupLabel (lblDevSigmaDecayScale_);
+    setupLabel (lblDevAttackMs_);
     setupLabel (lblDevLookaheadBandMs_);
     setupLabel (lblDevLookaheadWideMs_);
     setupLabel (lblDevSustainRatio_);
@@ -503,6 +504,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     styleDevTuningSlider (sldDevHighBandReleaseScale_);
     styleDevTuningSlider (sldDevSigmaAttackMs_);
     styleDevTuningSlider (sldDevSigmaDecayScale_);
+    styleDevTuningSlider (sldDevAttackMs_);
     styleDevTuningSlider (sldDevLookaheadBandMs_);
     styleDevTuningSlider (sldDevLookaheadWideMs_);
     styleDevTuningSlider (sldDevSustainRatio_);
@@ -581,6 +583,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (sldDevHighBandReleaseScale_);
     addAndMakeVisible (sldDevSigmaAttackMs_);
     addAndMakeVisible (sldDevSigmaDecayScale_);
+    addAndMakeVisible (sldDevAttackMs_);
     addAndMakeVisible (sldDevLookaheadBandMs_);
     addAndMakeVisible (sldDevLookaheadWideMs_);
     addAndMakeVisible (sldDevSustainRatio_);
@@ -654,6 +657,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     attDevHighBandReleaseScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_high_band_release_scale), sldDevHighBandReleaseScale_);
     attDevSigmaAttackMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_sigma_attack_ms), sldDevSigmaAttackMs_);
     attDevSigmaDecayScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_sigma_decay_scale), sldDevSigmaDecayScale_);
+    attDevAttackMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_attack_ms), sldDevAttackMs_);
     attDevLookaheadBandMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_band_ms), sldDevLookaheadBandMs_);
     attDevLookaheadWideMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_wide_ms), sldDevLookaheadWideMs_);
     attDevSustainRatio_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldDevSustainRatio_);
@@ -693,6 +697,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     useSliderTextboxFormat (sldDevHighBandReleaseScale_, 2, juce::String());
     useSliderTextboxFormat (sldDevSigmaAttackMs_, 1, " ms");
     useSliderTextboxFormat (sldDevSigmaDecayScale_, 2, juce::String());
+    useSliderTextboxFormat (sldDevAttackMs_, 2, " ms");
     useSliderTextboxFormat (sldDevLookaheadBandMs_, 1, " ms");
     useSliderTextboxFormat (sldDevLookaheadWideMs_, 1, " ms");
     useSliderTextboxFormat (sldDevSustainRatio_, 2, juce::String());
@@ -713,6 +718,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupValueEdit (sldDevHighBandReleaseScale_, ValueSlider::ValueLabelMode::Below);
     setupValueEdit (sldDevSigmaAttackMs_, ValueSlider::ValueLabelMode::Below);
     setupValueEdit (sldDevSigmaDecayScale_, ValueSlider::ValueLabelMode::Below);
+    setupValueEdit (sldDevAttackMs_, ValueSlider::ValueLabelMode::Below);
     setupValueEdit (sldDevLookaheadBandMs_, ValueSlider::ValueLabelMode::Below);
     setupValueEdit (sldDevLookaheadWideMs_, ValueSlider::ValueLabelMode::Below);
     setupValueEdit (sldDevSustainRatio_, ValueSlider::ValueLabelMode::Below);
@@ -888,7 +894,10 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnStereoMode_.setTooltip ("Click to toggle whether the wideband link operates in L/R stereo or M/S.");
     sldStereoLink_.setTooltip ("Link amount for the active stereo mode: 100% fully linked, 0% independent.");
     sldBandColor_.setTooltip ("Multiband Color: 0% glued/warm, 50% balanced, 100% open/bright.");
-    segCharacter_.setTooltip ("Character mode: Clean, Tight, or Aggressive.");
+    // TEMP: Character is visually inert while the DEV Attack knob owns attack time.
+    lblCharacter_.setEnabled (false);
+    segCharacter_.setEnabled (false);
+    segCharacter_.setTooltip ("Temporarily inactive while DEV Attack overrides Character.");
     lblDevReleaseTuning_.setTooltip ("Temporary release voicing controls for development; remove before 0.4 beta.");
     segDevReleaseEngine_.setTooltip ("DEV temporary: switches Auto release between Adaptive Sigma and Lookahead follower.");
     sldDevLaReleaseMs_.setTooltip ("DEV temporary: direct lookahead follower release time in milliseconds.");
@@ -897,6 +906,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldDevHighBandReleaseScale_.setTooltip ("DEV temporary: scales high-band and wideband auto-release fast/slow/sigma timings.");
     sldDevSigmaAttackMs_.setTooltip ("DEV temporary: sigma tracker attack time in milliseconds, applied to all auto-release envelopes.");
     sldDevSigmaDecayScale_.setTooltip ("DEV temporary: extra sigma decay multiplier, applied to all auto-release envelopes.");
+    sldDevAttackMs_.setTooltip ("DEV temporary: overrides Character attack; capped by the active band/wide lookahead window.");
     sldDevLookaheadBandMs_.setTooltip ("DEV temporary: per-band audio delay and envelope lookahead window in milliseconds.");
     sldDevLookaheadWideMs_.setTooltip ("DEV temporary: wideband audio delay and envelope lookahead window in milliseconds.");
     sldDevSustainRatio_.setTooltip ("DEV temporary: manual-release sustain ratio. Active only when Release Auto is Off.");
@@ -1459,6 +1469,8 @@ void MainView::resized()
     sldDevLookaheadWideMs_.setBounds (238, 530, 88, 18);
     lblDevSustainRatio_.setBounds (338, 516, 88, 14);
     sldDevSustainRatio_.setBounds (338, 530, 88, 18);
+    lblDevAttackMs_.setBounds (438, 516, 88, 14);
+    sldDevAttackMs_.setBounds (438, 530, 88, 18);
 
     btnGainMatchAutoTrack_.setBounds (152, 568, 126, 30);
     gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (546).withHeight (18);
@@ -1540,6 +1552,8 @@ void MainView::resized()
     sldDevSigmaAttackMs_.toFront (false);
     lblDevSigmaDecayScale_.toFront (false);
     sldDevSigmaDecayScale_.toFront (false);
+    lblDevAttackMs_.toFront (false);
+    sldDevAttackMs_.toFront (false);
     lblDevLookaheadBandMs_.toFront (false);
     sldDevLookaheadBandMs_.toFront (false);
     lblDevLookaheadWideMs_.toFront (false);

@@ -2,6 +2,58 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-10 — Slice: attack DEV knob
+
+**Status:** 🔶 Implemented locally; SDK and plugin Release builds clean; SDK
+committed/pushed first; AU/VST3 installed; AU validation clean. Audition
+pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`,
+  local file reads/search.
+- QUERIES ISSUED: MasterLimiter/SDK `LimiterEnvelope` and `MainView` path
+  lookup; JUCE `AudioProcessorValueTreeState` / `SliderAttachment`; JUCE
+  `Slider`; shared DSP `LimiterEnvelope attack lookahead release` reuse search.
+- FILES RETRIEVED: SDK `LimiterEnvelope.{h,cpp}`;
+  product `ParameterIDs.h`, `Parameters.cpp`, `PluginProcessor.{h,cpp}`,
+  `MainView.{h,cpp}`, `docs/SIGNAL_FLOW.md`, `docs/PROGRESS.md`,
+  `PROMPTS/PLAN.md`, and `PROMPTS/SLICE_ATTACK_DEV_KNOB.md`.
+- SECTIONS CITED: SDK `LimiterEnvelope::recomputeAttackSamples()` and active
+  lookahead clamp, product `processCore()` envelope configuration, APVTS DEV
+  parameter block, and `MainView` DEV strip attachment/layout.
+- REUSE CHECK: reused `mdsp_dsp::LimiterEnvelope` and the existing four-envelope
+  product topology. I checked the local library but found no separate attack
+  override component, so I extended the existing limiter envelope.
+
+**Deliverables**
+- SDK `LimiterEnvelope` now has `setAttackOverrideMs()`. A positive value drives
+  attack directly; `0` returns to Character/mode-derived attack. The result is
+  still clamped to the active lookahead window and refreshes the preallocated
+  attack table.
+- Added temporary `dev_attack_ms` APVTS parameter (`0.05..10 ms`, default `3 ms`)
+  and cached its raw pointer in the processor.
+- All four envelopes receive the same DEV attack override through the existing
+  `configureEnvelope()` lambda after the active LA Band/Wide windows are set.
+- Added an `Attack` slider to the orange DEV strip and disabled the Character
+  segmented control with a tooltip explaining that DEV Attack owns attack while
+  tuning.
+
+**RT / gate**
+- No allocations were added to the audio callback. Runtime work is raw parameter
+  load, scalar setter calls, and attack-table refresh into storage allocated in
+  SDK `prepare()`.
+- Defaults preserve the current Clean attack value (`3 ms`) while making the
+  override active for tuning.
+- [x] SDK Release build clean via `cmake --build build` (2026-06-10).
+- [x] SDK committed and pushed first: `0434a17`.
+- [x] Plugin Release build clean via `cmake --build build` (2026-06-10).
+- [x] AU/VST3 copied to user plug-in folders.
+- [x] AU validation clean via `auval -v aufx MaLm Melc`.
+- [ ] Audition: Attack changes limiter onset and clamps to active LA Band/Wide;
+  Character remains greyed out/inert.
+
+---
+
 ## 2026-06-10 — Slice: lookahead time DEV knobs
 
 **Status:** 🔶 Implemented locally; SDK and plugin Release builds clean; SDK
