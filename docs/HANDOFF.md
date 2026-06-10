@@ -1,84 +1,66 @@
-# MasterLimiter — Session Handoff (2026-06-09)
+# MasterLimiter — Session Handoff (2026-06-10)
 
-Context-clear handoff. Everything a fresh session needs to continue the limiter voicing work.
+Context-clear handoff. Everything a fresh session needs. **Status: v0.3.1-beta is SHIPPED to testers** (signed/notarized, all 4 formats incl. PACE-signed AAX, published to the Cloudflare beta portal). Now **awaiting tester `.mlpreset` feedback to bake the voicing for 0.4.**
 
 ---
 
-## 0. Workflow (read first)
-- **Trinity roles:** Claude = architect / reviewer / **Cursor-prompt-writer** (does NOT edit code directly). Cursor = coder/builder/committer. **avishali** = decides & auditions in Ableton.
-- **Every Cursor prompt MUST include an "Allowed files to touch" block** (scoped to the slice + PLAN/PROGRESS) so Cursor doesn't prompt for permission each file.
-- **SDK path gotcha:** the build compiles the **sibling** repo `…/MelechDSP/melechdsp-hq`, NOT `third_party/melechdsp-hq`. Edit the sibling for SDK changes.
-- **Commit + push after EVERY slice.** (A bare `rm -rf` wiped the repo this session — fully recovered, but the lesson is: push always. Never run unscoped `rm -rf`.)
-- Slices are gated; PLAN.md / PROGRESS.md track state.
+## 0. Workflow (Trinity — read first)
+- **Claude** = architect / reviewer / **Cursor-prompt-writer** (does NOT edit plugin code directly; writes `PROMPTS/SLICE_*.md`). **Cursor** = coder/builder/committer. **avishali** = decides & auditions in Ableton/Pro Tools.
+- Every Cursor prompt has an **"Allowed files to touch"** block. Slices are gated; `docs/PROGRESS.md` / `PROMPTS/PLAN.md` track state; each slice ends with a CLOSE archive + commit + **push**.
+- **SDK gotcha:** the build compiles the **sibling** repo `…/MelechDSP/melechdsp-hq`, NOT `third_party/`. Edit the sibling for DSP/SDK changes.
+- **Commit + push after every slice.** (A `rm -rf` once wiped the repo — fully recovered, but: push always.)
+- Claude may directly edit: docs, `release/`, the analysis tools, and the **beta-portal** web app (infra, not plugin C++).
 
-## 1. Repos, paths, remotes
-- **Plugin:** `/Users/avishaylidani/DEV/GitHubRepo/MelechDSP/MasterLimiter` → remote `git@github.com:avishali/MasterLimiter.git` (branch `main`). Recovered + pushed, builds clean.
-- **SDK:** `/Users/avishaylidani/DEV/GitHubRepo/MelechDSP/melechdsp-hq` → remote `git@github.com:avishali/melechdsp-hq.git` (branch `master`). Recent limiter work committed + pushed.
-- **JUCE:** `/Users/avishaylidani/DEV/SDK/JUCE` (export `JUCE_PATH` to build).
-- **Analyzer:** `tools/analysis/analyze.py` + venv `tools/analysis/.venv` (numpy/scipy/soundfile/pyloudnorm).
-- **Test files:** `/Users/avishaylidani/Music/Test Files/` — mixes (pre-master) + `Audio Tests/` (60+7k IMD, basswave2, Rumble50Hz, sweeps, pink/white).
-- Stale dirs to delete when comfortable: `MasterLimiter-DAMAGED-delete-later`, `MasterLimiter-RECOVERED-delete-later`.
+## 1. Repos, paths, tooling
+- **Plugin:** `/Users/avishaylidani/DEV/GitHubRepo/MelechDSP/MasterLimiter` → `git@github.com:avishali/MasterLimiter.git` (main). Clean + pushed.
+- **SDK:** `…/MelechDSP/melechdsp-hq` (master). Clean + pushed.
+- **JUCE:** `/Users/avishaylidani/DEV/SDK/JUCE` (export `JUCE_PATH`). **AAX SDK:** `/Users/avishaylidani/DEV/SDK/aax-sdk-2-9-0`.
+- **Beta portal:** sibling `…/MelechDSP/melechdsp-beta-portal` (Cloudflare Pages+Worker+private R2 `melechdsp-beta`). Pages auto-deploys from `main`; Worker via `npx wrangler deploy` (wrangler in its `node_modules/.bin`, OAuth-authed as avishay).
+- **Offline measurement rig:** `tools/analysis/.venv` (pedalboard, numpy, scipy, soundfile, matplotlib — **loads the AU, not the VST3** (VST3 load is flaky headless)). Scripts: `sweep_render.py`, `sweep_isolate.py`, `hammerstein.py`. PDF gen: `release/make_guide_pdf.sh`, `release/make_manual_pdf.sh` (pandoc + Chrome headless).
+- **Test files:** `/Users/avishaylidani/Music/Test Files/`.
+- **Note:** avishali's `cyrptoBot/binance-bot-v3` (paper-trading binance bot under PM2) was eating RAM/CPU and OOM-killing plugin renders — **stopped** (`pm2 stop` + saved). It belongs on AWS, not local.
 
-## 2. Build / install
-- **Audio testing:** Debug is fine (identical audio). `JUCE_PATH=… bash scripts/build.sh` (Debug → build-debug).
-- **CPU testing:** MUST be Release. `cmake --preset default && cmake --build build` (Release, native arm64).
-- **Install (dev, no sudo, recommended):** copy `build/MasterLimiter_artefacts/Release/{VST3,AU}/*` to `~/Library/Audio/Plug-Ins/{VST3,Components}`. (TODO: wire `build.sh` to do this automatically.)
-- **System install (needs sudo):** `sudo CONFIG=Release BUILD_DIR="$(pwd)/build" bash scripts/install_system.sh` — note env vars go AFTER `sudo` (it strips env otherwise).
-- No binary assets / `juce_add_binary_data` — UI is fully programmatic.
+## 2. Build / install / measure
+- **Dev build:** `export JUCE_PATH=… ; cmake --preset default && cmake --build build` (Release, native arm64, into `build/`). Dev Mode just limits formats/LTO; it does **NOT** gate the DEV params.
+- **Install (dev):** copy `build/MasterLimiter_artefacts/Release/{AU,VST3}` to install folders. **Primary install path = SYSTEM** `/Library/Audio/Plug-Ins/{Components,VST3}` (world-writable → no sudo, EXCEPT a stale **root-owned** system AU may need a one-time `sudo rm -rf /Library/Audio/Plug-Ins/Components/MasterLimiter.component`).
+- **Measure (proven clean):** `tools/analysis/.venv/bin/python tools/analysis/hammerstein.py` → THD + phase; `sweep_isolate.py` → worst non-fundamental. Run AFTER any DSP change for before/after numbers.
 
-## 3. Product / DSP state (what's implemented)
-Maximizer, v0.3.0 (beta). Signal flow (in `processCore`, inside `if (limiterActive_)`):
-clipper(optional) → input Gain → **4× oversample** → 2-band split (LR @120Hz) → per-band limiter envelopes → recombine → wideband limiter → **ceiling output gain** → downsample → **FinalCeilingLimiter** (true-peak residual catch) → I/O out.
+## 3. Product / DSP state (v0.3.1, signal flow)
+Canonical reference: **`docs/SIGNAL_FLOW.md`** (kept current). Chain in `processCore`:
+clipper(opt) → input gain → **4× oversample** → 2-band split (LR @120 Hz) → per-band limiter envelopes → **Color** band-link blend → lookahead delay + apply → wideband limiter → ceiling gain → downsample → **FinalCeilingLimiter** (true-peak catch).
+- **Release: two engines** (`mdsp_dsp::LimiterEnvelope`): legacy **AdaptiveSigma** (audible rate-switching) and the new **LookaheadFollower** (window-min gated recovery + fixed-time N-pole cascade — smooth, **the current winner**, confirmed by avishali).
+- **Attack** = cosine ramp over the lookahead window; **DEV Attack knob overrides Character** (Character greyed out while tuning).
+- **Lookahead:** two DEV windows (`dev_lookahead_band_ms`, `dev_lookahead_wide_ms`), **0.00–6.00 ms / 0.01 step**, default 5; constant-latency (padded; reported latency fixed at 6 ms max ≈ 14 ms total).
+- **Color:** 0% = linked/transparent, 100% = independent/multiband (low-IMD, breaks the loudness cap). Intermediate values dip the low end (known — needs linear-phase crossover).
 
-Key models (all recent, all in this session):
-- **Ceiling decoupled from GR (Ozone model):** limiter threshold fixed at **1.0 (SP) / 0.965 (TP)**; **Ceiling = output gain** applied after limiting. GR responds only to Gain, not Ceiling. `ceiling_db` default **0.0**.
-- **Color knob** = `mapBandColorToLink = 1 - color/100`: **0% = fully linked (transparent/wideband-like), 100% = independent (multiband character)**. `band_color` default **0**. `MDSP_BAND_HEADROOM_DB = 0` (pre-shave removed).
-- **FinalCeilingLimiter** (`mdsp_dsp`, new): final true-peak/sample-peak brickwall, catches residual ISP so output TP = ceiling. **Wideband TP=−1.0 ✓. Multiband TP still leaks to −0.4 (BUG, deferred — see backlog).**
-- **True-peak meters:** real ISP via `mdsp_dsp::TruePeakDetector` (4 instances: IN L/R + OUT L/R), shown above peak/RMS readouts; overs >0 dBFS render **red with "+"**.
-- **Clipper power switch** (`clipper_active`, default on; gated inside limiter block).
-- **Auto-release (program-dependent)** — the current focus, see §5.
-- **Lookahead = 7 ms** (was 5). Total latency ~**934 samples**.
-- Oversampler = manual 2-stage FIR (flat to 20 kHz, −0.00004 dB @20k; tw 0.03/0.10).
+## 4. UI / features shipped this session
+- **History Graph window** (header "Graph" button, always-on-top): per-sample-accurate GR/output/input traces, clip threshold + red clip markers, selectable dB range + 0.75–30 s scroll. Lock-free SPSC ring in the processor.
+- **DEV window** (header "DEV" button): all DEV controls grouped by section (Attack / Lookahead / Release·Engine / ·Lookahead / ·Adaptive / ·Band scaling / ·Manual). No inline DEV strip.
+- **User presets** (full APVTS state incl. DEV) → `~/Library/Audio/Presets/MelechDSP/MasterLimiter/*.mlpreset`; menu Save/Load-from-file/Delete/Reveal.
+- **A/B compare** (header A / B / A→B): full-state scratch slots, persisted in plugin state.
+- Removed dead `lookahead_ms` param; exposed hidden `release_sustain_ratio` as a DEV knob. Bypass-button text + default combo arrow fixed.
 
-## 4. Shootout findings (the "why")
-60+7k IMD test (low+high tone; intermod sidebands around 7 kHz = bass→treble distortion = release-induced AM). `IMD↓car`, lower = cleaner.
-- **At matched loudness/GR, MasterLimiter (multiband + auto-release) = −80 dB IMD — beats Ozone Maximizer (−15…−45) and Waves L4 (−17).** Pro-L 2 ≈ −39 in its clean wideband mode (the transparency benchmark).
-- **Bass-ducking cap:** on bass-heavy signal, wideband loudness walls out (~−5.4 LUFS) because the 60 Hz "owns" the gain and the 7 kHz rides fixed. **Multiband breaks the cap** → reaches −4.5 LUFS (Pro-L's loudness) while staying −80 IMD. **Multiband + auto-release is our edge.**
-- Method: **loudness-match (or GR-match) + cleanest mode + extras off**, then compare IMD. Use `analyze.py`. (Renders must have silence trimmed — analyzer auto-trims.)
-- References avishali owns: Pro-L 2 (transparency target), Weiss MM-1, L2, L4, Ozone 11, KClip3, bx_clipper, The God Particle.
+## 5. DEV controls (TEMPORARY — bake & remove for 0.4)
+In the DEV window. Defaults reproduce current voicing. To find the final voicing: Engine=**Lookahead**, then sweep **Attack**, **LA Band/Wide**, **LA Release ms**, **Poles** while watching the History Graph.
+`dev_release_engine` · `dev_la_release_ms` · `dev_la_release_poles` · `dev_attack_ms` · `dev_lookahead_band_ms` · `dev_lookahead_wide_ms` · `dev_sigma_attack_ms` · `dev_sigma_decay_scale` · `dev_low_band_release_scale` · `dev_high_band_release_scale` · `release_sustain_ratio`.
 
-## 5. CURRENT TASK — auto-release voicing (in progress)
-**Goal:** make the auto-release clean + program-dependent like Pro-L ("track the coming envelope, release per the signal, use lookahead"). Clean on sustained bass (no pump) AND punchy on acoustic transients (no dulling).
+## 6. Measurement findings (definitive)
+Offline render through the AU (latency-independent): **passthrough −119 dB, hard-limiting THD −94 dB, magnitude flat ±0.1 dB to 22 kHz, audible-band excess phase ~15°.** The Plugin Doctor "harmonic tent" avishali saw was a **measurement artifact** (latency smears its swept-sine deconvolution), NOT real audio. The "90° HF phase" is a benign linear-phase delay. So the filter-quality items (below) are *refinements*, not bug-fixes.
 
-**How our auto-release works:** per sample, `depth` = current GR; `sigma` = smoothed depth (how *sustained* limiting is); `relAlpha = fast + sigma·(slow−fast)` → low sigma = fast release, high sigma = slow. 2-stage cascaded smoother.
+## 7. Release / publish (DONE for 0.3.1-beta; reuse for next)
+Signed pipeline + Cloudflare publish — full detail in `release/PUBLISH.md` and memory `release-signing-aax`. Key gotchas baked into memory: **iLok** needs an *attached* dongle or *open Cloud Session* (sync alone fails: "Eden Tools License Failure"); **WCGUID = `BDE0ED80-…`** (the `75B5E420-…` is the catalog Product GUID, not the WCGUID); verify the **`-signed.pkg`** not the unsigned intermediate; `SIGN_AND_NOTARIZE_SKIP_AAX=1 sign_and_notarize_pkg.sh` skips rebuild when AAX already PACE-signed.
+- **Portal now serves:** installer .pkg + **Tester Guide PDF** + **Manual PDF** + release notes (guide folded in), all Access-gated presigned downloads. Manifest fields `guide_path`/`manual_path` + endpoints `/api/download/{guide,manual}` (Worker deployed).
+- Tester guide source: `docs/BETA_TESTER_GUIDE.md`. Manual source: `docs/SIGNAL_FLOW.md`.
 
-**Fixes already shipped this session:**
-- **Asymmetric sigma** (fast 5 ms attack, slow decay) — so sustained-but-oscillating bass keeps sigma high → slow release → no pump. (Was symmetric → averaged to mid → bass ripple.)
-- **Frequency-dependent release:** `LimiterEnvelope::setAutoReleaseScale()`; **low band 3× slower** (`kLowBandAutoReleaseScale`), high/wideband 1×.
-- Lookahead → 7 ms.
+## 8. Roadmap (after tester feedback)
+- **`docs/LIMITER_TYPES.md`** — limiter "types" as *decomposition* front-ends on a shared back-end. Sequence: **#1 Dual** (fast catcher + slow leveler; fast stage is a dedicated fast limiter, NOT the clipper) → **#3 Spectral** (STFT critical-band) → **#2 content-aware adaptive** (ML stems = long-term).
+- **`docs/FILTER_QUALITY_ROADMAP.md`** — keystone = **custom linear-phase FIR** → fixes Color phase (D), enables movable/3-band crossover (E), HF phase / anti-alias high-cut (F). Measure with `hammerstein.py`.
 
-**Status:** avishali says "a bit better but still not smooth — the release is audible" (couldn't isolate pump vs grit vs adaptation-being-heard). On an **acoustic** mix at **Color 100, Auto Transparent**.
+## 9. IMMEDIATE next steps
+1. avishali: add 1–2 testers (portal `docs/ADD_TESTER.md`), send the portal link (point them at the **tester guide** first).
+2. Collect their **`.mlpreset` files + notes**.
+3. Claude: load each preset through the offline rig, read out the chosen DEV values → **bake** (constants / promote keepers to real params, map onto Auto modes), **delete all DEV params**, bump to **0.4**.
+4. Then start the **filter-quality arc** (custom FIR) and/or **#1 Dual** limiter type.
 
-**Active experiment — DEV real-time tuning controls** (TEMPORARY, remove before 0.4): 4 APVTS dev params + a "DEV RELEASE" UI strip:
-- `dev_low_band_release_scale` (def 3.0), `dev_high_band_release_scale` (def 1.0), `dev_sigma_attack_ms` (def 5), `dev_sigma_decay_scale` (def 1.0). Live, RT-safe.
-- **Next action:** avishali runs the 3-step sweep — (1) freeze adaptation (sigma_decay_scale↑, attack↑) to test if the *adaptation* is the audible artifact; (2) sweep low/high band scales for a smooth fixed rate; (3) reintroduce slight adaptation. Report which step clicked + the 4 values → **bake them as constants, delete dev params.**
-- **If no setting sounds Pro-L-smooth:** the exponential-smoother-with-adaptive-time architecture has a ceiling → rebuild release as a **lookahead envelope-follower** (gain rides a smooth curve from the buffered upcoming signal; no audible rate-switching). Design is understood, it's a bigger slice.
-
-## 6. Open backlog (prioritized)
-1. **Auto-release smoothness** (§5) — active.
-2. **CPU / clicks:** ~50% + intermittent clicks were **Debug build + 6 oversamplers**. Release build pending CPU confirmation from avishali. Regardless: **trim the 4 metering TruePeakDetectors** (wasteful — share/decimate) for free CPU.
-3. **OS-quality slice (groups two bugs, same 4× cause):** (a) **multiband TP-ISP leak** (output TP −0.4, over ceiling in TP+Color100), (b) **harmonic aliasing** (limiter harmonics fold back at 4×; pre-existing). Fix = higher OS (8×+) and/or proper ISP control. Use the new TP meter to watch the leak live.
-4. **Color knob intermediate bug:** at Color 0<x<100 the low end drops (phase cancellation — blends full-band original-phase with allpass band-split). Behaves like on/off. Fix = linear-phase complementary crossover (adds latency). Endpoints (0/100) are fine.
-5. **Integer-latency HF phase** (~90° @20kHz, inaudible) — low-pri polish; fix = native-integer FIR (lose meter-align) or accept.
-6. **Ableton VST3 not listed** (AU works) — Ableton setting: Preferences→Plug-Ins→"Use VST3 System Folders" ON + rescan. Binary is fine (loads as AU + in Plugin Doctor).
-7. **Pre-0.4:** UI tidy-up; **remove DEV release params**; TP/SP metering user control (planned); decide Ceiling default (0 vs −1).
-
-## 7. Tools quick-ref
-- Analyze renders: `tools/analysis/.venv/bin/python tools/analysis/analyze.py "<folder or wavs>"` → LUFS, sample/true peak, crest, IMD↓car, THDlo, %active. Auto-trims silence. IMD only meaningful on 2-tone signals.
-- Bench DSP in isolation: `/tmp/xotest` had a JUCE console harness (gone after context clear — rebuild if needed; it linked juce_dsp to test crossover/OS/limiter behavior).
-
-## 8. Immediate next steps
-1. avishali: confirm Release **CPU %** + clicks gone (load the **AU** in Ableton; VST3 listing is a separate Ableton setting).
-2. Run the **dev-control release sweep** (§5) → report values + which step fixed it.
-3. Claude: bake the release values (or spec the envelope-follower), delete dev params, commit + **push**.
-4. Then: OS-quality slice (TP leak + aliasing), then continue shootout on real music.
+## 10. Memory (auto-memory, persists)
+`project-release-voicing` (current voicing/DEV state), `release-signing-aax` (signing/AAX/portal gotchas), `project-masterlimiter-slices`, `product-control-model`, `workflow-trinity`, `juce-build-gotchas`, `ui-aesthetic-direction`. In-repo refs: `docs/SIGNAL_FLOW.md`, `docs/LIMITER_TYPES.md`, `docs/FILTER_QUALITY_ROADMAP.md`.
