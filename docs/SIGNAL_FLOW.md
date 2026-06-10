@@ -1,6 +1,6 @@
 # MasterLimiter — Signal Flow & Component Reference
 
-**Version:** v0.3.0 (beta) · **Audience:** avishali (full mental model of the plugin) · **Maintained by:** Claude (architect)
+**Version:** v0.3.1 (beta) · **Audience:** avishali + advanced testers (full mental model of the plugin) · **Maintained by:** Claude (architect)
 **Source of truth:** `Source/PluginProcessor.cpp` (`processCore`), `Source/parameters/Parameters.cpp`, and the SDK `melechdsp-hq/shared/mdsp_dsp/`. If code and this doc disagree, the code wins — tell Claude to re-sync.
 
 ---
