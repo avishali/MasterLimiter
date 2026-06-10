@@ -50,3 +50,7 @@ scripts/.aax_wraptool.env
 !scripts/.env.example
 !scripts/*.example
 beta-dist/
+
+# analysis venv + renders
+tools/analysis/.venv/
+tools/analysis/out/
