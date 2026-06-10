@@ -113,6 +113,13 @@ private:
     void updateMeterScaleControls();
     void setMeterShowRms (bool shouldShow);
     void paintMeterScaleColumn (juce::Graphics& g);
+    void refreshPresetMenu (const juce::String& preferredUserPresetName = {});
+    void handlePresetMenuSelection();
+    void showSaveUserPresetDialog();
+    void saveUserPresetNamed (const juce::String& name);
+    void showDeleteUserPresetDialog();
+    void showPresetMessage (const juce::String& title, const juce::String& message);
+    juce::String makeDefaultUserPresetName() const;
 
     class CompensationBar : public juce::Component
     {
@@ -144,6 +151,7 @@ private:
     juce::Label header_ { {}, "MasterLimiter" };
     juce::Label headerMode_ { {}, "v0.3.0 (beta) - Maximizer" };
     juce::ComboBox presetMenu_ { "Factory Presets" };
+    juce::TextButton btnSavePreset_ { "Save" };
 
     juce::Label lblGainDrive_ { {}, "Gain" };
     ValueSlider sldGainDrive_;
@@ -233,6 +241,10 @@ private:
     MeterGroupComponent::ScaleMode currentMeterScale_ { MeterGroupComponent::ScaleMode::FullRange };
     float clipLedLevel_ { 0.0f };
     int lastStereoModeIdx_ { -1 };
+    juce::Array<juce::File> userPresetFiles_;
+    juce::String activeUserPresetName_;
+    int activeFactoryPresetId_ { 1 };
+    bool rebuildingPresetMenu_ { false };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attGainDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attLimiterActive_;

@@ -62,6 +62,7 @@ slice or split a follow-up slice.
 | Dev | 🔶 **Implemented — Attack DEV knob** | `LimiterEnvelope` attack override | `dev_attack_ms` + DEV strip | Added a temporary `dev_attack_ms` override that drives all low/high/wide envelopes directly and clamps to the active LA Band/Wide window. Character remains wired but is greyed out/inert while attack is tuned. SDK committed/pushed first (`0434a17`); plugin Release build/install/AU validation clean 2026-06-10; audition pending. |
 | Dev | 🔶 **Implemented — Lookahead trim + fine increments** | — | max lookahead + `dev_lookahead_*` ranges | Trimmed constant-latency max lookahead from 12 ms to 6 ms and changed LA Band/Wide to 0.00..6.00 ms with 0.01 ms steps and 5 ms defaults. Existing process clamp maps 0.00 ms to one OS sample. Release build clean, AU/VST3 installed including system VST3, and AU validation clean 2026-06-10; audition pending. |
 | Dev | 🔶 **Implemented — DEV controls window** | — | `DevControlsComponent` + header DEV window | Moved the temporary Attack/Lookahead/Release tuning controls out of the main view and into a separate always-on-top, resizable DEV window opened from the header. Reused the History Graph `DocumentWindow` ownership/deferred-close pattern. Main view no longer shows the inline orange DEV strip. Release build clean, AU/VST3 installed including system VST3, and AU validation clean 2026-06-10; audition pending. |
+| Dev | 🔶 **Implemented — User presets** | — | full-state `.mlpreset` save/load/delete/reveal | Added user presets under `~/Library/Audio/Presets/MelechDSP/MasterLimiter`, saved as full APVTS XML snapshots so every DEV voicing parameter round-trips for A/B comparison. Factory presets remain curated subsets. Header menu now has Factory/User sections plus Save/Delete/Reveal actions and a small Save button. Release build clean, user AU/VST3 + system VST3 installed, and AU validation clean 2026-06-10; system AU copy blocked by stale root-owned component; audition pending. |
 | Beta | **Remaining — signed/notarized beta build** | — | release artifacts | avishali builds AAX with the SDK, registers/signs it with PACE, tests in Pro Tools, then cuts the signed + notarized beta build (VST3 + AU, plus AAX once signed) for the tester. |
 
 Note: Auto-release shipped 2026-05-30 (ADR-0011). The dead-control sweep
@@ -75,7 +76,9 @@ envelope attack. The lookahead trim pass lowers the max window to 6 ms and makes
 LA Band/Wide fine from 0.00 ms for transient tuning. After avishali picks Attack,
 LA Release + Poles, and the lookahead times, bake constants and remove the dev
 params/window for `0.4`. The history graph window has a v2 accuracy/range pass
-for release/time-constant audition.
+for release/time-constant audition. User presets now save full APVTS snapshots,
+including all DEV params, so audition voicings can be stored and compared before
+the 0.4 bake.
 Remaining to beta: avishali builds/signs/registers AAX, tests in Pro Tools, then
 cuts the signed + notarized tester build. STFT "Max Transparency" remains the
 backlog path to fuller Ozone parity if real-world use demands it. Slice 6

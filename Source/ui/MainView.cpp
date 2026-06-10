@@ -21,6 +21,11 @@
 
 namespace
 {
+constexpr int kUserPresetIdBase = 1000;
+constexpr int kSaveUserPresetId = 9001;
+constexpr int kDeleteUserPresetId = 9002;
+constexpr int kRevealUserPresetsId = 9003;
+
 juce::String buildMarkerText()
 {
     return "v0.3.0 (beta) - Maximizer - "
@@ -435,16 +440,13 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     presetMenu_.setColour (juce::ComboBox::outlineColourId, palette::border);
     presetMenu_.setColour (juce::ComboBox::focusedOutlineColourId, palette::accent.withAlpha (0.8f));
     presetMenu_.setColour (juce::ComboBox::arrowColourId, palette::accentBright);
-    for (int i = 0; i < master_limiter_ui::PresetManager::getNumPresets(); ++i)
-        presetMenu_.addItem (master_limiter_ui::PresetManager::getPresetName (i), i + 1);
-    presetMenu_.setSelectedId (1, juce::dontSendNotification);
-    presetMenu_.onChange = [this]
-    {
-        const int presetIndex = presetMenu_.getSelectedId() - 1;
-        if (presetIndex >= 0)
-            processor_.applyPreset (presetIndex);
-    };
+    presetMenu_.setTextWhenNothingSelected ("Presets");
+    presetMenu_.onChange = [this] { handlePresetMenuSelection(); };
+    refreshPresetMenu();
     addAndMakeVisible (presetMenu_);
+
+    btnSavePreset_.onClick = [this] { showSaveUserPresetDialog(); };
+    addAndMakeVisible (btnSavePreset_);
 
     auto setupLabel = [&] (juce::Label& l)
     {
@@ -795,6 +797,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     sldIoOutputTrimR_.setTooltip ("Right output trim after the ceiling stage.");
     btnIoOutputLink_.setTooltip ("When enabled, moving one Output fader mirrors the other.");
     btnBypass_.setTooltip ("Plugin bypass. When on, the limiter is bypassed but I/O trims and Gain-Match still apply.");
+    btnSavePreset_.setTooltip ("Save the full current state as a user preset, including DEV controls.");
     btnDev_.setTooltip ("Open the temporary DEV tuning controls window.");
     btnHistory_.setTooltip ("Open the scrolling gain-reduction and level history graph.");
     btnMeterScaleMinus_.setTooltip ("Zoom the I/O meter range out.");
@@ -849,6 +852,229 @@ void MainView::styleIoTrimFader (ValueSlider& s) const
     s.setTextValueSuffix (" dB");
     s.setValue (0.0, juce::dontSendNotification);
     s.setScrollWheelEnabled (false);
+}
+
+void MainView::refreshPresetMenu (const juce::String& preferredUserPresetName)
+{
+    const juce::ScopedValueSetter<bool> guard (rebuildingPresetMenu_, true);
+
+    if (preferredUserPresetName.isNotEmpty())
+        activeUserPresetName_ = preferredUserPresetName;
+
+    presetMenu_.clear (juce::dontSendNotification);
+    presetMenu_.addSectionHeading ("Factory");
+
+    for (int i = 0; i < master_limiter_ui::PresetManager::getNumPresets(); ++i)
+        presetMenu_.addItem (master_limiter_ui::PresetManager::getPresetName (i), i + 1);
+
+    userPresetFiles_ = master_limiter_ui::PresetManager::listUserPresets();
+
+    if (! userPresetFiles_.isEmpty())
+    {
+        presetMenu_.addSeparator();
+        presetMenu_.addSectionHeading ("User");
+
+        for (int i = 0; i < userPresetFiles_.size(); ++i)
+            presetMenu_.addItem (userPresetFiles_.getReference (i).getFileNameWithoutExtension(), kUserPresetIdBase + i);
+    }
+
+    presetMenu_.addSeparator();
+    presetMenu_.addItem ("Save current as...", kSaveUserPresetId);
+
+    int selectedId = juce::jlimit (1, master_limiter_ui::PresetManager::getNumPresets(), activeFactoryPresetId_);
+    int activeUserIndex = -1;
+
+    if (activeUserPresetName_.isNotEmpty())
+    {
+        for (int i = 0; i < userPresetFiles_.size(); ++i)
+        {
+            if (userPresetFiles_.getReference (i).getFileNameWithoutExtension() == activeUserPresetName_)
+            {
+                activeUserIndex = i;
+                selectedId = kUserPresetIdBase + i;
+                break;
+            }
+        }
+
+        if (activeUserIndex < 0)
+            activeUserPresetName_.clear();
+    }
+
+    if (activeUserIndex >= 0)
+        presetMenu_.addItem ("Delete \"" + activeUserPresetName_ + "\"", kDeleteUserPresetId);
+
+    presetMenu_.addItem ("Reveal presets folder", kRevealUserPresetsId);
+    presetMenu_.setSelectedId (selectedId, juce::dontSendNotification);
+}
+
+void MainView::handlePresetMenuSelection()
+{
+    if (rebuildingPresetMenu_)
+        return;
+
+    const int id = presetMenu_.getSelectedId();
+    const int factoryCount = master_limiter_ui::PresetManager::getNumPresets();
+
+    if (id >= 1 && id <= factoryCount)
+    {
+        activeFactoryPresetId_ = id;
+        activeUserPresetName_.clear();
+        processor_.applyPreset (id - 1);
+        refreshPresetMenu();
+        return;
+    }
+
+    if (id >= kUserPresetIdBase && id < kUserPresetIdBase + userPresetFiles_.size())
+    {
+        const int index = id - kUserPresetIdBase;
+        const auto file = userPresetFiles_.getReference (index);
+
+        if (master_limiter_ui::PresetManager::loadUserPreset (apvts_, file))
+        {
+            activeFactoryPresetId_ = 1;
+            activeUserPresetName_ = file.getFileNameWithoutExtension();
+        }
+        else
+        {
+            showPresetMessage ("Preset Load Failed", "Could not load \"" + file.getFileName() + "\".");
+        }
+
+        refreshPresetMenu();
+        return;
+    }
+
+    if (id == kSaveUserPresetId)
+    {
+        refreshPresetMenu();
+        showSaveUserPresetDialog();
+        return;
+    }
+
+    if (id == kDeleteUserPresetId)
+    {
+        refreshPresetMenu();
+        showDeleteUserPresetDialog();
+        return;
+    }
+
+    if (id == kRevealUserPresetsId)
+    {
+        refreshPresetMenu();
+        master_limiter_ui::PresetManager::getUserPresetsDir().revealToUser();
+    }
+}
+
+void MainView::showSaveUserPresetDialog()
+{
+    auto alert = std::make_shared<juce::AlertWindow> ("Save User Preset",
+                                                      "Save the full current state, including DEV controls.",
+                                                      juce::MessageBoxIconType::NoIcon,
+                                                      this);
+    alert->addTextEditor ("name", makeDefaultUserPresetName(), "Name");
+    alert->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    alert->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    alert->enterModalState (true, juce::ModalCallbackFunction::create (
+        [safe = juce::Component::SafePointer<MainView> (this), alert] (int result)
+        {
+            if (safe != nullptr && result == 1)
+                safe->saveUserPresetNamed (alert->getTextEditorContents ("name"));
+        }));
+}
+
+void MainView::saveUserPresetNamed (const juce::String& name)
+{
+    const auto trimmed = name.trim();
+    if (trimmed.isEmpty())
+    {
+        showPresetMessage ("Preset Not Saved", "Please enter a preset name.");
+        refreshPresetMenu();
+        return;
+    }
+
+    if (! master_limiter_ui::PresetManager::saveUserPreset (apvts_, trimmed))
+    {
+        showPresetMessage ("Preset Save Failed", "Could not write the preset file.");
+        refreshPresetMenu();
+        return;
+    }
+
+    activeFactoryPresetId_ = 1;
+    refreshPresetMenu (trimmed);
+}
+
+void MainView::showDeleteUserPresetDialog()
+{
+    if (activeUserPresetName_.isEmpty())
+        return;
+
+    juce::File activeFile;
+    for (const auto& file : userPresetFiles_)
+    {
+        if (file.getFileNameWithoutExtension() == activeUserPresetName_)
+        {
+            activeFile = file;
+            break;
+        }
+    }
+
+    if (activeFile == juce::File())
+        return;
+
+    juce::AlertWindow::showOkCancelBox (
+        juce::MessageBoxIconType::WarningIcon,
+        "Delete User Preset",
+        "Delete \"" + activeUserPresetName_ + "\" from disk?",
+        "Delete",
+        "Cancel",
+        this,
+        juce::ModalCallbackFunction::create (
+            [safe = juce::Component::SafePointer<MainView> (this), activeFile] (int result)
+            {
+                if (safe == nullptr || result != 1)
+                    return;
+
+                if (! master_limiter_ui::PresetManager::deleteUserPreset (activeFile))
+                    safe->showPresetMessage ("Preset Delete Failed", "Could not delete \"" + activeFile.getFileName() + "\".");
+
+                safe->activeUserPresetName_.clear();
+                safe->activeFactoryPresetId_ = 1;
+                safe->refreshPresetMenu();
+            }));
+}
+
+void MainView::showPresetMessage (const juce::String& title, const juce::String& message)
+{
+    juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                      .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                      .withTitle (title)
+                                      .withMessage (message)
+                                      .withButton ("OK")
+                                      .withAssociatedComponent (this),
+                                  nullptr);
+}
+
+juce::String MainView::makeDefaultUserPresetName() const
+{
+    for (int i = 1; i < 1000; ++i)
+    {
+        const auto candidate = "Voicing " + juce::String (i);
+        bool exists = false;
+
+        for (const auto& file : userPresetFiles_)
+        {
+            if (file.getFileNameWithoutExtension().equalsIgnoreCase (candidate))
+            {
+                exists = true;
+                break;
+            }
+        }
+
+        if (! exists)
+            return candidate;
+    }
+
+    return "Voicing";
 }
 
 void MainView::setupValueEdit (ValueSlider& s, ValueSlider::ValueLabelMode mode)
@@ -1275,11 +1501,12 @@ void MainView::resized()
     footerArea_ = {};
 
     header_.setBounds (24, 8, 150, 34);
-    headerMode_.setBounds (184, 12, 520, 24);
-    presetMenu_.setBounds (704, 12, 170, 28);
-    btnDev_.setBounds (884, 12, 50, 28);
-    btnHistory_.setBounds (944, 12, 64, 28);
-    btnBypass_.setBounds (1018, 12, 72, 28);
+    headerMode_.setBounds (184, 12, 470, 24);
+    presetMenu_.setBounds (664, 12, 170, 28);
+    btnSavePreset_.setBounds (844, 12, 50, 28);
+    btnDev_.setBounds (904, 12, 50, 28);
+    btnHistory_.setBounds (964, 12, 56, 28);
+    btnBypass_.setBounds (1030, 12, 60, 28);
     btnLimiterActive_.setBounds (232, 126, 34, 34);
 
     lblGainDrive_.setBounds (48, 116, 140, 18);
@@ -1375,6 +1602,7 @@ void MainView::resized()
     btnLimiterActive_.toFront (false);
     btnClipperActive_.toFront (false);
     presetMenu_.toFront (false);
+    btnSavePreset_.toFront (false);
     btnDev_.toFront (false);
     btnHistory_.toFront (false);
     btnBypass_.toFront (false);

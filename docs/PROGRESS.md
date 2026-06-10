@@ -2,6 +2,59 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-10 — Slice: user presets
+
+**Status:** 🔶 Implemented locally; Release build clean; user AU/VST3 installed;
+system VST3 installed; AU validation clean. System AU copy is blocked by a
+stale root-owned component and needs the one-time sudo removal noted in the
+slice prompt. Audition pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`,
+  local file reads/search.
+- QUERIES ISSUED: MasterLimiter `PresetManager`/`MainView`/`PluginProcessor`
+  lookup; JUCE `AudioProcessorValueTreeState`; JUCE `ValueTree`; JUCE `File`;
+  JUCE `AlertWindow`; shared DSP `user presets APVTS XML full state save load
+  DEV parameters`.
+- FILES RETRIEVED: `PROMPTS/SLICE_USER_PRESETS.md`,
+  `Source/ui/PresetManager.{h,cpp}`, `Source/ui/MainView.{h,cpp}`,
+  `Source/PluginProcessor.{h,cpp}`, `docs/SIGNAL_FLOW.md`,
+  `docs/PROGRESS.md`, and `PROMPTS/PLAN.md`.
+- SECTIONS CITED: existing factory preset subset application,
+  `MainView` header preset combo, `AudioProcessorValueTreeState::copyState()`
+  / `replaceState()`, `ValueTree::createXml()` / `fromXml()`, JUCE `File`
+  directory/list/write/reveal APIs, and async `AlertWindow` text entry.
+- REUSE CHECK: reused the existing product `PresetManager`, header
+  `presetMenu_`, and APVTS state machinery. I checked the local library but
+  found no DSP implementation to reuse because this slice is UI/state-manager
+  only.
+
+**Deliverables**
+- Added user-preset persistence in `PresetManager`: directory creation,
+  sorted `*.mlpreset` listing, full-state save via APVTS XML, full-state load
+  via `replaceState()`, delete, and revealable storage under
+  `~/Library/Audio/Presets/MelechDSP/MasterLimiter`.
+- Extended the header preset menu with Factory/User sections plus Save current
+  as, Delete active user preset, and Reveal presets folder actions.
+- Added a small header Save button that opens the same full-state Save dialog.
+- Factory presets remain curated subsets; user presets capture every registered
+  parameter, including all temporary DEV controls.
+
+**RT / gate**
+- UI/state-manager only. `copyState()` / `replaceState()` are message-thread
+  operations and are not called from audio processing.
+- [x] Plugin Release build clean via `cmake --build build` (2026-06-10).
+- [x] User AU/VST3 copied to `~/Library/Audio/Plug-Ins/...`.
+- [x] System VST3 copied to `/Library/Audio/Plug-Ins/VST3/`.
+- [ ] System AU copy blocked by root-owned
+  `/Library/Audio/Plug-Ins/Components/MasterLimiter.component`; `sudo -n`
+  removal failed because a password is required.
+- [x] AU validation clean via `auval -v aufx MaLm Melc` after user AU install.
+- [ ] Audition: Save A/B voicings, including DEV values, load them back exactly;
+  Delete removes from disk/menu; Reveal opens the preset folder.
+
+---
+
 ## 2026-06-10 — Slice: DEV controls window
 
 **Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed

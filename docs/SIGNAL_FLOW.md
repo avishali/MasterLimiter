@@ -144,10 +144,16 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 | Bypass | `plugin_bypass` | bool | off | Click-free dry/wet bypass. |
 | I/O In/Out L/R + links | `io_*` | ±24 dB | 0 | Calibration trims. |
 
+Factory presets in the header menu remain curated voicing subsets. User presets
+saved from the header **Save** button or preset menu are full APVTS state
+snapshots written to `~/Library/Audio/Presets/MelechDSP/MasterLimiter/*.mlpreset`;
+they round-trip every registered parameter, including the temporary DEV controls
+listed in §6, for A/B comparison between complete voicings.
+
 ---
 
 ## 6. DEV controls (TEMPORARY — remove before 0.4)
-Live, RT-safe tuning knobs now live in the separate header **DEV** window, grouped by operating section. They drive release/lookahead/attack voicing experiments; defaults reproduce the baked constants where applicable. The main view intentionally has no inline DEV strip.
+Live, RT-safe tuning knobs now live in the separate header **DEV** window, grouped by operating section. They drive release/lookahead/attack voicing experiments; defaults reproduce the baked constants where applicable. The main view intentionally has no inline DEV strip. User presets capture these DEV values as part of the full APVTS state.
 
 | Window section | Controls |
 |---|---|

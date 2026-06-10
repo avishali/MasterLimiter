@@ -1,6 +1,7 @@
 #include "PresetManager.h"
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <string_view>
 
@@ -37,6 +38,26 @@ constexpr std::array<FactoryPreset, 5> kFactoryPresets {{
 juce::String pid (std::string_view sv)
 {
     return { sv.data(), static_cast<size_t> (sv.size()) };
+}
+
+juce::String sanitisePresetName (juce::String name)
+{
+    name = name.trim();
+    static constexpr const char* illegal = "\\/:*?\"<>|";
+
+    juce::String result;
+    result.preallocateBytes (static_cast<size_t> (name.getNumBytesAsUTF8()));
+
+    for (auto c : name)
+    {
+        if (c < juce::juce_wchar (32) || juce::String::charToString (c).containsAnyOf (illegal))
+            result += "_";
+        else
+            result += c;
+    }
+
+    result = result.trim();
+    return result.isNotEmpty() ? result : "Untitled";
 }
 
 void setParameterValue (juce::AudioProcessorValueTreeState& apvts, std::string_view paramId, float plainValue)
@@ -105,6 +126,76 @@ bool PresetManager::applyPreset (juce::AudioProcessorValueTreeState& apvts, int 
     setParameterValue (apvts, param::io_output_link, 0.0f);
 
     return true;
+}
+
+juce::File PresetManager::getUserPresetsDir()
+{
+    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                   .getChildFile ("Audio")
+                   .getChildFile ("Presets")
+                   .getChildFile ("MelechDSP")
+                   .getChildFile ("MasterLimiter");
+
+    if (! dir.isDirectory())
+        dir.createDirectory();
+
+    return dir;
+}
+
+juce::Array<juce::File> PresetManager::listUserPresets()
+{
+    juce::Array<juce::File> files;
+    getUserPresetsDir().findChildFiles (files, juce::File::findFiles, false, "*.mlpreset");
+
+    std::sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b)
+    {
+        return a.getFileNameWithoutExtension().compareIgnoreCase (b.getFileNameWithoutExtension()) < 0;
+    });
+
+    return files;
+}
+
+bool PresetManager::saveUserPreset (const juce::AudioProcessorValueTreeState& apvts, const juce::String& name)
+{
+    const auto safeName = sanitisePresetName (name);
+    auto& mutableApvts = const_cast<juce::AudioProcessorValueTreeState&> (apvts);
+    const auto state = mutableApvts.copyState();
+    const auto xml = state.createXml();
+
+    if (xml == nullptr)
+        return false;
+
+    const auto file = getUserPresetsDir().getChildFile (safeName).withFileExtension (".mlpreset");
+    return file.replaceWithText (xml->toString());
+}
+
+bool PresetManager::loadUserPreset (juce::AudioProcessorValueTreeState& apvts, const juce::File& file)
+{
+    if (! file.existsAsFile() || ! file.hasFileExtension (".mlpreset"))
+        return false;
+
+    const auto xml = juce::parseXML (file);
+    if (xml == nullptr)
+        return false;
+
+    const auto tree = juce::ValueTree::fromXml (*xml);
+    if (! tree.isValid())
+        return false;
+
+    const auto expectedType = apvts.copyState().getType();
+    if (tree.getType() != expectedType)
+        return false;
+
+    apvts.replaceState (tree);
+    return true;
+}
+
+bool PresetManager::deleteUserPreset (const juce::File& file)
+{
+    if (! file.existsAsFile() || ! file.hasFileExtension (".mlpreset"))
+        return false;
+
+    return file.deleteFile();
 }
 
 } // namespace master_limiter_ui
