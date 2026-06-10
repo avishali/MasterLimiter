@@ -138,8 +138,8 @@ private:
     // Multiband pre-shave (ADR-0009): fixed 2-band split inside the 4x OS region.
     static constexpr float kCrossoverHz = 120.0f;
     static constexpr float kBandHeadroomDb = MDSP_BAND_HEADROOM_DB;
-    static constexpr float kLookaheadMs = 7.0f;
-    static constexpr float kMaxLookaheadMs = 12.0f;
+    static constexpr float kLookaheadMs = 5.0f;
+    static constexpr float kMaxLookaheadMs = 6.0f;
     static constexpr float kLowBandAutoReleaseScale = 3.0f;
     static constexpr float kHighBandAutoReleaseScale = 1.0f;
     static constexpr float kAutoSigmaAttackMs = 5.0f;

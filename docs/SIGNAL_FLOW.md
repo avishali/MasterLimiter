@@ -17,8 +17,8 @@ MasterLimiter is a **mastering maximizer**. Audio comes in, optionally gets soft
   - **Stage 2** — transition width `0.10`, attenuation `−100 dB`. Wider/cheaper, transparent at the higher rate.
   - Flat to 20 kHz; `setUsingIntegerLatency(true)` so latency is a whole number of samples.
 - **Why 4×:** limiting is a nonlinear operation; doing it at 4× pushes the aliasing products far above the audible band so they can be filtered on the way down. (Known limit: at 4× some limiter harmonics still fold back — see §8.)
-- **Total plugin latency** = `2 × max lookahead` + oversampler latency + FinalCeiling (lookahead 64 + its detector). The reported latency is fixed at the 12 ms maximum lookahead so DEV tuning does not force host PDC changes.
-- **Lookahead** has two DEV-tunable active windows, both defaulting to the shipped 7 ms voicing: `dev_lookahead_band_ms` drives the per-band delay/envelope window, and `dev_lookahead_wide_ms` drives the wideband delay/envelope window. The wet path is padded by the unused slack so total latency stays constant.
+- **Total plugin latency** = `2 × max lookahead` + oversampler latency + FinalCeiling (lookahead 64 + its detector). The reported latency is fixed at the 6 ms maximum lookahead so DEV tuning does not force host PDC changes.
+- **Lookahead** has two DEV-tunable active windows, both defaulting to 5 ms: `dev_lookahead_band_ms` drives the per-band delay/envelope window, and `dev_lookahead_wide_ms` drives the wideband delay/envelope window. Both sweep 0.00…6.00 ms in 0.01 ms steps; 0.00 ms maps internally to the one-oversampled-sample minimum so the delay and envelope window stay aligned. The wet path is padded by the unused slack so total latency stays constant.
 
 ---
 
@@ -158,8 +158,8 @@ Live, RT-safe tuning knobs in the orange "DEV RELEASE" strip. They drive release
 | **High/Wide Release Scale** | `dev_high_band_release_scale` | 0.5…8.0× | 1.0 | High/wideband release multiplier | Nominal 1×. |
 | **Sigma Attack** | `dev_sigma_attack_ms` | 1…50 ms | 5 | AdaptiveSigma: how fast `sigma` rises | Legacy-engine only. |
 | **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | Legacy-engine only. |
-| **LA Band** | `dev_lookahead_band_ms` | 1…12 ms | 7 | Per-band audio delay + low/high envelope window | Latency stays fixed via wet-path padding. |
-| **LA Wide** | `dev_lookahead_wide_ms` | 1…12 ms | 7 | Wideband audio delay + wide envelope window | Latency stays fixed via wet-path padding. |
+| **LA Band** | `dev_lookahead_band_ms` | 0…6 ms, 0.01 ms step | 5 | Per-band audio delay + low/high envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
+| **LA Wide** | `dev_lookahead_wide_ms` | 0…6 ms, 0.01 ms step | 5 | Wideband audio delay + wide envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
 | **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | All limiter envelope attack ramps | Overrides Character; capped by each active lookahead window. |
 | **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | Active only when Release Auto is Off. |
 

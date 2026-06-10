@@ -2,6 +2,50 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-10 — Slice: lookahead trim + fine increments
+
+**Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed
+including system VST3; AU validation clean. Audition pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`,
+  local file reads/search.
+- QUERIES ISSUED: MasterLimiter `PluginProcessor`/`Parameters`/docs path lookup;
+  JUCE `AudioParameterFloat`; JUCE `NormalisableRange`; shared DSP
+  `LookaheadDelay LimiterEnvelope active lookahead samples clamp`.
+- FILES RETRIEVED: `Source/PluginProcessor.{h,cpp}`,
+  `Source/parameters/Parameters.cpp`, `docs/SIGNAL_FLOW.md`,
+  `docs/PROGRESS.md`, `PROMPTS/PLAN.md`, and
+  `PROMPTS/SLICE_LOOKAHEAD_TRIM_FINE.md`.
+- SECTIONS CITED: `prepareToPlay()` max-lookahead allocation/latency setup,
+  `processCore()` active lookahead clamp and constant-latency padding, APVTS
+  lookahead parameter declarations, and `SIGNAL_FLOW.md` §1/§6.
+- REUSE CHECK: reused the existing product `LookaheadDelay` and SDK
+  `LimiterEnvelope` active-window path. I checked the local library but found no
+  separate lookahead-trim component, so this slice only adjusts the product max
+  latency constant and DEV parameter ranges.
+
+**Deliverables**
+- Lowered the prepared constant-latency max lookahead from `12 ms` to `6 ms`.
+- Set both DEV lookahead parameters to `0.00..6.00 ms` with `0.01 ms` steps and
+  `5.00 ms` defaults.
+- Aligned the internal lookahead fallback/default constant to `5 ms`.
+- Confirmed the existing process-time clamp maps `0.00 ms` to a one-OS-sample
+  minimum for both audio delay and envelope active window.
+
+**RT / gate**
+- No allocations or structural DSP changes were added. Runtime behavior remains
+  scalar parameter loads, integer clamps, delay changes, and the existing wet-path
+  padding.
+- [x] Plugin Release build clean via `cmake --build build` (2026-06-10).
+- [x] AU/VST3 copied to user plug-in folders, including system VST3.
+- [x] AU validation clean via `auval -v aufx MaLm Melc`; `auval` reports
+  `DEV LA Band` and `DEV LA Wide` as min `0.00`, default `5.00`, max `6.00`.
+- [ ] Audition: reported latency is reduced, lookahead sweeps fine from
+  `0.00..6.00 ms`, no PDC churn, and FinalCeiling still holds at 0.00 ms.
+
+---
+
 ## 2026-06-10 — Slice: attack DEV knob
 
 **Status:** 🔶 Implemented locally; SDK and plugin Release builds clean; SDK
