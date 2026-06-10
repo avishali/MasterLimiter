@@ -1,0 +1,25 @@
+{
+  "product": "MasterLimiter",
+  "channel": "beta",
+  "platform": "macOS",
+  "latest": {
+    "version": "0.3.0-beta",
+    "build": 1,
+    "date": "2026-06-10",
+    "minimum_supported_version": "0.3.0-beta",
+    "download_path": "MasterLimiter/macOS/0.3.0-beta/MasterLimiter-0.3.0-beta.pkg",
+    "sha256": "FILL_WITH_REAL_SHA256_64HEX",
+    "release_notes_path": "MasterLimiter/macOS/0.3.0-beta/release-notes.md"
+  },
+  "releases": [
+    {
+      "version": "0.3.0-beta",
+      "build": 1,
+      "date": "2026-06-10",
+      "minimum_supported_version": "0.3.0-beta",
+      "download_path": "MasterLimiter/macOS/0.3.0-beta/MasterLimiter-0.3.0-beta.pkg",
+      "sha256": "FILL_WITH_REAL_SHA256_64HEX",
+      "release_notes_path": "MasterLimiter/macOS/0.3.0-beta/release-notes.md"
+    }
+  ]
+}

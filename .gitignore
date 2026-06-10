@@ -55,3 +55,8 @@ beta-dist/
 tools/analysis/.venv/
 tools/analysis/out/
 tools/analysis/__pycache__/
+
+# release binaries (built locally, not committed)
+release/*.pkg
+release/*.sha256
+release/*.dmg
