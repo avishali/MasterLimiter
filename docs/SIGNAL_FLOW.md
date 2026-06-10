@@ -148,7 +148,17 @@ Factory presets in the header menu remain curated voicing subsets. User presets
 saved from the header **Save** button or preset menu are full APVTS state
 snapshots written to `~/Library/Audio/Presets/MelechDSP/MasterLimiter/*.mlpreset`;
 they round-trip every registered parameter, including the temporary DEV controls
-listed in §6, for A/B comparison between complete voicings.
+listed in §6, for A/B comparison between complete voicings. The preset menu also
+has **Load from file...**, which opens that presets folder and can load any
+`.mlpreset` selected from disk.
+
+The header **A/B** controls are scratch compare slots backed by full APVTS
+snapshots. Switching to the inactive slot first captures the live state into the
+current slot, then loads the target slot with `replaceState()`. The copy button
+seeds the inactive slot from the active slot, so a common flow is **A→B**, tweak
+B, then flip A/B to compare complete voicings. The A/B pair and active slot are
+stored in the plugin state alongside the APVTS wrapper so host sessions restore
+the current comparison pair.
 
 ---
 

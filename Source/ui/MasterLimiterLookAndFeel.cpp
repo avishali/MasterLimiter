@@ -65,6 +65,11 @@ bool isMeterZoomButton (const juce::Button& button)
     return name == "MeterScaleMinus" || name == "MeterScalePlus";
 }
 
+bool isBypassButton (const juce::Button& button)
+{
+    return button.getName() == "BypassButton";
+}
+
 bool isTextButtonActive (const juce::Button& button)
 {
     const auto text = button.getButtonText();
@@ -313,6 +318,12 @@ void MasterLimiterLookAndFeel::drawButtonText (juce::Graphics& g,
         return;
     }
 
+    if (isBypassButton (button))
+    {
+        drawButtonLabel (g, ui_, button, button.getLocalBounds().toFloat(), button.getToggleState());
+        return;
+    }
+
     if (isTextButtonActive (button) && ! button.getToggleState())
     {
         drawButtonLabel (g, ui_, button, button.getLocalBounds().toFloat(), true);
@@ -348,5 +359,18 @@ void MasterLimiterLookAndFeel::drawToggleButton (juce::Graphics& g,
     }
 
     mdsp_ui::LookAndFeel::drawToggleButton (g, button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+}
+
+void MasterLimiterLookAndFeel::drawComboBox (juce::Graphics& g,
+                                             int width,
+                                             int height,
+                                             bool isButtonDown,
+                                             int buttonX,
+                                             int buttonY,
+                                             int buttonW,
+                                             int buttonH,
+                                             juce::ComboBox& box)
+{
+    juce::LookAndFeel_V4::drawComboBox (g, width, height, isButtonDown, buttonX, buttonY, buttonW, buttonH, box);
 }
 

@@ -24,6 +24,16 @@ public:
                            bool shouldDrawButtonAsHighlighted,
                            bool shouldDrawButtonAsDown) override;
 
+    void drawComboBox (juce::Graphics& g,
+                       int width,
+                       int height,
+                       bool isButtonDown,
+                       int buttonX,
+                       int buttonY,
+                       int buttonW,
+                       int buttonH,
+                       juce::ComboBox& box) override;
+
 private:
     mdsp_ui::UiContext& ui_;
 

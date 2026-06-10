@@ -13,6 +13,10 @@ namespace
 {
 constexpr const char* kStateWrapperType = "MasterLimiterState";
 constexpr const char* kLearnedRefLufsProperty = "learned_ref_lufs";
+constexpr const char* kCompareStateType = "ABCompareState";
+constexpr const char* kCompareSlotAType = "slotA";
+constexpr const char* kCompareSlotBType = "slotB";
+constexpr const char* kCompareActiveSlotProperty = "active_slot";
 
 float readFloatParam (juce::AudioProcessorValueTreeState& apvts, const char* paramId)
 {
@@ -533,6 +537,94 @@ void MasterLimiterAudioProcessor::clearLearnedReference()
 bool MasterLimiterAudioProcessor::applyPreset (int presetIndex)
 {
     return master_limiter_ui::PresetManager::applyPreset (apvts, presetIndex);
+}
+
+void MasterLimiterAudioProcessor::ensureCompareSlotsInitialized()
+{
+    const auto current = apvts.copyState();
+
+    if (! compareSlotA_.isValid())
+        compareSlotA_ = current.createCopy();
+
+    if (! compareSlotB_.isValid())
+        compareSlotB_ = current.createCopy();
+}
+
+void MasterLimiterAudioProcessor::switchCompareSlot (int slotIndex)
+{
+    ensureCompareSlotsInitialized();
+    slotIndex = juce::jlimit (0, 1, slotIndex);
+
+    if (slotIndex == activeCompareSlot_)
+        return;
+
+    captureCurrentStateToActiveCompareSlot();
+    replaceLiveStateFromCompareSlot (slotIndex);
+    activeCompareSlot_ = slotIndex;
+}
+
+void MasterLimiterAudioProcessor::copyActiveCompareSlotToOther()
+{
+    ensureCompareSlotsInitialized();
+    captureCurrentStateToActiveCompareSlot();
+
+    if (activeCompareSlot_ == 0)
+        compareSlotB_ = compareSlotA_.createCopy();
+    else
+        compareSlotA_ = compareSlotB_.createCopy();
+}
+
+void MasterLimiterAudioProcessor::captureCurrentStateToActiveCompareSlot()
+{
+    const auto current = apvts.copyState();
+
+    if (activeCompareSlot_ == 0)
+        compareSlotA_ = current.createCopy();
+    else
+        compareSlotB_ = current.createCopy();
+}
+
+void MasterLimiterAudioProcessor::replaceLiveStateFromCompareSlot (int slotIndex)
+{
+    const auto& slot = slotIndex == 0 ? compareSlotA_ : compareSlotB_;
+
+    if (slot.isValid())
+        apvts.replaceState (slot);
+}
+
+juce::ValueTree MasterLimiterAudioProcessor::createCompareStateTree() const
+{
+    juce::ValueTree compareState (kCompareStateType);
+    compareState.setProperty (kCompareActiveSlotProperty, activeCompareSlot_, nullptr);
+
+    if (compareSlotA_.isValid())
+    {
+        juce::ValueTree slotA (kCompareSlotAType);
+        slotA.addChild (compareSlotA_.createCopy(), -1, nullptr);
+        compareState.addChild (slotA, -1, nullptr);
+    }
+
+    if (compareSlotB_.isValid())
+    {
+        juce::ValueTree slotB (kCompareSlotBType);
+        slotB.addChild (compareSlotB_.createCopy(), -1, nullptr);
+        compareState.addChild (slotB, -1, nullptr);
+    }
+
+    return compareState;
+}
+
+void MasterLimiterAudioProcessor::restoreCompareStateFromTree (const juce::ValueTree& tree)
+{
+    const auto slotA = tree.getChildWithName (kCompareSlotAType);
+    const auto slotB = tree.getChildWithName (kCompareSlotBType);
+    const auto slotAState = slotA.getChildWithName (apvts.state.getType());
+    const auto slotBState = slotB.getChildWithName (apvts.state.getType());
+
+    compareSlotA_ = slotAState.isValid() ? slotAState.createCopy() : juce::ValueTree();
+    compareSlotB_ = slotBState.isValid() ? slotBState.createCopy() : juce::ValueTree();
+    activeCompareSlot_ = juce::jlimit (0, 1, static_cast<int> (tree.getProperty (kCompareActiveSlotProperty, 0)));
+    ensureCompareSlotsInitialized();
 }
 
 void MasterLimiterAudioProcessor::handleAsyncUpdate()
@@ -1321,6 +1413,7 @@ void MasterLimiterAudioProcessor::changeProgramName (int, const juce::String&)
 
 void MasterLimiterAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    captureCurrentStateToActiveCompareSlot();
     auto state = apvts.copyState();
     juce::ValueTree wrapper (kStateWrapperType);
     const float learnedRef = learnedRefLufs_.load (std::memory_order_relaxed);
@@ -1328,6 +1421,7 @@ void MasterLimiterAudioProcessor::getStateInformation (juce::MemoryBlock& destDa
         wrapper.setProperty (kLearnedRefLufsProperty, learnedRef, nullptr);
     // Wrap APVTS state so the hidden Learn reference stays off the automation surface.
     wrapper.addChild (state, -1, nullptr);
+    wrapper.addChild (createCompareStateTree(), -1, nullptr);
 
     const std::unique_ptr<juce::XmlElement> xml (wrapper.createXml());
     copyXmlToBinary (*xml, destData);
@@ -1342,6 +1436,7 @@ void MasterLimiterAudioProcessor::setStateInformation (const void* data, int siz
         {
             const float noRef = -std::numeric_limits<float>::infinity();
             float loadedRef = noRef;
+            bool compareStateRestored = false;
 
             if (vt.hasType (kStateWrapperType))
             {
@@ -1351,6 +1446,13 @@ void MasterLimiterAudioProcessor::setStateInformation (const void* data, int siz
                 auto apvtsState = vt.getChildWithName (apvts.state.getType());
                 if (apvtsState.isValid())
                     apvts.replaceState (apvtsState);
+
+                auto compareState = vt.getChildWithName (kCompareStateType);
+                if (compareState.isValid())
+                {
+                    restoreCompareStateFromTree (compareState);
+                    compareStateRestored = true;
+                }
             }
             else
             {
@@ -1358,6 +1460,14 @@ void MasterLimiterAudioProcessor::setStateInformation (const void* data, int siz
                     loadedRef = static_cast<float> (vt.getProperty (kLearnedRefLufsProperty));
 
                 apvts.replaceState (vt);
+            }
+
+            if (! compareStateRestored)
+            {
+                compareSlotA_ = {};
+                compareSlotB_ = {};
+                activeCompareSlot_ = 0;
+                ensureCompareSlotsInitialized();
             }
 
             if (! std::isfinite (loadedRef))

@@ -25,6 +25,7 @@ constexpr int kUserPresetIdBase = 1000;
 constexpr int kSaveUserPresetId = 9001;
 constexpr int kDeleteUserPresetId = 9002;
 constexpr int kRevealUserPresetsId = 9003;
+constexpr int kLoadUserPresetFromFileId = 9004;
 
 juce::String buildMarkerText()
 {
@@ -439,7 +440,6 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     presetMenu_.setColour (juce::ComboBox::textColourId, palette::text);
     presetMenu_.setColour (juce::ComboBox::outlineColourId, palette::border);
     presetMenu_.setColour (juce::ComboBox::focusedOutlineColourId, palette::accent.withAlpha (0.8f));
-    presetMenu_.setColour (juce::ComboBox::arrowColourId, palette::accentBright);
     presetMenu_.setTextWhenNothingSelected ("Presets");
     presetMenu_.onChange = [this] { handlePresetMenuSelection(); };
     refreshPresetMenu();
@@ -447,6 +447,28 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     btnSavePreset_.onClick = [this] { showSaveUserPresetDialog(); };
     addAndMakeVisible (btnSavePreset_);
+    btnCompareA_.setClickingTogglesState (false);
+    btnCompareB_.setClickingTogglesState (false);
+    btnCompareA_.onClick = [this]
+    {
+        processor_.switchCompareSlot (0);
+        updateCompareButtons();
+    };
+    btnCompareB_.onClick = [this]
+    {
+        processor_.switchCompareSlot (1);
+        updateCompareButtons();
+    };
+    btnCopyCompare_.onClick = [this]
+    {
+        processor_.copyActiveCompareSlotToOther();
+        updateCompareButtons();
+    };
+    processor_.ensureCompareSlotsInitialized();
+    updateCompareButtons();
+    addAndMakeVisible (btnCompareA_);
+    addAndMakeVisible (btnCompareB_);
+    addAndMakeVisible (btnCopyCompare_);
 
     auto setupLabel = [&] (juce::Label& l)
     {
@@ -543,6 +565,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnIoOutputLink_.setButtonText ({});
     btnIoOutputLink_.setToggleState (false, juce::dontSendNotification);
     btnBypass_.setClickingTogglesState (true);
+    btnBypass_.setName ("BypassButton");
     btnMeterRms_.setClickingTogglesState (true);
     btnMeterRms_.setToggleState (false, juce::dontSendNotification);
     btnMeterScaleMinus_.setName ("MeterScaleMinus");
@@ -798,6 +821,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnIoOutputLink_.setTooltip ("When enabled, moving one Output fader mirrors the other.");
     btnBypass_.setTooltip ("Plugin bypass. When on, the limiter is bypassed but I/O trims and Gain-Match still apply.");
     btnSavePreset_.setTooltip ("Save the full current state as a user preset, including DEV controls.");
+    btnCompareA_.setTooltip ("A/B compare slot A. Click inactive slot to capture the current slot and load A.");
+    btnCompareB_.setTooltip ("A/B compare slot B. Click inactive slot to capture the current slot and load B.");
+    btnCopyCompare_.setTooltip ("Copy the active A/B slot into the other slot.");
     btnDev_.setTooltip ("Open the temporary DEV tuning controls window.");
     btnHistory_.setTooltip ("Open the scrolling gain-reduction and level history graph.");
     btnMeterScaleMinus_.setTooltip ("Zoom the I/O meter range out.");
@@ -815,7 +841,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     lblCharacter_.setEnabled (false);
     segCharacter_.setEnabled (false);
     segCharacter_.setTooltip ("Temporarily inactive while DEV Attack overrides Character.");
-    presetMenu_.setTooltip ("Factory presets. Selecting one updates the processing controls.");
+    presetMenu_.setTooltip ("Factory and user presets. User presets save/load full state including DEV controls.");
     lblTruePeak_.setTooltip ({});
     btnResetPeaks_.setTooltip ("Resets held peaks, maximum gain reduction, and clip maximums.");
 
@@ -880,6 +906,7 @@ void MainView::refreshPresetMenu (const juce::String& preferredUserPresetName)
 
     presetMenu_.addSeparator();
     presetMenu_.addItem ("Save current as...", kSaveUserPresetId);
+    presetMenu_.addItem ("Load from file...", kLoadUserPresetFromFileId);
 
     int selectedId = juce::jlimit (1, master_limiter_ui::PresetManager::getNumPresets(), activeFactoryPresetId_);
     int activeUserIndex = -1;
@@ -954,6 +981,13 @@ void MainView::handlePresetMenuSelection()
     {
         refreshPresetMenu();
         showDeleteUserPresetDialog();
+        return;
+    }
+
+    if (id == kLoadUserPresetFromFileId)
+    {
+        refreshPresetMenu();
+        showLoadUserPresetFromFileDialog();
         return;
     }
 
@@ -1041,6 +1075,43 @@ void MainView::showDeleteUserPresetDialog()
                 safe->activeFactoryPresetId_ = 1;
                 safe->refreshPresetMenu();
             }));
+}
+
+void MainView::showLoadUserPresetFromFileDialog()
+{
+    presetFileChooser_ = std::make_unique<juce::FileChooser> ("Load preset",
+                                                              master_limiter_ui::PresetManager::getUserPresetsDir(),
+                                                              "*.mlpreset");
+    presetFileChooser_->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                                     [safe = juce::Component::SafePointer<MainView> (this)] (const juce::FileChooser& chooser)
+                                     {
+                                         if (safe == nullptr)
+                                             return;
+
+                                         const auto file = chooser.getResult();
+                                         if (file == juce::File())
+                                             return;
+
+                                         if (master_limiter_ui::PresetManager::loadUserPreset (safe->apvts_, file))
+                                         {
+                                             safe->activeFactoryPresetId_ = 1;
+                                             safe->activeUserPresetName_ = file.getFileNameWithoutExtension();
+                                         }
+                                         else
+                                         {
+                                             safe->showPresetMessage ("Preset Load Failed", "Could not load \"" + file.getFileName() + "\".");
+                                         }
+
+                                         safe->refreshPresetMenu();
+                                     });
+}
+
+void MainView::updateCompareButtons()
+{
+    const int active = processor_.getActiveCompareSlot();
+    btnCompareA_.setToggleState (active == 0, juce::dontSendNotification);
+    btnCompareB_.setToggleState (active == 1, juce::dontSendNotification);
+    btnCopyCompare_.setButtonText (active == 0 ? "A→B" : "B→A");
 }
 
 void MainView::showPresetMessage (const juce::String& title, const juce::String& message)
@@ -1501,12 +1572,15 @@ void MainView::resized()
     footerArea_ = {};
 
     header_.setBounds (24, 8, 150, 34);
-    headerMode_.setBounds (184, 12, 470, 24);
-    presetMenu_.setBounds (664, 12, 170, 28);
-    btnSavePreset_.setBounds (844, 12, 50, 28);
-    btnDev_.setBounds (904, 12, 50, 28);
-    btnHistory_.setBounds (964, 12, 56, 28);
-    btnBypass_.setBounds (1030, 12, 60, 28);
+    headerMode_.setBounds (184, 12, 348, 24);
+    presetMenu_.setBounds (542, 12, 160, 28);
+    btnSavePreset_.setBounds (710, 12, 48, 28);
+    btnCompareA_.setBounds (766, 12, 30, 28);
+    btnCompareB_.setBounds (802, 12, 30, 28);
+    btnCopyCompare_.setBounds (838, 12, 48, 28);
+    btnDev_.setBounds (894, 12, 48, 28);
+    btnHistory_.setBounds (950, 12, 56, 28);
+    btnBypass_.setBounds (1014, 12, 76, 28);
     btnLimiterActive_.setBounds (232, 126, 34, 34);
 
     lblGainDrive_.setBounds (48, 116, 140, 18);
@@ -1603,6 +1677,9 @@ void MainView::resized()
     btnClipperActive_.toFront (false);
     presetMenu_.toFront (false);
     btnSavePreset_.toFront (false);
+    btnCompareA_.toFront (false);
+    btnCompareB_.toFront (false);
+    btnCopyCompare_.toFront (false);
     btnDev_.toFront (false);
     btnHistory_.toFront (false);
     btnBypass_.toFront (false);

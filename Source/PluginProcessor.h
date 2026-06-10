@@ -117,6 +117,10 @@ public:
     void armLearnReference() noexcept;
     void clearLearnedReference();
     bool applyPreset (int presetIndex);
+    void ensureCompareSlotsInitialized();
+    int getActiveCompareSlot() const noexcept { return activeCompareSlot_; }
+    void switchCompareSlot (int slotIndex);
+    void copyActiveCompareSlotToOther();
 
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
@@ -132,8 +136,15 @@ private:
     void applyCompensationGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float compGainDb) const;
     void processCore (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool forceBypass);
     void commitLearnedRef();
+    void captureCurrentStateToActiveCompareSlot();
+    void replaceLiveStateFromCompareSlot (int slotIndex);
+    juce::ValueTree createCompareStateTree() const;
+    void restoreCompareStateFromTree (const juce::ValueTree& tree);
 
     juce::AudioProcessorValueTreeState apvts;
+    juce::ValueTree compareSlotA_;
+    juce::ValueTree compareSlotB_;
+    int activeCompareSlot_ = 0;
 
     // Multiband pre-shave (ADR-0009): fixed 2-band split inside the 4x OS region.
     static constexpr float kCrossoverHz = 120.0f;

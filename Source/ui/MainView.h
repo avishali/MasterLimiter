@@ -118,6 +118,8 @@ private:
     void showSaveUserPresetDialog();
     void saveUserPresetNamed (const juce::String& name);
     void showDeleteUserPresetDialog();
+    void showLoadUserPresetFromFileDialog();
+    void updateCompareButtons();
     void showPresetMessage (const juce::String& title, const juce::String& message);
     juce::String makeDefaultUserPresetName() const;
 
@@ -152,6 +154,9 @@ private:
     juce::Label headerMode_ { {}, "v0.3.0 (beta) - Maximizer" };
     juce::ComboBox presetMenu_ { "Factory Presets" };
     juce::TextButton btnSavePreset_ { "Save" };
+    juce::TextButton btnCompareA_ { "A" };
+    juce::TextButton btnCompareB_ { "B" };
+    juce::TextButton btnCopyCompare_ { "A→B" };
 
     juce::Label lblGainDrive_ { {}, "Gain" };
     ValueSlider sldGainDrive_;
@@ -245,6 +250,7 @@ private:
     juce::String activeUserPresetName_;
     int activeFactoryPresetId_ { 1 };
     bool rebuildingPresetMenu_ { false };
+    std::unique_ptr<juce::FileChooser> presetFileChooser_;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attGainDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attLimiterActive_;

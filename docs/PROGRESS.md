@@ -2,6 +2,62 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-10 — Slice: preset A/B + header polish
+
+**Status:** 🔶 Implemented locally; Release build clean; user AU/VST3 installed;
+system VST3 installed; AU validation clean. System AU copy is still blocked by
+the stale root-owned component. Audition pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`,
+  local file reads/search.
+- QUERIES ISSUED: MasterLimiter `PluginProcessor`/`MainView`/`PresetManager`/
+  `MasterLimiterLookAndFeel` lookup; JUCE `FileChooser`; JUCE
+  `AudioProcessorValueTreeState`; JUCE `ValueTree`; shared DSP `A/B compare
+  preset snapshots APVTS state XML`.
+- FILES RETRIEVED: `PROMPTS/SLICE_PRESET_AB_HEADER_POLISH.md`,
+  `Source/PluginProcessor.{h,cpp}`, `Source/ui/MainView.{h,cpp}`,
+  `Source/ui/MasterLimiterLookAndFeel.{h,cpp}`,
+  `Source/ui/PresetManager.{h,cpp}`, `docs/SIGNAL_FLOW.md`,
+  `docs/PROGRESS.md`, and `PROMPTS/PLAN.md`.
+- SECTIONS CITED: existing plugin state wrapper, full-state user preset load/save
+  helpers, header preset menu layout, `MasterLimiterLookAndFeel` combo/button
+  rendering, JUCE `FileChooser::launchAsync`, and APVTS `copyState()` /
+  `replaceState()`.
+- REUSE CHECK: reused APVTS full-state snapshots, existing user preset
+  load/list/delete APIs, and the existing state wrapper. I checked the local
+  library but found no DSP implementation to reuse because this slice is UI and
+  message-thread state only.
+
+**Deliverables**
+- Added persistent full-state A/B compare slots in the processor state wrapper,
+  with active-slot restore and fallback initialization for older sessions.
+- Added header **A**, **B**, and copy buttons. Switching captures the current
+  slot before loading the target slot; copy seeds the inactive slot from the
+  active slot.
+- Added **Load from file...** to the preset menu via async `FileChooser` rooted
+  at the user preset folder.
+- Switched combo rendering in `MasterLimiterLookAndFeel` to JUCE V4's stock
+  combo box arrow and removed the preset-menu arrow colour override.
+- Made Bypass text rendering explicit and widened the header Bypass button so
+  `Bypassed` is legible.
+
+**RT / gate**
+- UI/state-manager only. `copyState()` / `replaceState()` and file chooser work
+  happen on the message thread; no audio-thread changes.
+- [x] Plugin Release build clean via `cmake --build build` (2026-06-10).
+- [x] User AU/VST3 clean-reinstalled to `~/Library/Audio/Plug-Ins/...`.
+- [x] System VST3 copied to `/Library/Audio/Plug-Ins/VST3/`.
+- [ ] System AU copy blocked by root-owned
+  `/Library/Audio/Plug-Ins/Components/MasterLimiter.component`.
+- [x] AU validation clean via `auval -v aufx MaLm Melc`; clean user reinstall
+  reports the current 35-parameter build.
+- [ ] Audition: A/B slots round-trip distinct DEV voicings and survive session
+  reload; Load from file opens the presets folder; preset arrow is stock JUCE;
+  Bypass text is visible in both states.
+
+---
+
 ## 2026-06-10 — Slice: user presets
 
 **Status:** 🔶 Implemented locally; Release build clean; user AU/VST3 installed;
