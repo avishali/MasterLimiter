@@ -155,12 +155,19 @@ void DevControlsComponent::resized()
     area.removeFromTop (8);
     viewport_.setBounds (area);
 
-    const int contentW = juce::jmax (480, area.getWidth() - 14);
-    const int margin = 14;
-    const int labelW = 112;
+    const int contentW = juce::jmax (260, area.getWidth() - 14);
+    const int margin = 10;
+    const int labelW = contentW < 360 ? 72 : 112;
     const int rowH = 28;
     const int gap = 10;
     int y = 10;
+
+    if (contentW < 360)
+    {
+        for (auto* slider : { &sldAttack_, &sldLookaheadBand_, &sldLookaheadWide_, &sldLaRelease_,
+                              &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldHighScale_, &sldSustainRatio_ })
+            slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
+    }
 
     auto placeGroup = [&] (juce::GroupComponent& group, int h)
     {

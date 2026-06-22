@@ -33,9 +33,9 @@ void MasterLimiterAudioProcessorEditor::DevPanel::paint (juce::Graphics& g)
 {
     g.fillAll (kDevPanelBg);
 
-    auto bounds = getLocalBounds().toFloat().reduced (0.5f);
+    auto bounds = getLocalBounds();
     g.setColour (kDevPanelBorder);
-    g.drawRoundedRectangle (bounds, 8.0f, 1.0f);
+    g.drawVerticalLine (0, 0.0f, static_cast<float> (bounds.getHeight()));
 }
 
 void MasterLimiterAudioProcessorEditor::DevPanel::resized()
@@ -73,17 +73,14 @@ MasterLimiterAudioProcessorEditor::MasterLimiterAudioProcessorEditor (MasterLimi
 {
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf_);
 
-    constrainer_.setMinimumSize (958, 540);
-    constrainer_.setMaximumSize (4000, 2255);
+    constrainer_.setMinimumSize (kMinBaseWidth, kMinBaseHeight);
+    constrainer_.setMaximumSize (kMaxBaseWidth, kMaxBaseHeight);
     constrainer_.setFixedAspectRatio (static_cast<double> (kDesignWidth) / static_cast<double> (kDesignHeight));
     setConstrainer (&constrainer_);
 
     addAndMakeVisible (mainView);
     mainView.onToggleHistoryGraph = [this] { toggleHistoryGraph(); };
     mainView.onToggleDevControls = [this] { toggleDevControls(); };
-
-    scrim_.setInterceptsMouseClicks (true, false);
-    addChildComponent (scrim_);
 
     devPanel_.onClose = [this] { toggleDevControls(); };
     addChildComponent (devPanel_);
@@ -109,12 +106,14 @@ void MasterLimiterAudioProcessorEditor::paint (juce::Graphics& g)
 
 void MasterLimiterAudioProcessorEditor::resized()
 {
-    const auto scale = static_cast<float> (getWidth()) / static_cast<float> (kDesignWidth);
+    const int dockW = devPanel_.isVisible() ? kDevDockWidth : 0;
+    const int baseW = getWidth() - dockW;
+    const auto scale = static_cast<float> (baseW) / static_cast<float> (kDesignWidth);
     mainView.setTransform (juce::AffineTransform::scale (scale));
     mainView.setBounds (0, 0, kDesignWidth, kDesignHeight);
 
-    if (devPanel_.isVisible())
-        layoutDevPanel();
+    if (dockW > 0)
+        devPanel_.setBounds (baseW, 0, dockW, getHeight());
 }
 
 void MasterLimiterAudioProcessorEditor::timerCallback()
@@ -157,26 +156,39 @@ void MasterLimiterAudioProcessorEditor::closeHistoryGraphWindow()
     });
 }
 
+void MasterLimiterAudioProcessorEditor::updateConstrainer()
+{
+    const bool devOpen = devPanel_.isVisible();
+    const int minW = devOpen ? (kMinBaseWidth + kDevDockWidth) : kMinBaseWidth;
+    const int maxW = devOpen ? (kMaxBaseWidth + kDevDockWidth) : kMaxBaseWidth;
+
+    constrainer_.setMinimumSize (minW, kMinBaseHeight);
+    constrainer_.setMaximumSize (maxW, kMaxBaseHeight);
+
+    if (devOpen)
+        constrainer_.setFixedAspectRatio (0.0);
+    else
+        constrainer_.setFixedAspectRatio (static_cast<double> (kDesignWidth) / static_cast<double> (kDesignHeight));
+}
+
 void MasterLimiterAudioProcessorEditor::toggleDevControls()
 {
     const bool show = ! devPanel_.isVisible();
-    scrim_.setVisible (show);
-    devPanel_.setVisible (show);
 
     if (show)
     {
-        layoutDevPanel();
-        scrim_.toFront (false);
-        devPanel_.toFront (true);
+        devPanel_.setVisible (true);
+        updateConstrainer();
+        setSize (getWidth() + kDevDockWidth, getHeight());
+        resized();
+        devPanel_.toFront (false);
     }
-}
-
-void MasterLimiterAudioProcessorEditor::layoutDevPanel()
-{
-    const auto editorBounds = getLocalBounds();
-    scrim_.setBounds (editorBounds);
-
-    const int width = juce::jmin (kDevPanelPrefWidth, editorBounds.getWidth() - 24);
-    const int height = juce::jmin (kDevPanelPrefHeight, editorBounds.getHeight() - 24);
-    devPanel_.setBounds (editorBounds.withSizeKeepingCentre (width, height));
+    else
+    {
+        devPanel_.setVisible (false);
+        const int newW = juce::jmax (kMinBaseWidth, getWidth() - kDevDockWidth);
+        updateConstrainer();
+        setSize (newW, getHeight());
+        resized();
+    }
 }

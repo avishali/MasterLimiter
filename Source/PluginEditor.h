@@ -26,17 +26,11 @@ public:
 private:
     static constexpr int kDesignWidth = 1100;
     static constexpr int kDesignHeight = 620;
-    static constexpr int kDevPanelPrefWidth = 700;
-    static constexpr int kDevPanelPrefHeight = 560;
-
-    class ScrimOverlay : public juce::Component
-    {
-    public:
-        void paint (juce::Graphics& g) override
-        {
-            g.fillAll (juce::Colours::black.withAlpha (0.45f));
-        }
-    };
+    static constexpr int kDevDockWidth = 360;
+    static constexpr int kMinBaseWidth = 958;
+    static constexpr int kMinBaseHeight = 540;
+    static constexpr int kMaxBaseWidth = 4000;
+    static constexpr int kMaxBaseHeight = 2255;
 
     class DevPanel : public juce::Component
     {
@@ -58,7 +52,7 @@ private:
     void toggleHistoryGraph();
     void closeHistoryGraphWindow();
     void toggleDevControls();
-    void layoutDevPanel();
+    void updateConstrainer();
 
     class HistoryWindow : public juce::DocumentWindow
     {
@@ -77,7 +71,6 @@ private:
     juce::ComponentBoundsConstrainer constrainer_;
     MasterLimiterAudioProcessor& processor_;
     MainView mainView;
-    ScrimOverlay scrim_;
     DevPanel devPanel_;
     std::unique_ptr<HistoryWindow> historyWindow_;
 

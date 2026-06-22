@@ -111,6 +111,40 @@ slice prompt. Audition pending.
 
 ---
 
+## 2026-06-22 — Slice: DEV controls dock panel (meters visible while tuning)
+
+**Status:** 🔶 Implemented locally; AU validation clean (user install); audition pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`, local file reads.
+- QUERIES ISSUED: MasterLimiter `PluginEditor` path; `ComponentBoundsConstrainer`
+  API; DSP reuse for viewport (none — UI-only).
+- FILES RETRIEVED: `PROMPTS/SLICE_DEV_PANEL_DOCK.md`,
+  `Source/PluginEditor.{h,cpp}`, `Source/ui/DevControlsComponent.cpp`,
+  `docs/SIGNAL_FLOW.md`, `docs/PROGRESS.md`, `PROMPTS/PLAN.md`.
+- SECTIONS CITED: embedded `DevPanel` overlay (replaced with right dock),
+  `DevControlsComponent` internal `Viewport` (reused), `SIGNAL_FLOW.md` §6.
+- REUSE CHECK: reused `DevControlsComponent` (internal viewport unchanged);
+  reparented dock layout only. No DSP changes. History Graph unchanged.
+
+**Deliverables**
+- Removed centered overlay + scrim; DEV panel now docks in a +360 px editor strip
+  on the right. Main view keeps its base bounds — meters, GR, and controls stay
+  fully visible while DEV is open.
+- Editor grows on DEV open / shrinks on close; constrainer min/max updated for
+  docked width; close ✕ still hides the panel.
+- Narrow-dock reflow in `DevControlsComponent` (smaller labels/text boxes below 360 px).
+
+**Gate**
+- [x] Release build clean.
+- [x] AU installed (user folder); AU validation clean.
+- [ ] Audition: DEV open does not cover meters/GR/main controls.
+- [ ] Audition: VST3/AU/AAX DEV controls still drive/persist params (regression).
+- [ ] Audition: editor grow/shrink + resize stable; close ✕ works.
+- [ ] History Graph window unaffected.
+
+---
+
 ## 2026-06-22 — Slice: DEV controls embedded panel (AAX fix)
 
 **Status:** 🔶 Implemented locally; build/install/AU validation pending.
