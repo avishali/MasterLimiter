@@ -34,7 +34,9 @@ Your mission: voice the attack & release
 2. Open the DEV window (top bar). In RELEASE - Engine, set Engine = Lookahead.
 3. Push Input Gain so the limiter does ~3-6 dB on real music.
 4. Sweep these while listening AND watching the GR trace:
-   - DEV -> ATTACK: how fast transients are caught (short = punchier; capped by Lookahead).
+   - DEV -> ATTACK -> Mode: "Ramp" (transparent, capped by lookahead) or "Real" (decoupled time-constant).
+     In "Real" mode use the Real Attack knob: slow = transients PUNCH through (punchy), fast = tight/controlled.
+   - DEV -> ATTACK (Ramp mode knob): how gently the gain eases into the peak (subtle smoothness).
    - DEV -> LOOKAHEAD -> Band / Wide (0-6 ms): how far ahead it sees.
    - DEV -> RELEASE - Lookahead -> Time + Poles: release speed (Time) and smoothness (Poles 2/3/4).
 5. Try several sources (drums, full mix, vocal, bass-heavy).
