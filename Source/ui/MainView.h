@@ -151,7 +151,7 @@ private:
     juce::Rectangle<int> meterScaleColumnArea_;
 
     juce::Label header_ { {}, "MasterLimiter" };
-    juce::Label headerMode_ { {}, "v0.3.0 (beta) - Maximizer" };
+    juce::Label headerMode_ { {}, "MasterLimiter" };
     juce::ComboBox presetMenu_ { "Factory Presets" };
     juce::TextButton btnSavePreset_ { "Save" };
     juce::TextButton btnCompareA_ { "A" };
