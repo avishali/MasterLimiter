@@ -113,7 +113,7 @@ slice prompt. Audition pending.
 
 ## 2026-06-22 — Slice: Attack mode Ramp vs Real (decoupled)
 
-**Status:** 🔶 Implemented locally; build/AU validation pending.
+**Status:** 🔶 Implemented locally; AU validation clean (user install); audition pending.
 
 **Retrieval / scope**
 - TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`, local file reads.
@@ -131,8 +131,8 @@ slice prompt. Audition pending.
 - DEV UI: Attack Mode combo + Real Attack slider; grey inactive control per mode.
 
 **Gate**
-- [ ] SDK + plugin Release build clean.
-- [ ] AU validation clean.
+- [x] SDK + plugin Release build clean.
+- [x] AU validation clean (user install).
 - [ ] Audition: Ramp = current behavior; Real slow = punch-through on drums.
 - [ ] RT-safe; CPU unchanged.
 
