@@ -47,7 +47,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.8 — Input gain.** `input_gain_db` (0–24 dB), smoothed, multiplied in. **This is the knob that drives gain reduction** (the limiter threshold is fixed at 1.0 — see §3).
 
-**2.9 — 2-band split for detection.** `detectCrossover_` (Linkwitz-Riley, 120 Hz) splits each channel into **low/high**; per-sample band peaks (`peakLow`, `peakHigh`) are collected. `snapToZero()` clears filter state at block end.
+**2.9 — 2-band split for detection.** `detectCrossover_` (`mdsp_dsp::LinearPhaseCrossover`, DEV-tunable cutoff/transition/atten, prepared at **4× OS rate**) splits each channel into **low/high**; per-sample band peaks (`peakLow`, `peakHigh`) are collected. Detection lookahead is reduced by the crossover group delay so gain-to-audio timing matches the IIR-era alignment.
 
 **2.10 — Per-band limiter envelopes.** `envelopeLow_.process()` and `envelopeHigh_.process()` turn the band peak streams into **gain coefficients** (`gainLow`, `gainHigh`, each ≤ 1.0). These are *gain computers only* — they output a gain curve, they don't touch audio yet. (Details: §4.3.)
 
@@ -56,7 +56,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
   - **Color 100% → independent** (`bl = 0`): each band keeps its own gain → multiband character (the loudness-cap-breaking, low-IMD mode).
   The blend is applied both to the gains and to the audio reconstruction.
 
-**2.12 — Lookahead delay + band gain application.** The audio is delayed by `lookahead_` using the active `dev_lookahead_band_ms` window (so the gain curve, computed from the *future* peak, lands *before* the peak arrives — that's the lookahead attack). `applyCrossover_` re-splits the delayed audio and applies `gainLow`/`gainHigh`, blended by `bl` against the un-split delayed signal → `bandLimitedBuf_`.
+**2.12 — Lookahead delay + band gain application.** The audio is delayed by `lookahead_` using the active `dev_lookahead_band_ms` window (so the gain curve, computed from the *future* peak, lands *before* the peak arrives — that's the lookahead attack). `applyCrossover_` re-splits the delayed audio; the linked term uses **`xDelayed`** (phase-coherent with `low+high`) blended by `bl` against the band-weighted split → `bandLimitedBuf_`.
 
 **2.13 — Wideband limiter.** The band-limited signal is peak-detected again (or M/S-encoded if **Stereo Mode = M/S**) and run through `envelope_` (and `envelope_R_` when stereo unlinked). **Stereo Link / M/S Link** (%) blends L/R gain toward `min(L,R)`; at ≥99.95% it takes a single-envelope fast path. This is the safety stage that catches anything the per-band stage let through.
 
@@ -85,7 +85,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 ## 4. Component deep-dives (plain-language)
 
 ### 4.1 Crossover (`detectCrossover_` / `applyCrossover_`)
-`juce::dsp::LinkwitzRileyFilter`, 120 Hz, complementary low/high that sum back to flat. **Two instances on purpose:** one drives *detection* (measuring band peaks), the other drives *application* (splitting the delayed audio to apply gain) — separating them avoids state bleed between the measure and apply paths. `snapToZero()` flushes filter state at block boundaries.
+`mdsp_dsp::LinearPhaseCrossover` — Kaiser lowpass + subtraction trick (`low + high == delay(x,M)`). Prepared at **4× OS rate** with **fixed latency** (`prepareFixedLatency` + center-padded `installActiveKernel`) so DEV audition of transition/atten does not move host PDC. **Two instances on purpose:** one drives *detection* (measuring band peaks), the other drives *application* (splitting the delayed audio to apply gain) — separating them avoids state bleed between the measure and apply paths. DEV params: `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db` (§6). Kernel redesign is off the audio thread (double-buffer swap at block start).
 
 ### 4.2 LookaheadDelay (`lookahead_`, `lookaheadWide_`, `lookaheadPad_`, plus `dryDelay_`)
 Simple per-channel circular buffers. `pushPop()` writes the new sample and returns the one from `delaySamples` ago — RT-safe, no allocation. `lookahead_` and `lookaheadWide_` make each gain curve line up with its active envelope window; `lookaheadPad_` absorbs the unused max-window slack so reported latency never changes while sweeping DEV lookahead.
@@ -170,6 +170,7 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 |---|---|
 | ATTACK | `dev_attack_mode`, `dev_attack_ms` (Ramp), `dev_real_attack_ms` (Real) |
 | LOOKAHEAD | `dev_lookahead_band_ms`, `dev_lookahead_wide_ms` |
+| CROSSOVER (linear-phase) | `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db` |
 | RELEASE · Engine | `dev_release_engine` |
 | RELEASE · Lookahead engine | `dev_la_release_ms`, `dev_la_release_poles` |
 | RELEASE · Adaptive engine | `dev_sigma_attack_ms`, `dev_sigma_decay_scale` |
@@ -190,6 +191,9 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Attack Mode** | `dev_attack_mode` | Ramp / Real | **Ramp** | Chooses §4.3 attack behavior | Ramp = current cosine-in-lookahead. Real = decoupled time-constant. |
 | **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | Ramp-mode envelope attack ramps | Overrides Character; capped by each active lookahead window. |
 | **Real Attack** | `dev_real_attack_ms` | 0.05…100 ms (skewed fast) | 5 | Real-mode 2-pole attack TC | Decoupled from lookahead; slow = transient punch-through. |
+| **Xover Cutoff** | `dev_xover_cutoff_hz` | 40…250 Hz | 120 | Linear-phase split frequency | Audition; kernel swap off RT thread. |
+| **Xover Transition** | `dev_xover_transition_hz` | 60…240 Hz | 120 | Transition width | Wider = gentler split / shorter active kernel (padded to Nmax). |
+| **Xover Atten** | `dev_xover_atten_db` | 48…72 dB | 60 | Stop-band attenuation | Lower = shorter kernel; latency fixed at worst-case Nmax. |
 | **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | Active only when Release Auto is Off. |
 
 **Plan:** once Attack, LA Band/Wide, LA Release ms, and Poles are chosen by ear, Claude bakes them as constants or promotes any keeper to a real user parameter, then deletes the temporary DEV params for 0.4.
@@ -211,6 +215,6 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 
 ## 8. Known discrepancies & backlog (so the doc stays honest)
 1. **Multiband true-peak leak:** at Color 100 + TruePeak, output TP can leak to ~−0.4 (over ceiling). Root cause = 4× OS headroom. Grouped with harmonic aliasing in the "OS-quality" slice (raise OS to 8×+ and/or proper ISP control).
-2. **Color intermediate (0<x<100):** low end dips from phase cancellation between the full-band and allpass-split paths; endpoints (0/100) are clean. Fix = linear-phase complementary crossover (adds latency).
+2. **Color intermediate (0<x<100):** ~~low end dips from phase cancellation~~ **Fixed (F-2b):** linear-phase crossover + `xDelayed` linked term; verify on offline rig. Residual risk = CPU at 4× OS (escalate to F-2c if needed).
 3. **DEV params** are shipping in the beta build — must be removed for 0.4.
 4. **Metering history depth** — history graph storage is fixed at 65536 frames for the 30 s max view; extend only if a future UI window needs more.

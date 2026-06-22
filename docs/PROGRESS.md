@@ -2,6 +2,29 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-06-22 — Slice F-2b: Linear-phase crossover integration
+
+**Status:** ✅ Implemented locally; Release build clean (Standalone/AU/VST3);
+`mdsp_dsp_tests` exit 0; offline Color sweep gate passed. Uncommitted.
+
+**Deliverables**
+- SDK: `LinearPhaseCrossover::prepareFixedLatency`, `installActiveKernel`,
+  `centerPadKernel` (fixed PDC while auditioning DEV spec).
+- Plugin: replaced Linkwitz-Riley with `LinearPhaseCrossover` (detect/apply,
+  double-buffer kernel swap); `xDelayed` phase-coherent Color blend; detection
+  lookahead aligned to crossover latency; DEV params + CROSSOVER dock section.
+- Docs: `SIGNAL_FLOW.md` §2.9/§2.12, §4.1, §6, §8.2; `CUSTOM_FILTERS.md` F-2b;
+  close prompt `docs/prompts/SLICE_F2b_crossover_integration_CLOSE.md`.
+
+**Gate**
+- [x] `mdsp_dsp_tests` full suite exit 0.
+- [x] MasterLimiter Release build clean.
+- [x] Offline Color sweep (40–200 Hz vs Color 0): ±0.000 dB at 0/25/50/75/100.
+- [ ] CPU % at Color 50, OS 4× — profile in DAW (escalate F-2c if needed).
+- [ ] Commit + push SDK and plugin.
+
+---
+
 ## 2026-06-10 — Slice: preset A/B + header polish
 
 **Status:** 🔶 Implemented locally; Release build clean; user AU/VST3 installed;

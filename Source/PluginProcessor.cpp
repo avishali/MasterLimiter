@@ -118,6 +118,9 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_la_release_poles.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_lookahead_band_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_lookahead_wide_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_xover_cutoff_hz.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_xover_transition_hz.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_xover_atten_db.data()) != nullptr);
 
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
     jassert (pluginBypass_ != nullptr);
@@ -125,6 +128,9 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     apvts.addParameterListener (param::input_gain_db.data(), this);
     apvts.addParameterListener (param::ceiling_db.data(), this);
     apvts.addParameterListener (param::gain_ceiling_link.data(), this);
+    apvts.addParameterListener (param::dev_xover_cutoff_hz.data(), this);
+    apvts.addParameterListener (param::dev_xover_transition_hz.data(), this);
+    apvts.addParameterListener (param::dev_xover_atten_db.data(), this);
 }
 
 MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
@@ -133,6 +139,9 @@ MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
     apvts.removeParameterListener (param::input_gain_db.data(), this);
     apvts.removeParameterListener (param::ceiling_db.data(), this);
     apvts.removeParameterListener (param::gain_ceiling_link.data(), this);
+    apvts.removeParameterListener (param::dev_xover_cutoff_hz.data(), this);
+    apvts.removeParameterListener (param::dev_xover_transition_hz.data(), this);
+    apvts.removeParameterListener (param::dev_xover_atten_db.data(), this);
 }
 
 void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -181,12 +190,6 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     spec.maxBlockSize = osMaxBlockSize;
     envelope_.prepare (spec);
     envelope_R_.prepare (spec);
-
-    juce::dsp::ProcessSpec xoSpec { osSampleRate, static_cast<juce::uint32> (osMaxBlockSize), 2 };
-    detectCrossover_.prepare (xoSpec);
-    applyCrossover_.prepare (xoSpec);
-    detectCrossover_.setCutoffFrequency (kCrossoverHz);
-    applyCrossover_.setCutoffFrequency (kCrossoverHz);
 
     envelopeLow_.prepare (spec);
     envelopeHigh_.prepare (spec);
@@ -252,6 +255,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devLaReleasePoles_ = apvts.getRawParameterValue (param::dev_la_release_poles.data());
     devLookaheadBandMs_ = apvts.getRawParameterValue (param::dev_lookahead_band_ms.data());
     devLookaheadWideMs_ = apvts.getRawParameterValue (param::dev_lookahead_wide_ms.data());
+    devXoverCutoffHz_ = apvts.getRawParameterValue (param::dev_xover_cutoff_hz.data());
+    devXoverTransitionHz_ = apvts.getRawParameterValue (param::dev_xover_transition_hz.data());
+    devXoverAttenDb_ = apvts.getRawParameterValue (param::dev_xover_atten_db.data());
     jassert (limiterActive_ != nullptr);
     jassert (pluginBypass_ != nullptr);
     jassert (clipperActive_ != nullptr);
@@ -272,8 +278,13 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devLaReleasePoles_ != nullptr);
     jassert (devLookaheadBandMs_ != nullptr);
     jassert (devLookaheadWideMs_ != nullptr);
+    jassert (devXoverCutoffHz_ != nullptr);
+    jassert (devXoverTransitionHz_ != nullptr);
+    jassert (devXoverAttenDb_ != nullptr);
     bandLinkSmoothed_.reset (osSampleRate, 0.02);
     bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 0.0f));
+
+    prepareCrossoverBanks (osSampleRate);
 
     releaseSustainRatio_ = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("release_sustain_ratio"));
     releaseAuto_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("release_auto"));
@@ -309,7 +320,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     ioOutputGainRSmoothed_.reset (sampleRate, controlSmoothingSeconds);
     ioOutputGainRSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioOutputRDb_ != nullptr ? ioOutputRDb_->load (std::memory_order_relaxed) : 0.0f));
 
-    baseLatencySamples_ = (2 * baseMaxLookaheadSamples) + limiterOsLatencySamples_ + finalCeilingLatencySamples_;
+    baseLatencySamples_ = (2 * baseMaxLookaheadSamples) + limiterOsLatencySamples_ + finalCeilingLatencySamples_
+                        + crossoverOsLatencyHostSamples_;
     cachedCeilingMode_  = ceilingMode_->getIndex();
 
     limiterOversampler_.reset();
@@ -318,8 +330,10 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     lookaheadPad_.reset();
     envelope_.reset();
     envelope_R_.reset();
-    detectCrossover_.reset();
-    applyCrossover_.reset();
+    detectCrossover_[0].reset();
+    detectCrossover_[1].reset();
+    applyCrossover_[0].reset();
+    applyCrossover_[1].reset();
     envelopeLow_.reset();
     envelopeHigh_.reset();
     finalCeiling_.reset();
@@ -454,8 +468,85 @@ void MasterLimiterAudioProcessor::refreshGainCeilingLinkBaseline()
     lastLinkedCeilingDb_.store (ceilingDbParam_->get(), std::memory_order_relaxed);
 }
 
+mdsp_dsp::LinearPhaseCrossover::Spec MasterLimiterAudioProcessor::readCrossoverSpecFromParams() const
+{
+    mdsp_dsp::LinearPhaseCrossover::Spec spec;
+    spec.sampleRate   = osSampleRate_ > 0.0 ? osSampleRate_ : 192000.0;
+    spec.cutoffHz     = devXoverCutoffHz_ != nullptr ? (double) devXoverCutoffHz_->load (std::memory_order_relaxed)
+                                                     : (double) kDevXoverCutoffDefault;
+    spec.transitionHz = devXoverTransitionHz_ != nullptr ? (double) devXoverTransitionHz_->load (std::memory_order_relaxed)
+                                                         : (double) kDevXoverTransitionDefault;
+    spec.stopAttenDb  = devXoverAttenDb_ != nullptr ? (double) devXoverAttenDb_->load (std::memory_order_relaxed)
+                                                    : (double) kDevXoverAttenDefault;
+    spec.numChannels  = 2;
+    return spec;
+}
+
+void MasterLimiterAudioProcessor::prepareCrossoverBanks (double osSampleRate)
+{
+    constexpr int osFactor = 4;
+
+    mdsp_dsp::LinearPhaseCrossover::Spec worst;
+    worst.sampleRate   = osSampleRate;
+    worst.cutoffHz     = 40.0;
+    worst.transitionHz = (double) kDevXoverTransitionMin;
+    worst.stopAttenDb  = (double) kDevXoverAttenMax;
+    worst.numChannels  = 2;
+
+    auto active = readCrossoverSpecFromParams();
+    active.sampleRate = osSampleRate;
+
+    for (auto& xo : detectCrossover_)
+        xo.prepareFixedLatency (worst, 2);
+    for (auto& xo : applyCrossover_)
+        xo.prepareFixedLatency (worst, 2);
+
+    crossoverOsLatencySamples_ = detectCrossover_[0].getLatencySamples();
+    crossoverOsLatencyHostSamples_ = (crossoverOsLatencySamples_ + osFactor - 1) / osFactor;
+
+    for (auto& xo : detectCrossover_)
+        xo.installActiveKernel (active);
+    for (auto& xo : applyCrossover_)
+        xo.installActiveKernel (active);
+
+    activeCrossoverBank_.store (0, std::memory_order_release);
+    crossoverSwapReady_.store (false, std::memory_order_release);
+    crossoverRedesignPending_.store (false, std::memory_order_release);
+}
+
+void MasterLimiterAudioProcessor::rebuildCrossoverKernels()
+{
+    const int staging = 1 - activeCrossoverBank_.load (std::memory_order_acquire);
+    const auto active = readCrossoverSpecFromParams();
+
+    detectCrossover_[staging].installActiveKernel (active);
+    applyCrossover_[staging].installActiveKernel (active);
+    crossoverSwapReady_.store (true, std::memory_order_release);
+}
+
+void MasterLimiterAudioProcessor::trySwapCrossoverBank() noexcept
+{
+    if (! crossoverSwapReady_.exchange (false, std::memory_order_acq_rel))
+        return;
+
+    const int newBank = 1 - activeCrossoverBank_.load (std::memory_order_relaxed);
+    detectCrossover_[newBank].reset();
+    applyCrossover_[newBank].reset();
+    activeCrossoverBank_.store (newBank, std::memory_order_release);
+}
+
 void MasterLimiterAudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
 {
+    if (parameterID == param::dev_xover_cutoff_hz.data()
+        || parameterID == param::dev_xover_transition_hz.data()
+        || parameterID == param::dev_xover_atten_db.data())
+    {
+        juce::ignoreUnused (newValue);
+        crossoverRedesignPending_.store (true, std::memory_order_release);
+        triggerAsyncUpdate();
+        return;
+    }
+
     if (parameterID == param::gain_ceiling_link.data())
     {
         const bool enabled = newValue >= 0.5f;
@@ -635,6 +726,9 @@ void MasterLimiterAudioProcessor::restoreCompareStateFromTree (const juce::Value
 
 void MasterLimiterAudioProcessor::handleAsyncUpdate()
 {
+    if (crossoverRedesignPending_.exchange (false, std::memory_order_acq_rel))
+        rebuildCrossoverKernels();
+
     commitLearnedRef();
 }
 
@@ -781,6 +875,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         || devAttackMs_ == nullptr || devAttackMode_ == nullptr || devRealAttackMs_ == nullptr
         || devReleaseEngine_ == nullptr || devLaReleaseMs_ == nullptr || devLaReleasePoles_ == nullptr
         || devLookaheadBandMs_ == nullptr || devLookaheadWideMs_ == nullptr
+        || devXoverCutoffHz_ == nullptr || devXoverTransitionHz_ == nullptr || devXoverAttenDb_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
         || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
         return;
@@ -871,6 +966,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (limiterActive_->get())
     {
+        trySwapCrossoverBank();
+        const int xoBank = activeCrossoverBank_.load (std::memory_order_acquire);
+
         juce::dsp::AudioBlock<float> block (buffer);
         auto osBlock = limiterOversampler_.processSamplesUp (block);
         const int osN = (int) osBlock.getNumSamples();
@@ -993,6 +1091,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             : mdsp_dsp::LimiterEnvelope::ReleaseEngine::AdaptiveSigma;
         bandLinkSmoothed_.setTargetValue (mapBandColorToLink (bandColor));
 
+        // Band audio delay = full envelope window. The detect and apply crossovers
+        // BOTH add the same group delay M, so they cancel in the effective lookahead
+        // (audio_delay - detect_latency) — do NOT subtract M here, or the band
+        // lookahead collapses to ~0 (envelope window stays laBandActive at :1096).
         lookahead_.setDelaySamples (laBandActive);
         lookaheadWide_.setDelaySamples (laWideActive);
         envelopeLow_.setActiveLookaheadSamples (laBandActive);
@@ -1044,11 +1146,14 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             {
                 float low = 0.0f;
                 float high = 0.0f;
-                detectCrossover_.processSample (
+                float xDelayedDetect = 0.0f;
+                detectCrossover_[xoBank].processSample (
                     ch,
                     osBlock.getChannelPointer ((size_t) ch)[i],
                     low,
-                    high);
+                    high,
+                    xDelayedDetect);
+                juce::ignoreUnused (xDelayedDetect);
                 bandLow[ch][i] = low;
                 bandHigh[ch][i] = high;
                 lowMax = std::max (lowMax, std::abs (low));
@@ -1057,7 +1162,6 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             peakLow[i] = lowMax;
             peakHigh[i] = highMax;
         }
-        detectCrossover_.snapToZero();
 
         auto* gainLow = gainLowBuf_.getWritePointer (0);
         auto* gainHigh = gainHighBuf_.getWritePointer (0);
@@ -1081,13 +1185,13 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                 const float delayed = lookahead_.pushPop (ch, d[i]);
                 float low = 0.0f;
                 float high = 0.0f;
-                applyCrossover_.processSample (ch, delayed, low, high);
+                float xDelayed = 0.0f;
+                applyCrossover_[xoBank].processSample (ch, delayed, low, high, xDelayed);
 
-                bandLimitedBuf_.getWritePointer (ch)[i] = linkedGain * delayed
+                bandLimitedBuf_.getWritePointer (ch)[i] = linkedGain * xDelayed
                     + oneMinusBandLink * (low * gainLow[i] + high * gainHigh[i]);
             }
         }
-        applyCrossover_.snapToZero();
 
         const auto* bandLimitedL = bandLimitedBuf_.getReadPointer (0);
         const auto* bandLimitedR = nch > 1 ? bandLimitedBuf_.getReadPointer (1) : bandLimitedL;

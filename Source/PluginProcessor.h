@@ -12,6 +12,7 @@
 #include <mdsp_dsp/dynamics/LookaheadDelay.h>
 #include <mdsp_dsp/dynamics/PeakDetector.h>
 #include <mdsp_dsp/dynamics/TruePeakDetector.h>
+#include <mdsp_dsp/filters/LinearPhaseCrossover.h>
 #include <mdsp_dsp/loudness/LoudnessAnalyzer.h>
 
 #ifndef MDSP_BAND_HEADROOM_DB
@@ -135,6 +136,10 @@ private:
     float updateDryCompensationGainDb (float liveDryLufs);
     void applyCompensationGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float compGainDb) const;
     void processCore (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool forceBypass);
+    mdsp_dsp::LinearPhaseCrossover::Spec readCrossoverSpecFromParams() const;
+    void prepareCrossoverBanks (double osSampleRate);
+    void rebuildCrossoverKernels();
+    void trySwapCrossoverBank() noexcept;
     void commitLearnedRef();
     void captureCurrentStateToActiveCompareSlot();
     void replaceLiveStateFromCompareSlot (int slotIndex);
@@ -147,8 +152,12 @@ private:
     int activeCompareSlot_ = 0;
 
     // Multiband pre-shave (ADR-0009): fixed 2-band split inside the 4x OS region.
-    static constexpr float kCrossoverHz = 120.0f;
     static constexpr float kBandHeadroomDb = MDSP_BAND_HEADROOM_DB;
+    static constexpr float kDevXoverCutoffDefault = 120.0f;
+    static constexpr float kDevXoverTransitionDefault = 120.0f;
+    static constexpr float kDevXoverAttenDefault = 60.0f;
+    static constexpr float kDevXoverTransitionMin = 60.0f;
+    static constexpr float kDevXoverAttenMax = 72.0f;
     static constexpr float kLookaheadMs = 5.0f;
     static constexpr float kMaxLookaheadMs = 6.0f;
     static constexpr float kLowBandAutoReleaseScale = 3.0f;
@@ -162,8 +171,11 @@ private:
     mdsp_dsp::PeakDetector peakDetector_;
     mdsp_dsp::LimiterEnvelope envelope_;
     mdsp_dsp::LimiterEnvelope envelope_R_;
-    juce::dsp::LinkwitzRileyFilter<float> detectCrossover_;
-    juce::dsp::LinkwitzRileyFilter<float> applyCrossover_;
+    mdsp_dsp::LinearPhaseCrossover detectCrossover_[2];
+    mdsp_dsp::LinearPhaseCrossover applyCrossover_[2];
+    std::atomic<int> activeCrossoverBank_ { 0 };
+    std::atomic<bool> crossoverSwapReady_ { false };
+    std::atomic<bool> crossoverRedesignPending_ { false };
     mdsp_dsp::LimiterEnvelope envelopeLow_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
     juce::dsp::Oversampling<float> limiterOversampler_ { 2 };
@@ -231,10 +243,15 @@ private:
     std::atomic<float>* devLaReleasePoles_ = nullptr;
     std::atomic<float>* devLookaheadBandMs_ = nullptr;
     std::atomic<float>* devLookaheadWideMs_ = nullptr;
+    std::atomic<float>* devXoverCutoffHz_ = nullptr;
+    std::atomic<float>* devXoverTransitionHz_ = nullptr;
+    std::atomic<float>* devXoverAttenDb_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 
     int  baseLatencySamples_ = 0;
+    int  crossoverOsLatencySamples_ = 0;
+    int  crossoverOsLatencyHostSamples_ = 0;
     int  limiterOsLatencySamples_ = 0;
     int  finalCeilingLatencySamples_ = 0;
     int  cachedCeilingMode_   = 0;

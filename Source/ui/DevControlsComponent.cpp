@@ -41,6 +41,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
 
     for (auto* group : { &groupAttack_,
                          &groupLookahead_,
+                         &groupCrossover_,
                          &groupReleaseEngine_,
                          &groupLookaheadRelease_,
                          &groupAdaptiveRelease_,
@@ -72,6 +73,18 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupLabel (lblLookaheadWide_, "Wide");
     setupSlider (sldLookaheadWide_, 2, " ms");
     sldLookaheadWide_.setTooltip ("Wideband audio delay and envelope lookahead window.");
+
+    setupLabel (lblXoverCutoff_, "Cutoff");
+    setupSlider (sldXoverCutoff_, 0, " Hz");
+    sldXoverCutoff_.setTooltip ("Linear-phase crossover split frequency.");
+
+    setupLabel (lblXoverTransition_, "Transition");
+    setupSlider (sldXoverTransition_, 0, " Hz");
+    sldXoverTransition_.setTooltip ("Transition width; wider = gentler split / shorter latency kernel.");
+
+    setupLabel (lblXoverAtten_, "Atten");
+    setupSlider (sldXoverAtten_, 0, " dB");
+    sldXoverAtten_.setTooltip ("Stop-band attenuation; lower = shorter kernel.");
 
     setupLabel (lblReleaseEngine_, "Engine");
     setupCombo (cmbReleaseEngine_);
@@ -111,6 +124,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     sldSustainRatio_.setTooltip ("Manual-release sustain split. Active only when Release Auto is Off.");
 
     for (auto* label : { &lblAttackMode_, &lblAttack_, &lblRealAttack_, &lblLookaheadBand_, &lblLookaheadWide_,
+                         &lblXoverCutoff_, &lblXoverTransition_, &lblXoverAtten_,
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_,
                          &lblHighScale_, &lblSustainRatio_ })
@@ -119,6 +133,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     }
 
     for (auto* slider : { &sldAttack_, &sldRealAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
+                          &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
                           &sldLaRelease_, &sldSigmaAttack_, &sldSigmaDecay_,
                           &sldLowScale_, &sldHighScale_, &sldSustainRatio_ })
     {
@@ -134,6 +149,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attRealAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_real_attack_ms), sldRealAttack_);
     attLookaheadBand_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_band_ms), sldLookaheadBand_);
     attLookaheadWide_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_wide_ms), sldLookaheadWide_);
+    attXoverCutoff_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_cutoff_hz), sldXoverCutoff_);
+    attXoverTransition_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_transition_hz), sldXoverTransition_);
+    attXoverAtten_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_atten_db), sldXoverAtten_);
     attReleaseEngine_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_release_engine), cmbReleaseEngine_);
     attLaRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_la_release_ms), sldLaRelease_);
     attLaPoles_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_la_release_poles), cmbLaPoles_);
@@ -189,7 +207,9 @@ void DevControlsComponent::resized()
 
     if (contentW < 360)
     {
-        for (auto* slider : { &sldAttack_, &sldLookaheadBand_, &sldLookaheadWide_, &sldLaRelease_,
+        for (auto* slider : { &sldAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
+                              &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
+                              &sldLaRelease_,
                               &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldHighScale_, &sldSustainRatio_ })
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
@@ -226,6 +246,13 @@ void DevControlsComponent::resized()
     placeSliderRow (inner.removeFromTop (rowH), lblLookaheadBand_, sldLookaheadBand_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblLookaheadWide_, sldLookaheadWide_);
+
+    inner = placeGroup (groupCrossover_, 136);
+    placeSliderRow (inner.removeFromTop (rowH), lblXoverCutoff_, sldXoverCutoff_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblXoverTransition_, sldXoverTransition_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblXoverAtten_, sldXoverAtten_);
 
     inner = placeGroup (groupReleaseEngine_, 72);
     placeComboRow (inner.removeFromTop (rowH), lblReleaseEngine_, cmbReleaseEngine_);

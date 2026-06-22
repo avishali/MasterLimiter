@@ -42,5 +42,8 @@ inline constexpr std::string_view dev_la_release_ms { "dev_la_release_ms" };
 inline constexpr std::string_view dev_la_release_poles { "dev_la_release_poles" };
 inline constexpr std::string_view dev_lookahead_band_ms { "dev_lookahead_band_ms" };
 inline constexpr std::string_view dev_lookahead_wide_ms { "dev_lookahead_wide_ms" };
+inline constexpr std::string_view dev_xover_cutoff_hz { "dev_xover_cutoff_hz" };
+inline constexpr std::string_view dev_xover_transition_hz { "dev_xover_transition_hz" };
+inline constexpr std::string_view dev_xover_atten_db { "dev_xover_atten_db" };
 
 } // namespace param

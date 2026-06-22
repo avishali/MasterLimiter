@@ -47,6 +47,14 @@ private:
     juce::Label lblLookaheadWide_ {};
     juce::Slider sldLookaheadWide_;
 
+    juce::GroupComponent groupCrossover_ { "CrossoverGroup", "CROSSOVER (linear-phase)" };
+    juce::Label lblXoverCutoff_ {};
+    juce::Slider sldXoverCutoff_;
+    juce::Label lblXoverTransition_ {};
+    juce::Slider sldXoverTransition_;
+    juce::Label lblXoverAtten_ {};
+    juce::Slider sldXoverAtten_;
+
     juce::GroupComponent groupReleaseEngine_ { "ReleaseEngineGroup", "RELEASE - Engine" };
     juce::Label lblReleaseEngine_ {};
     juce::ComboBox cmbReleaseEngine_ { "DEV Release Engine" };
@@ -78,6 +86,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRealAttack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookaheadBand_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookaheadWide_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverCutoff_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverTransition_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverAtten_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attReleaseEngine_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLaRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attLaPoles_;
