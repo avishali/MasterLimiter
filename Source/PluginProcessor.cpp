@@ -158,24 +158,14 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     osMaxLookaheadSamples_ = juce::jmax (1, osMaxLookaheadSamples);
     osSampleRate_ = osSampleRate;
 
-    using OversamplingFilterType = juce::dsp::Oversampling<float>::FilterType;
-    limiterOversampler_.clearOversamplingStages();
-
-    // Stage 1 straddles the audible top octave, so keep its transition tight.
-    limiterOversampler_.addOversamplingStage (OversamplingFilterType::filterHalfBandFIREquiripple,
-                                              0.03f, -110.0f,
-                                              0.03f, -110.0f);
-    // Stage 2 runs at the higher rate, where a wider transition is transparent and cheaper.
-    limiterOversampler_.addOversamplingStage (OversamplingFilterType::filterHalfBandFIREquiripple,
-                                              0.10f, -100.0f,
-                                              0.10f, -100.0f);
-    limiterOversampler_.setUsingIntegerLatency (true);
-    limiterOversampler_.initProcessing ((size_t) samplesPerBlock);
+    // Custom linear-phase 4× oversampler (mdsp_dsp::HalfbandPolyphaseOS) — same half-band
+    // specs as the previous juce::dsp::Oversampling (0.03/-110 + 0.10/-100) but with EXACT
+    // integer host latency (no setUsingIntegerLatency fractional rounding), which removes the
+    // residual HF phase tilt. See docs/CUSTOM_FILTERS.md F-3.
+    limiterOversampler_.prepare (2, samplesPerBlock, sampleRate);
     limiterOversampler_.reset();
 
-    const double osLatencySamples = static_cast<double> (limiterOversampler_.getLatencyInSamples());
-    limiterOsLatencySamples_ = static_cast<int> (std::llround (osLatencySamples));
-    jassert (std::abs (osLatencySamples - static_cast<double> (limiterOsLatencySamples_)) < 1.0e-3);
+    limiterOsLatencySamples_ = limiterOversampler_.getLatencyInSamples();
 
     lookahead_.prepare (2, osMaxLookaheadSamples_);
     lookahead_.setDelaySamples (osLookaheadSamples);

@@ -13,6 +13,7 @@
 #include <mdsp_dsp/dynamics/PeakDetector.h>
 #include <mdsp_dsp/dynamics/TruePeakDetector.h>
 #include <mdsp_dsp/filters/LinearPhaseCrossover.h>
+#include <mdsp_dsp/filters/HalfbandPolyphaseOS.h>
 #include <mdsp_dsp/loudness/LoudnessAnalyzer.h>
 
 #ifndef MDSP_BAND_HEADROOM_DB
@@ -178,7 +179,7 @@ private:
     std::atomic<bool> crossoverRedesignPending_ { false };
     mdsp_dsp::LimiterEnvelope envelopeLow_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
-    juce::dsp::Oversampling<float> limiterOversampler_ { 2 };
+    mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
 
     juce::AudioBuffer<float> peakBuf_;
     juce::AudioBuffer<float> gainBuf_;
