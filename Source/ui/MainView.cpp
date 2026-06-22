@@ -29,7 +29,7 @@ constexpr int kLoadUserPresetFromFileId = 9004;
 
 juce::String buildMarkerText()
 {
-    return "v0.3.0 (beta) - Maximizer - "
+    return "v" + juce::String (JucePlugin_VersionString) + " (beta) - Maximizer - "
            + juce::String (MASTERLIMITER_GIT_BRANCH)
            + "@"
            + juce::String (MASTERLIMITER_GIT_SHA)
@@ -824,7 +824,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnCompareA_.setTooltip ("A/B compare slot A. Click inactive slot to capture the current slot and load A.");
     btnCompareB_.setTooltip ("A/B compare slot B. Click inactive slot to capture the current slot and load B.");
     btnCopyCompare_.setTooltip ("Copy the active A/B slot into the other slot.");
-    btnDev_.setTooltip ("Open the temporary DEV tuning controls window.");
+    btnDev_.setTooltip ("Open the temporary DEV tuning controls panel.");
     btnHistory_.setTooltip ("Open the scrolling gain-reduction and level history graph.");
     btnMeterScaleMinus_.setTooltip ("Zoom the I/O meter range out.");
     btnMeterScalePlus_.setTooltip ("Zoom the I/O meter range in.");

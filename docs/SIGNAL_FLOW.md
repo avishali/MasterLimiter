@@ -163,7 +163,7 @@ the current comparison pair.
 ---
 
 ## 6. DEV controls (TEMPORARY — remove before 0.4)
-Live, RT-safe tuning knobs now live in the separate header **DEV** window, grouped by operating section. They drive release/lookahead/attack voicing experiments; defaults reproduce the baked constants where applicable. The main view intentionally has no inline DEV strip. User presets capture these DEV values as part of the full APVTS state.
+Live, RT-safe tuning knobs now live in an **embedded editor panel** opened by the header **DEV** button (not a separate OS window — required so AAX/Pro Tools commits parameter gestures). Controls are grouped by operating section. They drive release/lookahead/attack voicing experiments; defaults reproduce the baked constants where applicable. The main view intentionally has no inline DEV strip. User presets capture these DEV values as part of the full APVTS state. The History Graph remains a separate read-only window (no param writes).
 
 | Window section | Controls |
 |---|---|

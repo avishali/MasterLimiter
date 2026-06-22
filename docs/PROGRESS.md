@@ -111,6 +111,41 @@ slice prompt. Audition pending.
 
 ---
 
+## 2026-06-22 — Slice: DEV controls embedded panel (AAX fix)
+
+**Status:** 🔶 Implemented locally; build/install/AU validation pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, local file reads.
+- QUERIES ISSUED: MasterLimiter `PluginEditor` path lookup; JUCE `Component`
+  child hierarchy / `addChildComponent`.
+- FILES RETRIEVED: `PROMPTS/SLICE_DEV_PANEL_EMBED.md`,
+  `Source/PluginEditor.{h,cpp}`, `Source/ui/DevControlsComponent.{h,cpp}`,
+  `Source/ui/MainView.cpp`, `docs/SIGNAL_FLOW.md`, `docs/PROGRESS.md`,
+  `PROMPTS/PLAN.md`.
+- SECTIONS CITED: `PluginEditor` DEV `DocumentWindow` plumbing (removed),
+  `DevControlsComponent` APVTS attachments (unchanged), `SIGNAL_FLOW.md` §6.
+- REUSE CHECK: reused `DevControlsComponent` as-is; reparented only. No DSP
+  changes. History Graph `DocumentWindow` pattern kept for read-only graph.
+
+**Deliverables**
+- Removed the separate DEV `DocumentWindow`; DEV controls now live in an
+  editor-owned `DevPanel` overlay (header bar + close ✕ + `DevControlsComponent`)
+  with a translucent scrim, toggled by the existing header **DEV** button.
+- Panel is centered (~700×560, clamped to editor bounds) and re-laid out on
+  editor resize. History Graph window unchanged.
+- Updated `MainView` DEV button tooltip to say "panel" not "window".
+
+**Gate**
+- [ ] Release build clean.
+- [ ] AU/VST3 installed; AU validation clean.
+- [ ] Audition: DEV opens as in-window panel (no separate OS window); close ✕ hides it.
+- [ ] Audition: VST3/AU DEV controls still drive/persist params (regression).
+- [ ] Audition: **AAX/Pro Tools** — DEV sliders change sound and hold value (no snap-back).
+- [ ] Audition: editor resize keeps panel positioned correctly.
+
+---
+
 ## 2026-06-10 — Slice: DEV controls window
 
 **Status:** 🔶 Implemented locally; Release build clean; AU/VST3 installed
