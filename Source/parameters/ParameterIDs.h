@@ -35,6 +35,8 @@ inline constexpr std::string_view dev_high_band_release_scale { "dev_high_band_r
 inline constexpr std::string_view dev_sigma_attack_ms { "dev_sigma_attack_ms" };
 inline constexpr std::string_view dev_sigma_decay_scale { "dev_sigma_decay_scale" };
 inline constexpr std::string_view dev_attack_ms { "dev_attack_ms" };
+inline constexpr std::string_view dev_attack_mode { "dev_attack_mode" };
+inline constexpr std::string_view dev_real_attack_ms { "dev_real_attack_ms" };
 inline constexpr std::string_view dev_release_engine { "dev_release_engine" };
 inline constexpr std::string_view dev_la_release_ms { "dev_la_release_ms" };
 inline constexpr std::string_view dev_la_release_poles { "dev_la_release_poles" };

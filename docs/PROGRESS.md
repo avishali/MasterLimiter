@@ -111,6 +111,33 @@ slice prompt. Audition pending.
 
 ---
 
+## 2026-06-22 — Slice: Attack mode Ramp vs Real (decoupled)
+
+**Status:** 🔶 Implemented locally; build/AU validation pending.
+
+**Retrieval / scope**
+- TOOLS USED: `user-melech_internal`, `user-juce_docs`, `user-melech_dsp`, local file reads.
+- QUERIES ISSUED: MasterLimiter `PluginProcessor` path; `LimiterEnvelope` in SDK.
+- FILES RETRIEVED: `PROMPTS/SLICE_ATTACK_DECOUPLED_MODE.md`,
+  `melechdsp-hq/shared/mdsp_dsp/.../LimiterEnvelope.{h,cpp}`,
+  `Source/parameters/*`, `Source/PluginProcessor.{h,cpp}`, `DevControlsComponent.{h,cpp}`,
+  `docs/SIGNAL_FLOW.md`.
+- SECTIONS CITED: `SIGNAL_FLOW.md` §4.3 attack, §6 DEV controls.
+- REUSE CHECK: extended existing `LimiterEnvelope` (no new filter/envelope class).
+
+**Deliverables**
+- SDK: `AttackMode::Ramp` (default, unchanged) vs `Real` (2-pole decoupled attack TC).
+- Plugin: `dev_attack_mode`, `dev_real_attack_ms`; wired to all four envelopes.
+- DEV UI: Attack Mode combo + Real Attack slider; grey inactive control per mode.
+
+**Gate**
+- [ ] SDK + plugin Release build clean.
+- [ ] AU validation clean.
+- [ ] Audition: Ramp = current behavior; Real slow = punch-through on drums.
+- [ ] RT-safe; CPU unchanged.
+
+---
+
 ## 2026-06-22 — Slice: DEV controls dock panel (meters visible while tuning)
 
 **Status:** 🔶 Implemented locally; AU validation clean (user install); audition pending.

@@ -51,9 +51,19 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
         content_.addAndMakeVisible (*group);
     }
 
+    setupLabel (lblAttackMode_, "Mode");
+    setupCombo (cmbAttackMode_);
+    cmbAttackMode_.addItem ("Ramp", 1);
+    cmbAttackMode_.addItem ("Real", 2);
+    cmbAttackMode_.setTooltip ("Ramp = cosine pre-peak ramp (current). Real = decoupled attack time-constant.");
+
     setupLabel (lblAttack_, "Attack");
     setupSlider (sldAttack_, 2, " ms");
-    sldAttack_.setTooltip ("Overrides Character; capped by the active lookahead window.");
+    sldAttack_.setTooltip ("Ramp-mode attack: overrides Character; capped by the active lookahead window.");
+
+    setupLabel (lblRealAttack_, "Real Atk");
+    setupSlider (sldRealAttack_, 2, " ms");
+    sldRealAttack_.setTooltip ("Decoupled attack time-constant; slow = transients punch through to the ceiling (punch).");
 
     setupLabel (lblLookaheadBand_, "Band");
     setupSlider (sldLookaheadBand_, 2, " ms");
@@ -100,7 +110,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldSustainRatio_, 2, {});
     sldSustainRatio_.setTooltip ("Manual-release sustain split. Active only when Release Auto is Off.");
 
-    for (auto* label : { &lblAttack_, &lblLookaheadBand_, &lblLookaheadWide_,
+    for (auto* label : { &lblAttackMode_, &lblAttack_, &lblRealAttack_, &lblLookaheadBand_, &lblLookaheadWide_,
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_,
                          &lblHighScale_, &lblSustainRatio_ })
@@ -108,17 +118,20 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
         content_.addAndMakeVisible (*label);
     }
 
-    for (auto* slider : { &sldAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
+    for (auto* slider : { &sldAttack_, &sldRealAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
                           &sldLaRelease_, &sldSigmaAttack_, &sldSigmaDecay_,
                           &sldLowScale_, &sldHighScale_, &sldSustainRatio_ })
     {
         content_.addAndMakeVisible (*slider);
     }
 
+    content_.addAndMakeVisible (cmbAttackMode_);
     content_.addAndMakeVisible (cmbReleaseEngine_);
     content_.addAndMakeVisible (cmbLaPoles_);
 
     attAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_attack_ms), sldAttack_);
+    attAttackMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_attack_mode), cmbAttackMode_);
+    attRealAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_real_attack_ms), sldRealAttack_);
     attLookaheadBand_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_band_ms), sldLookaheadBand_);
     attLookaheadWide_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_wide_ms), sldLookaheadWide_);
     attReleaseEngine_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_release_engine), cmbReleaseEngine_);
@@ -140,6 +153,18 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
             },
             nullptr);
         attReleaseAuto_->sendInitialUpdate();
+    }
+
+    if (auto* attackMode = apvts_.getParameter (pid (param::dev_attack_mode)))
+    {
+        attAttackModeListener_ = std::make_unique<juce::ParameterAttachment> (
+            *attackMode,
+            [this] (float value)
+            {
+                updateAttackModeControls ((int) value);
+            },
+            nullptr);
+        attAttackModeListener_->sendInitialUpdate();
     }
 }
 
@@ -190,8 +215,12 @@ void DevControlsComponent::resized()
         combo.setBounds (row.withHeight (24));
     };
 
-    auto inner = placeGroup (groupAttack_, 72);
+    auto inner = placeGroup (groupAttack_, 136);
+    placeComboRow (inner.removeFromTop (rowH), lblAttackMode_, cmbAttackMode_);
+    inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblAttack_, sldAttack_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblRealAttack_, sldRealAttack_);
 
     inner = placeGroup (groupLookahead_, 104);
     placeSliderRow (inner.removeFromTop (rowH), lblLookaheadBand_, sldLookaheadBand_);
@@ -266,4 +295,13 @@ void DevControlsComponent::updateManualReleaseEnabled (bool enabled)
 {
     lblSustainRatio_.setEnabled (enabled);
     sldSustainRatio_.setEnabled (enabled);
+}
+
+void DevControlsComponent::updateAttackModeControls (int attackModeIdx)
+{
+    const bool ramp = attackModeIdx == 0;
+    lblAttack_.setEnabled (ramp);
+    sldAttack_.setEnabled (ramp);
+    lblRealAttack_.setEnabled (! ramp);
+    sldRealAttack_.setEnabled (! ramp);
 }

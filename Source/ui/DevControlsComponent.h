@@ -24,6 +24,7 @@ private:
     void setupSlider (juce::Slider& slider, int decimals, const juce::String& suffix);
     void setupCombo (juce::ComboBox& combo);
     void updateManualReleaseEnabled (bool enabled);
+    void updateAttackModeControls (int attackModeIdx);
 
     mdsp_ui::UiContext& ui_;
     juce::AudioProcessorValueTreeState& apvts_;
@@ -33,8 +34,12 @@ private:
     juce::Viewport viewport_ { "DEV Controls Viewport" };
 
     juce::GroupComponent groupAttack_ { "AttackGroup", "ATTACK" };
+    juce::Label lblAttackMode_ {};
+    juce::ComboBox cmbAttackMode_ { "DEV Attack Mode" };
     juce::Label lblAttack_ {};
     juce::Slider sldAttack_;
+    juce::Label lblRealAttack_ {};
+    juce::Slider sldRealAttack_;
 
     juce::GroupComponent groupLookahead_ { "LookaheadGroup", "LOOKAHEAD" };
     juce::Label lblLookaheadBand_ {};
@@ -69,6 +74,8 @@ private:
     juce::Slider sldSustainRatio_;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attAttack_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attAttackMode_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRealAttack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookaheadBand_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookaheadWide_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attReleaseEngine_;
@@ -80,6 +87,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attHighScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;
     std::unique_ptr<juce::ParameterAttachment> attReleaseAuto_;
+    std::unique_ptr<juce::ParameterAttachment> attAttackModeListener_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DevControlsComponent)
 };

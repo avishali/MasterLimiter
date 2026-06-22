@@ -92,9 +92,10 @@ Simple per-channel circular buffers. `pushPop()` writes the new sample and retur
 
 ### 4.3 LimiterEnvelope (the heart — gain computer)
 Input = peak stream, output = gain coefficient stream (≤1). No audio delay here; the caller does the delaying.
-- **Attack** = a **half-cosine ramp** (`attackTable_`, `0.5·(1−cos(π·k/n))`) applied across the lookahead window so gain eases down *into* each peak. The temporary **DEV Attack** knob now overrides Character-derived attack for all envelopes while tuning:
-  - **DEV Attack** = `dev_attack_ms`, clamped per envelope to `1..active lookahead samples` so it can never exceed the LA Band/LA Wide window.
-  - With the DEV override removed/disabled, attack length returns to **Character**:
+- **Attack — two modes** (DEV Attack Mode toggle, §6):
+  - **Ramp** (default, current behavior): a **half-cosine ramp** (`attackTable_`, `0.5·(1−cos(π·k/n))`) applied across the lookahead window so gain eases down *into* each peak. Driven by **`dev_attack_ms`**, clamped per envelope to `1..active lookahead samples` so it can never exceed the LA Band/LA Wide window. Transparent smoothness control.
+  - **Real** (new): attack is a genuine **2-pole time-constant** on gain coming down, **decoupled from lookahead** (`attackSamples_ = 1`; no cosine pre-ramp in `ext_`). Driven by **`dev_real_attack_ms`**. A fast TC reaches the lookahead target before the peak (clean); a slow TC does not → the transient **punches through** → `FinalCeiling` catches the tip.
+  - With the DEV override removed/disabled, Ramp-mode attack length returns to **Character**:
   - **Clean** ≈ 3 ms · **Tight** ≈ 1 ms · **Aggressive** ≈ 0.3 ms.
 - **Release — two selectable engines** (chosen by the DEV Release Engine toggle, §6):
   - **AdaptiveSigma (legacy):** two cascaded one-pole smoothers whose time-constant is blended between a *fast* and *slow* value by **`sigma`** (an estimate of how *sustained* the limiting is). Asymmetric: sigma rises fast (attack), decays slow. Per-mode timing table:
@@ -167,7 +168,7 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 
 | Window section | Controls |
 |---|---|
-| ATTACK | `dev_attack_ms` |
+| ATTACK | `dev_attack_mode`, `dev_attack_ms` (Ramp), `dev_real_attack_ms` (Real) |
 | LOOKAHEAD | `dev_lookahead_band_ms`, `dev_lookahead_wide_ms` |
 | RELEASE · Engine | `dev_release_engine` |
 | RELEASE · Lookahead engine | `dev_la_release_ms`, `dev_la_release_poles` |
@@ -186,7 +187,9 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | Legacy-engine only. |
 | **LA Band** | `dev_lookahead_band_ms` | 0…6 ms, 0.01 ms step | 5 | Per-band audio delay + low/high envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
 | **LA Wide** | `dev_lookahead_wide_ms` | 0…6 ms, 0.01 ms step | 5 | Wideband audio delay + wide envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
-| **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | All limiter envelope attack ramps | Overrides Character; capped by each active lookahead window. |
+| **Attack Mode** | `dev_attack_mode` | Ramp / Real | **Ramp** | Chooses §4.3 attack behavior | Ramp = current cosine-in-lookahead. Real = decoupled time-constant. |
+| **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | Ramp-mode envelope attack ramps | Overrides Character; capped by each active lookahead window. |
+| **Real Attack** | `dev_real_attack_ms` | 0.05…100 ms (skewed fast) | 5 | Real-mode 2-pole attack TC | Decoupled from lookahead; slow = transient punch-through. |
 | **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | Active only when Release Auto is Off. |
 
 **Plan:** once Attack, LA Band/Wide, LA Release ms, and Poles are chosen by ear, Claude bakes them as constants or promotes any keeper to a real user parameter, then deletes the temporary DEV params for 0.4.

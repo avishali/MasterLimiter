@@ -111,6 +111,8 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_sigma_attack_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_sigma_decay_scale.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_attack_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_attack_mode.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_real_attack_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_release_engine.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_la_release_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_la_release_poles.data()) != nullptr);
@@ -243,6 +245,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devSigmaAttackMs_ = apvts.getRawParameterValue (param::dev_sigma_attack_ms.data());
     devSigmaDecayScale_ = apvts.getRawParameterValue (param::dev_sigma_decay_scale.data());
     devAttackMs_ = apvts.getRawParameterValue (param::dev_attack_ms.data());
+    devAttackMode_ = apvts.getRawParameterValue (param::dev_attack_mode.data());
+    devRealAttackMs_ = apvts.getRawParameterValue (param::dev_real_attack_ms.data());
     devReleaseEngine_ = apvts.getRawParameterValue (param::dev_release_engine.data());
     devLaReleaseMs_ = apvts.getRawParameterValue (param::dev_la_release_ms.data());
     devLaReleasePoles_ = apvts.getRawParameterValue (param::dev_la_release_poles.data());
@@ -261,6 +265,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devSigmaAttackMs_ != nullptr);
     jassert (devSigmaDecayScale_ != nullptr);
     jassert (devAttackMs_ != nullptr);
+    jassert (devAttackMode_ != nullptr);
+    jassert (devRealAttackMs_ != nullptr);
     jassert (devReleaseEngine_ != nullptr);
     jassert (devLaReleaseMs_ != nullptr);
     jassert (devLaReleasePoles_ != nullptr);
@@ -772,7 +778,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         || releaseAuto_ == nullptr || autoReleaseMode_ == nullptr
         || devLowBandReleaseScale_ == nullptr || devHighBandReleaseScale_ == nullptr
         || devSigmaAttackMs_ == nullptr || devSigmaDecayScale_ == nullptr
-        || devAttackMs_ == nullptr
+        || devAttackMs_ == nullptr || devAttackMode_ == nullptr || devRealAttackMs_ == nullptr
         || devReleaseEngine_ == nullptr || devLaReleaseMs_ == nullptr || devLaReleasePoles_ == nullptr
         || devLookaheadBandMs_ == nullptr || devLookaheadWideMs_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
@@ -962,6 +968,12 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                                                                      : kAutoSigmaDecayScale;
         const float devAttackMs = devAttackMs_ != nullptr ? devAttackMs_->load (std::memory_order_relaxed)
                                                           : 3.0f;
+        const int attackModeIdx = devAttackMode_ != nullptr ? (int) devAttackMode_->load (std::memory_order_relaxed)
+                                                            : 0;
+        const float realAttackMs = devRealAttackMs_ != nullptr ? devRealAttackMs_->load (std::memory_order_relaxed)
+                                                               : 5.0f;
+        const auto attackMode = attackModeIdx == 1 ? mdsp_dsp::LimiterEnvelope::AttackMode::Real
+                                                   : mdsp_dsp::LimiterEnvelope::AttackMode::Ramp;
         const int laReleaseEngineIdx = devReleaseEngine_ != nullptr ? (int) devReleaseEngine_->load (std::memory_order_relaxed)
                                                                     : 0;
         const float laReleaseMs = devLaReleaseMs_ != nullptr ? devLaReleaseMs_->load (std::memory_order_relaxed)
@@ -999,6 +1011,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             envelope.setReleaseEngine (laEngine);
             envelope.setLookaheadReleaseMs (laReleaseMs * autoReleaseScale);
             envelope.setLookaheadReleasePoles (laReleasePoles);
+            envelope.setAttackMode (attackMode);
+            envelope.setRealAttackMs (realAttackMs);
             envelope.setAttackOverrideMs (devAttackMs);
             if (! autoRelease)
                 envelope.setReleaseMs (releaseMs);
