@@ -496,13 +496,17 @@ void MasterLimiterAudioProcessor::prepareCrossoverBanks (double osSampleRate)
     auto active = readCrossoverSpecFromParams();
     active.sampleRate = osSampleRate;
 
+    // Align the crossover's OS-rate latency to a multiple of osFactor so the host-rate
+    // PDC divides exactly — otherwise the OS→host rounding leaves a sub-sample delay
+    // that shows up as a high-frequency phase tilt.
     for (auto& xo : detectCrossover_)
-        xo.prepareFixedLatency (worst, 2);
+        xo.prepareFixedLatency (worst, 2, osFactor);
     for (auto& xo : applyCrossover_)
-        xo.prepareFixedLatency (worst, 2);
+        xo.prepareFixedLatency (worst, 2, osFactor);
 
     crossoverOsLatencySamples_ = detectCrossover_[0].getLatencySamples();
-    crossoverOsLatencyHostSamples_ = (crossoverOsLatencySamples_ + osFactor - 1) / osFactor;
+    jassert (crossoverOsLatencySamples_ % osFactor == 0); // exact host PDC, no HF phase residual
+    crossoverOsLatencyHostSamples_ = crossoverOsLatencySamples_ / osFactor;
 
     for (auto& xo : detectCrossover_)
         xo.installActiveKernel (active);
