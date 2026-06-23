@@ -524,17 +524,21 @@ void MasterLimiterAudioProcessor::prepareCrossoverBanks (double osSampleRate)
         xo.installActiveKernel (active);
 
     activeCrossoverBank_.store (0, std::memory_order_release);
-    crossoverSwapReady_.store (false, std::memory_order_release);
+    crossoverFreeBank_.store   (1, std::memory_order_release);
+    crossoverPendingBank_ = 1;
+    crossoverSwapReady_.store      (false, std::memory_order_release);
     crossoverRedesignPending_.store (false, std::memory_order_release);
 }
 
 void MasterLimiterAudioProcessor::rebuildCrossoverKernels()
 {
-    const int staging = 1 - activeCrossoverBank_.load (std::memory_order_acquire);
+    const int wb = crossoverFreeBank_.load (std::memory_order_acquire);
     const auto active = readCrossoverSpecFromParams();
 
-    detectCrossover_[staging].installActiveKernel (active);
-    applyCrossover_[staging].installActiveKernel (active);
+    detectCrossover_[wb].installActiveKernel (active);
+    applyCrossover_[wb].installActiveKernel (active);
+
+    crossoverPendingBank_ = wb;
     crossoverSwapReady_.store (true, std::memory_order_release);
 }
 
@@ -543,10 +547,14 @@ void MasterLimiterAudioProcessor::trySwapCrossoverBank() noexcept
     if (! crossoverSwapReady_.exchange (false, std::memory_order_acq_rel))
         return;
 
-    const int newBank = 1 - activeCrossoverBank_.load (std::memory_order_relaxed);
+    const int newBank = crossoverPendingBank_;
+    const int oldBank = activeCrossoverBank_.load (std::memory_order_relaxed);
+
     detectCrossover_[newBank].reset();
     applyCrossover_[newBank].reset();
+
     activeCrossoverBank_.store (newBank, std::memory_order_release);
+    crossoverFreeBank_.store   (oldBank, std::memory_order_release);
 }
 
 void MasterLimiterAudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)

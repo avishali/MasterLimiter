@@ -174,9 +174,11 @@ private:
     mdsp_dsp::LimiterEnvelope envelope_R_;
     mdsp_dsp::LinearPhaseCrossover detectCrossover_[2];
     mdsp_dsp::LinearPhaseCrossover applyCrossover_[2];
-    std::atomic<int> activeCrossoverBank_ { 0 };
+    std::atomic<int> activeCrossoverBank_ { 0 };   // audio thread owns (writes on swap)
+    std::atomic<int> crossoverFreeBank_   { 1 };   // bank the msg thread may write; audio publishes it
     std::atomic<bool> crossoverSwapReady_ { false };
     std::atomic<bool> crossoverRedesignPending_ { false };
+    int               crossoverPendingBank_ = 1;     // msg→audio: which bank holds the new kernel
     mdsp_dsp::LimiterEnvelope envelopeLow_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
     mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
