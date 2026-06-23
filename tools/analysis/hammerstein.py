@@ -27,7 +27,11 @@ def exp_sweep(f0, f1, peak):
 
 def render(x, params, peak):
     p = load_plugin(VST3)
-    for k,v in params.items(): setattr(p, k, v)
+    for k,v in params.items():
+        # pedalboard uses sanitized DISPLAY names (input_gain, color, ceiling) — a wrong
+        # name silently sets a dead attribute, so guard loudly instead of measuring nothing.
+        assert k in p.parameters, f"unknown param '{k}'; available: {sorted(p.parameters)}"
+        setattr(p, k, v)
     y = p(np.stack([x*peak, x*peak],1), SR)
     return y.mean(1)
 
@@ -101,7 +105,7 @@ def linear(params, peak, tag):
 
 if __name__ == "__main__":
     print("=== Harmonic (limiter engaged, +12 dB drive) ===")
-    harmonics({"input_gain_db": 12.0}, 0.5, "default")
+    harmonics({"input_gain": 12.0}, 0.5, "default")
     print("\n=== Linear filter response (quiet, ~linear) ===")
     linear({}, 0.10, "default")
     print("\nplots in tools/analysis/out/ (harm_default.png, lin_default.png)")

@@ -51,7 +51,11 @@ def specpng(sig, path, title):
 
 def run(tag, peak, params):
     p = load_plugin(VST3)
-    for k,v in params.items(): setattr(p, k, v)
+    for k,v in params.items():
+        # pedalboard uses sanitized DISPLAY names (input_gain, color, ceiling) — a wrong
+        # name silently sets a dead attribute, so guard loudly instead of measuring nothing.
+        assert k in p.parameters, f"unknown param '{k}'; available: {sorted(p.parameters)}"
+        setattr(p, k, v)
     y = p(sweep(peak), SR)
     sf.write(f"{OUT}/iso_{tag}.wav", y, SR)
     specpng(y, f"{OUT}/iso_{tag}.png", f"{tag}  (peak {peak})")
@@ -67,7 +71,7 @@ run("low_bypass",       0.12, {"bypass": True})
 run("low_limiter_off",  0.12, {"limiter_active": False})
 run("low_clipper_off",  0.12, {"clipper_active": False})
 print("\nHOT (input_gain +12 dB -> limiter actively limiting):")
-run("hot_default",      0.5,  {"input_gain_db": 12.0})
-run("hot_clipper_off",  0.5,  {"input_gain_db": 12.0, "clipper_active": False})
-run("hot_la_engine",    0.5,  {"input_gain_db": 12.0, "dev_release_engine": "Lookahead"})
+run("hot_default",      0.5,  {"input_gain": 12.0})
+run("hot_clipper_off",  0.5,  {"input_gain": 12.0, "clipper_active": False})
+run("hot_la_engine",    0.5,  {"input_gain": 12.0, "dev_release_engine": "Lookahead"})
 print("\nPNGs + WAVs in tools/analysis/out/  (iso_*.png)")
