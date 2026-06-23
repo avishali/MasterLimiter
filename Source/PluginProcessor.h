@@ -180,6 +180,8 @@ private:
     mdsp_dsp::LimiterEnvelope envelopeLow_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
     mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
+    mdsp_dsp::HalfbandPolyphaseOS clipperOversampler_;   // 1-stage (2×), runs inside the 4× domain
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> clipperOsAlignDelay_ { 4096 };
 
     juce::AudioBuffer<float> peakBuf_;
     juce::AudioBuffer<float> gainBuf_;
@@ -254,6 +256,9 @@ private:
     int  crossoverOsLatencySamples_ = 0;
     int  crossoverOsLatencyHostSamples_ = 0;
     int  limiterOsLatencySamples_ = 0;
+    int  clipperOsLatencySamples4x_ = 0;   // padded total latency in 4×-rate samples
+    int  clipperOsLatencyHostSamples_ = 0;
+    int  clipperOsAlignPad4x_ = 0;
     int  finalCeilingLatencySamples_ = 0;
     int  cachedCeilingMode_   = 0;
     int  osMaxLookaheadSamples_ = 0;

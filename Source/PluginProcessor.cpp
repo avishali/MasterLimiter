@@ -167,6 +167,24 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     limiterOsLatencySamples_ = limiterOversampler_.getLatencyInSamples();
 
+    // Clipper-only 2× OS at the 4× rate — gentle spec; suppresses images in the top octave of the 4× band.
+    clipperOversampler_.prepare (2, osMaxBlockSize, osSampleRate, { { 0.10, 90.0 } });
+    clipperOversampler_.reset();
+    const int rawClipperOsLat4x = clipperOversampler_.getLatencyInSamples();
+    const int paddedClipperOsLat4x = ((rawClipperOsLat4x + 3) / 4) * 4;
+    clipperOsAlignPad4x_ = paddedClipperOsLat4x - rawClipperOsLat4x;
+    clipperOsLatencySamples4x_ = paddedClipperOsLat4x;
+    clipperOsLatencyHostSamples_ = paddedClipperOsLat4x / 4;
+
+    juce::dsp::ProcessSpec clipperOsAlignSpec;
+    clipperOsAlignSpec.sampleRate       = osSampleRate;
+    clipperOsAlignSpec.maximumBlockSize = static_cast<juce::uint32> (osMaxBlockSize);
+    clipperOsAlignSpec.numChannels      = 2;
+    clipperOsAlignDelay_.prepare (clipperOsAlignSpec);
+    clipperOsAlignDelay_.setMaximumDelayInSamples (std::max (1, clipperOsAlignPad4x_));
+    clipperOsAlignDelay_.setDelay (static_cast<float> (clipperOsAlignPad4x_));
+    clipperOsAlignDelay_.reset();
+
     lookahead_.prepare (2, osMaxLookaheadSamples_);
     lookahead_.setDelaySamples (osLookaheadSamples);
     lookaheadWide_.prepare (2, osMaxLookaheadSamples_);
@@ -311,10 +329,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     ioOutputGainRSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioOutputRDb_ != nullptr ? ioOutputRDb_->load (std::memory_order_relaxed) : 0.0f));
 
     baseLatencySamples_ = (2 * baseMaxLookaheadSamples) + limiterOsLatencySamples_ + finalCeilingLatencySamples_
-                        + crossoverOsLatencyHostSamples_;
+                        + crossoverOsLatencyHostSamples_ + clipperOsLatencyHostSamples_;
     cachedCeilingMode_  = ceilingMode_->getIndex();
 
     limiterOversampler_.reset();
+    clipperOversampler_.reset();
+    clipperOsAlignDelay_.reset();
     lookahead_.reset();
     lookaheadWide_.reset();
     lookaheadPad_.reset();
@@ -968,19 +988,26 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         const int osN = (int) osBlock.getNumSamples();
 
         const bool clipperActive = clipperActive_ != nullptr && clipperActive_->get();
+
+        auto clipBlock = clipperOversampler_.processSamplesUp (osBlock);
+        const int clipN = static_cast<int> (clipBlock.getNumSamples());
+
         if (clipperActive)
         {
             clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
             const int clipperModeIdx = clipperMode_->getIndex();
             float maxAttenuationDb = 0.0f;
+            float clipperDriveGain = clipperDriveSmoothed_.getCurrentValue();
 
-            for (int i = 0; i < osN; ++i)
+            for (int i = 0; i < clipN; ++i)
             {
-                const float clipperDriveGain = clipperDriveSmoothed_.getNextValue();
-                const int hostIdx = juce::jmin (n - 1, i * n / osN);
+                if ((i & 1) == 0)
+                    clipperDriveGain = clipperDriveSmoothed_.getNextValue();
+
+                const int hostIdx = juce::jmin (n - 1, i * n / clipN);
                 for (int ch = 0; ch < nch; ++ch)
                 {
-                    auto* d = osBlock.getChannelPointer ((size_t) ch);
+                    auto* d = clipBlock.getChannelPointer ((size_t) ch);
                     const float x = d[i] * clipperDriveGain;
                     const float ax = std::abs (x);
                     float y = x;
@@ -1025,6 +1052,14 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         else
         {
             currentClipDb_.store (0.0f, std::memory_order_relaxed);
+        }
+
+        clipperOversampler_.processSamplesDown (osBlock);
+
+        if (clipperOsAlignPad4x_ > 0)
+        {
+            juce::dsp::ProcessContextReplacing<float> clipAlignCtx (osBlock);
+            clipperOsAlignDelay_.process (clipAlignCtx);
         }
 
         inputGainSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
