@@ -1077,6 +1077,23 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (limiterActive_->get())
     {
+        if (xoDuckPhase_ == 1 && xoDuckPos_ >= xoFadeOutSamples_)
+        {
+            if (tryLockCrossoverBank())
+            {
+                if (crossoverSwapReady_.exchange (false, std::memory_order_acq_rel))
+                {
+                    const int nb = crossoverPendingBank_;
+                    detectCrossover_[nb].reset();
+                    applyCrossover_[nb].reset();
+                    activeCrossoverBank_.store (nb, std::memory_order_release);
+                }
+                unlockCrossoverBank();
+                xoDuckPhase_ = 2;
+                xoDuckPos_   = 0;
+            }
+        }
+
         const int xoBank = activeCrossoverBank_.load (std::memory_order_acquire);
 
         juce::dsp::AudioBlock<float> block (buffer);
@@ -1315,23 +1332,6 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                 }
                 else
                     duck = 0.0f;
-
-                if (xoDuckPos_ >= xoFadeOutSamples_)
-                {
-                    if (tryLockCrossoverBank())
-                    {
-                        if (crossoverSwapReady_.exchange (false, std::memory_order_acq_rel))
-                        {
-                            const int nb = crossoverPendingBank_;
-                            detectCrossover_[nb].reset();
-                            applyCrossover_[nb].reset();
-                            activeCrossoverBank_.store (nb, std::memory_order_release);
-                        }
-                        unlockCrossoverBank();
-                        xoDuckPhase_ = 2;
-                        xoDuckPos_ = 0;
-                    }
-                }
             }
             else if (xoDuckPhase_ == 2)
             {
