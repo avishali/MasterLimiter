@@ -134,14 +134,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterBool> (
         pid (release_auto, 1),
         "Release Auto",
-        false,
+        true,
         releaseAutoAttrs));
 
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (auto_release_mode, 1),
         "Auto Release",
         StringArray { "Transparent", "Balanced", "Reactive" },
-        0,
+        2,
         AudioParameterChoiceAttributes()));
 
     layout.add (std::make_unique<AudioParameterChoice> (
@@ -193,14 +193,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterBool> (
         pid (clipper_active, 1),
         "Clipper Active",
-        true,
+        false,
         AudioParameterBoolAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_low_band_release_scale, 1),
         "DEV Low Release Scale",
         NormalisableRange<float> (0.5f, 8.0f, 0.01f),
-        3.0f,
+        1.52f,
         AudioParameterFloatAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
@@ -214,7 +214,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (dev_sigma_attack_ms, 1),
         "DEV Sigma Attack",
         NormalisableRange<float> (1.0f, 50.0f, 0.1f),
-        5.0f,
+        17.4f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
     layout.add (std::make_unique<AudioParameterFloat> (
@@ -228,35 +228,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (dev_attack_ms, 1),
         "DEV Attack",
         NormalisableRange<float> (0.05f, 10.0f, 0.01f, 0.35f),
-        3.0f,
+        2.05f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (dev_attack_mode, 1),
         "DEV Attack Mode",
         StringArray { "Ramp", "Real" },
-        0,
+        1,
         AudioParameterChoiceAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_real_attack_ms, 1),
         "DEV Real Attack",
         NormalisableRange<float> (0.05f, 100.0f, 0.01f, 0.3f),
-        5.0f,
+        3.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (dev_release_engine, 1),
         "DEV Release Engine",
         StringArray { "Adaptive", "Lookahead" },
-        0,
+        1,
         AudioParameterChoiceAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_la_release_ms, 1),
         "DEV LA Release",
         NormalisableRange<float> (5.0f, 400.0f, 0.1f, 0.4f),
-        80.0f,
+        8.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
     layout.add (std::make_unique<AudioParameterChoice> (
@@ -270,21 +270,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         pid (dev_lookahead_band_ms, 1),
         "DEV LA Band",
         NormalisableRange<float> (0.0f, 6.0f, 0.01f),
-        5.0f,
+        0.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_lookahead_wide_ms, 1),
         "DEV LA Wide",
         NormalisableRange<float> (0.0f, 6.0f, 0.01f),
-        5.0f,
+        0.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_xover_cutoff_hz, 1),
         "DEV Xover Cutoff",
         NormalisableRange<float> (40.0f, 250.0f, 1.0f, 0.35f),
-        120.0f,
+        100.0f,
         AudioParameterFloatAttributes().withLabel ("Hz")));
 
     layout.add (std::make_unique<AudioParameterFloat> (

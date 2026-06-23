@@ -86,7 +86,7 @@ MasterLimiterAudioProcessorEditor::MasterLimiterAudioProcessorEditor (MasterLimi
     addChildComponent (devPanel_);
 
     setResizable (true, true);
-    setSize (1100, 620);
+    setSize (kMinBaseWidth, kMinBaseHeight);
 
     startTimerHz (30);
 }

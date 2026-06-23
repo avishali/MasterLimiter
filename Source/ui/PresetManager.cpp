@@ -14,25 +14,22 @@ struct FactoryPreset
 {
     const char* name = "";
     float inputGainDb = 0.0f;
-    float ceilingDb = -1.0f;
+    float ceilingDb = 0.0f;
     int ceilingMode = 0;
     float clipperDriveDb = 0.0f;
     int clipperMode = 0;
+    bool clipperActive = false;
     int character = 0;
     float releaseMs = 30.0f;
-    bool releaseAuto = false;
-    int autoReleaseMode = 0;
+    bool releaseAuto = true;
+    int autoReleaseMode = 2;
     int stereoMode = 0;
     float stereoLinkPct = 100.0f;
-    float bandColor = 50.0f;
+    float bandColor = 0.0f;
 };
 
-constexpr std::array<FactoryPreset, 5> kFactoryPresets {{
-    { "Default",             0.0f, -1.0f, 0,  0.0f, 0, 0,  30.0f, false, 0, 0, 100.0f, 50.0f },
-    { "Transparent Master",  3.0f, -1.0f, 1,  0.0f, 0, 0,  30.0f, true,  0, 0, 100.0f, 50.0f },
-    { "Loud & Aggressive",   9.0f, -1.0f, 1, -3.0f, 1, 2,  30.0f, true,  2, 0, 100.0f, 25.0f },
-    { "Gentle Glue",         2.0f, -1.0f, 0,  0.0f, 0, 1, 120.0f, false, 0, 0, 100.0f, 70.0f },
-    { "Clipper Punch",       4.0f, -1.0f, 0, -4.0f, 0, 1,  30.0f, false, 0, 0, 100.0f, 40.0f },
+constexpr std::array<FactoryPreset, 1> kFactoryPresets {{
+    { "Default", 0.0f, 0.0f, 0, 0.0f, 0, false, 0, 30.0f, true, 2, 0, 100.0f, 0.0f },
 }};
 
 juce::String pid (std::string_view sv)
@@ -108,6 +105,7 @@ bool PresetManager::applyPreset (juce::AudioProcessorValueTreeState& apvts, int 
     setParameterValue (apvts, param::limiter_active, 1.0f);
     setParameterValue (apvts, param::clipper_drive_db, preset.clipperDriveDb);
     setParameterValue (apvts, param::clipper_mode, static_cast<float> (preset.clipperMode));
+    setParameterValue (apvts, param::clipper_active, preset.clipperActive ? 1.0f : 0.0f);
     setParameterValue (apvts, param::character, static_cast<float> (preset.character));
     setParameterValue (apvts, param::release_ms, preset.releaseMs);
     setParameterValue (apvts, param::release_auto, preset.releaseAuto ? 1.0f : 0.0f);
@@ -120,10 +118,10 @@ bool PresetManager::applyPreset (juce::AudioProcessorValueTreeState& apvts, int 
     setParameterValue (apvts, param::gain_match_auto, 0.0f);
     setParameterValue (apvts, param::io_input_l_db, 0.0f);
     setParameterValue (apvts, param::io_input_r_db, 0.0f);
-    setParameterValue (apvts, param::io_input_link, 0.0f);
+    setParameterValue (apvts, param::io_input_link, 1.0f);
     setParameterValue (apvts, param::io_output_l_db, 0.0f);
     setParameterValue (apvts, param::io_output_r_db, 0.0f);
-    setParameterValue (apvts, param::io_output_link, 0.0f);
+    setParameterValue (apvts, param::io_output_link, 1.0f);
 
     return true;
 }

@@ -1567,8 +1567,8 @@ void MainView::paint (juce::Graphics& g)
 void MainView::resized()
 {
     headerArea_ = { 0, 0, 1100, 52 };
-    maximizerPanelArea_ = { 16, 64, 736, 540 };
-    ioPanelArea_ = { 768, 64, 316, 540 };
+    maximizerPanelArea_ = { 16, 64, 736, 500 };
+    ioPanelArea_ = { 768, 64, 316, 500 };
     footerArea_ = {};
 
     header_.setBounds (24, 8, 150, 34);
@@ -1616,13 +1616,13 @@ void MainView::resized()
     lblBandColor_.setBounds (526, 314, knobW, 18);
     sldBandColor_.setBounds (526, 332, knobW, knobH);
 
-    btnGainMatchAutoTrack_.setBounds (152, 568, 126, 30);
-    gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (546).withHeight (18);
-    lblGainMatchNote_.setBounds (288, 568, 76, 30);
-    compGainBar_.setBounds (372, 580, 48, 8);
+    btnGainMatchAutoTrack_.setBounds (152, 528, 126, 30);
+    gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (506).withHeight (18);
+    lblGainMatchNote_.setBounds (288, 528, 76, 30);
+    compGainBar_.setBounds (372, 540, 48, 8);
     // Slice 11b2.1: Learn sits with Auto/Track so the LUFS feature reads as one group.
-    btnLearnInputGain_.setBounds (432, 568, 84, 30);
-    lblLearnInputLufs_.setBounds (524, 568, 96, 30);
+    btnLearnInputGain_.setBounds (432, 528, 84, 30);
+    lblLearnInputLufs_.setBounds (524, 528, 96, 30);
 
     meterGr_.setBounds (650, 104, 88, 354);
 

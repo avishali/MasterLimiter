@@ -25,12 +25,12 @@ public:
 
 private:
     static constexpr int kDesignWidth = 1100;
-    static constexpr int kDesignHeight = 620;
+    static constexpr int kDesignHeight = 580;
     static constexpr int kDevDockWidth = 360;
     static constexpr int kMinBaseWidth = 958;
-    static constexpr int kMinBaseHeight = 540;
+    static constexpr int kMinBaseHeight = 505;
     static constexpr int kMaxBaseWidth = 4000;
-    static constexpr int kMaxBaseHeight = 2255;
+    static constexpr int kMaxBaseHeight = 2109;
 
     class DevPanel : public juce::Component
     {
