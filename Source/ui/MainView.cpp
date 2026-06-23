@@ -1616,13 +1616,13 @@ void MainView::resized()
     lblBandColor_.setBounds (526, 314, knobW, 18);
     sldBandColor_.setBounds (526, 332, knobW, knobH);
 
-    btnGainMatchAutoTrack_.setBounds (152, 528, 126, 30);
+    btnGainMatchAutoTrack_.setBounds (24, 528, 126, 30);
     gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (506).withHeight (18);
-    lblGainMatchNote_.setBounds (288, 528, 76, 30);
-    compGainBar_.setBounds (372, 540, 48, 8);
+    lblGainMatchNote_.setBounds (160, 528, 76, 30);
+    compGainBar_.setBounds (244, 540, 48, 8);
     // Slice 11b2.1: Learn sits with Auto/Track so the LUFS feature reads as one group.
-    btnLearnInputGain_.setBounds (432, 528, 84, 30);
-    lblLearnInputLufs_.setBounds (524, 528, 96, 30);
+    btnLearnInputGain_.setBounds (304, 528, 84, 30);
+    lblLearnInputLufs_.setBounds (396, 528, 96, 30);
 
     meterGr_.setBounds (650, 104, 88, 354);
 
@@ -1654,8 +1654,8 @@ void MainView::resized()
     btnMeterScalePlus_.setBounds (scaleX + scaleW - 17, 492, 17, 17);
     btnMeterRms_.setBounds (scaleX, 514, scaleW, 20);
 
-    lufsPanel_.setBounds (790, 536, 160, 68);
-    btnResetPeaks_.setBounds (962, 556, 100, 26);
+    lufsPanel_.setBounds (508, 520, 160, 60);
+    btnResetPeaks_.setBounds (884, 520, 84, 22);
 
     sldIoInputTrimL_.toFront (false);
     sldIoInputTrimR_.toFront (false);
