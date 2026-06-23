@@ -3,6 +3,10 @@
 #include "PluginProcessor.h"
 #include "parameters/ParameterIDs.h"
 
+#ifndef MASTERLIMITER_GIT_SHA
+ #define MASTERLIMITER_GIT_SHA "nogit"
+#endif
+
 namespace
 {
 namespace palette
@@ -32,6 +36,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     header_.setJustificationType (juce::Justification::centredLeft);
     header_.setFont (ui_.type().labelFont().withHeight (13.0f).boldened());
     header_.setColour (juce::Label::textColourId, palette::warning.withAlpha (0.95f));
+    header_.setText ("DEV - tuning controls (temporary; baked & removed for 0.4)  ["
+                     + juce::String (MASTERLIMITER_GIT_SHA) + "]",
+                     juce::dontSendNotification);
     addAndMakeVisible (header_);
 
     viewport_.setViewedComponent (&content_, false);
