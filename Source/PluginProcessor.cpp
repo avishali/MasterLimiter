@@ -133,10 +133,20 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     apvts.addParameterListener (param::dev_xover_atten_db.data(), this);
     apvts.addParameterListener (param::dev_lookahead_band_ms.data(), this);
     apvts.addParameterListener (param::dev_lookahead_wide_ms.data(), this);
+
+    for (auto id : { param::dev_xover_cutoff_hz, param::dev_xover_transition_hz, param::dev_xover_atten_db,
+                     param::dev_lookahead_band_ms, param::dev_lookahead_wide_ms })
+        if (auto* p = apvts.getParameter (id.data()))
+            p->addListener (this);
 }
 
 MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
 {
+    for (auto id : { param::dev_xover_cutoff_hz, param::dev_xover_transition_hz, param::dev_xover_atten_db,
+                     param::dev_lookahead_band_ms, param::dev_lookahead_wide_ms })
+        if (auto* p = apvts.getParameter (id.data()))
+            p->removeListener (this);
+
     stopTimer();
     cancelPendingUpdate();
     apvts.removeParameterListener (param::input_gain_db.data(), this);
@@ -774,21 +784,24 @@ void MasterLimiterAudioProcessor::restoreCompareStateFromTree (const juce::Value
 
 void MasterLimiterAudioProcessor::handleAsyncUpdate()
 {
-    if ((heavyCrossoverDirty_.load (std::memory_order_acquire)
-         || heavyLookaheadDirty_.load (std::memory_order_acquire))
-        && ! isTimerRunning())
+    if (heavyGestureCommitPending_.exchange (false, std::memory_order_acq_rel))
+    {
+        commitHeavyControls();
+        stopTimer();
+    }
+    else if ((heavyCrossoverDirty_.load (std::memory_order_acquire)
+              || heavyLookaheadDirty_.load (std::memory_order_acquire))
+             && heavyGestureActive_.load (std::memory_order_acquire) == 0
+             && ! isTimerRunning())
+    {
         startTimer (kHeavyPollMs);
+    }
 
     commitLearnedRef();
 }
 
-void MasterLimiterAudioProcessor::timerCallback()
+void MasterLimiterAudioProcessor::commitHeavyControls()
 {
-    const auto nowMs = juce::Time::getMillisecondCounter();
-    if (nowMs - lastHeavyChangeMs_.load (std::memory_order_acquire)
-        < (juce::uint32) kHeavyDebounceMs)
-        return;
-
     if (heavyCrossoverDirty_.exchange (false, std::memory_order_acq_rel))
         rebuildCrossoverKernels();
 
@@ -799,7 +812,37 @@ void MasterLimiterAudioProcessor::timerCallback()
         committedLookaheadWideMs_.store (devLookaheadWideMs_ != nullptr ? devLookaheadWideMs_->load (std::memory_order_relaxed) : kLookaheadMs,
                                          std::memory_order_release);
     }
+}
 
+void MasterLimiterAudioProcessor::parameterGestureChanged (int, bool gestureIsStarting)
+{
+    if (gestureIsStarting)
+    {
+        heavyGestureActive_.fetch_add (1, std::memory_order_acq_rel);
+    }
+    else
+    {
+        const int prev = heavyGestureActive_.fetch_sub (1, std::memory_order_acq_rel);
+        if (prev <= 1)
+        {
+            heavyGestureActive_.store (0, std::memory_order_release);
+            heavyGestureCommitPending_.store (true, std::memory_order_release);
+            triggerAsyncUpdate();
+        }
+    }
+}
+
+void MasterLimiterAudioProcessor::timerCallback()
+{
+    if (heavyGestureActive_.load (std::memory_order_acquire) > 0)
+        return;
+
+    const auto nowMs = juce::Time::getMillisecondCounter();
+    if (nowMs - lastHeavyChangeMs_.load (std::memory_order_acquire)
+        < (juce::uint32) kHeavyDebounceMs)
+        return;
+
+    commitHeavyControls();
     stopTimer();
 }
 

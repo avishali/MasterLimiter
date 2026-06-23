@@ -25,6 +25,7 @@
 //==============================================================================
 class MasterLimiterAudioProcessor : public juce::AudioProcessor,
                                     private juce::AudioProcessorValueTreeState::Listener,
+                                    private juce::AudioProcessorParameter::Listener,
                                     private juce::AsyncUpdater,
                                     private juce::Timer
 {
@@ -127,8 +128,11 @@ public:
 
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void parameterValueChanged (int, float) override {}
+    void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override;
     void handleAsyncUpdate() override;
     void timerCallback() override;
+    void commitHeavyControls();
     void cacheGainCeilingLinkParameters();
     void refreshGainCeilingLinkBaseline();
     void applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels);
@@ -188,6 +192,8 @@ private:
     std::atomic<juce::uint32>  lastHeavyChangeMs_   { 0 };
     std::atomic<float>         committedLookaheadBandMs_ { 0.0f };
     std::atomic<float>         committedLookaheadWideMs_ { 0.0f };
+    std::atomic<int>           heavyGestureActive_       { 0 };
+    std::atomic<bool>          heavyGestureCommitPending_ { false };
     static constexpr int kHeavyDebounceMs = 120;
     static constexpr int kHeavyPollMs     = 30;
     mdsp_dsp::LimiterEnvelope envelopeLow_;
