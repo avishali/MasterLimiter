@@ -1654,8 +1654,8 @@ void MainView::resized()
     btnMeterScalePlus_.setBounds (scaleX + scaleW - 17, 492, 17, 17);
     btnMeterRms_.setBounds (scaleX, 514, scaleW, 20);
 
-    lufsPanel_.setBounds (508, 520, 160, 60);
-    btnResetPeaks_.setBounds (884, 520, 84, 22);
+    lufsPanel_.setBounds (508, 486, 160, 60);
+    btnResetPeaks_.setBounds (884, 538, 84, 22);
 
     sldIoInputTrimL_.toFront (false);
     sldIoInputTrimR_.toFront (false);
