@@ -141,6 +141,9 @@ private:
     void prepareCrossoverBanks (double osSampleRate);
     void rebuildCrossoverKernels();
     void trySwapCrossoverBank() noexcept;
+    bool tryLockCrossoverBank() noexcept { return ! crossoverBankLock_.test_and_set (std::memory_order_acquire); }
+    void lockCrossoverBankSpin() noexcept { while (crossoverBankLock_.test_and_set (std::memory_order_acquire)) {} }
+    void unlockCrossoverBank() noexcept { crossoverBankLock_.clear (std::memory_order_release); }
     void commitLearnedRef();
     void captureCurrentStateToActiveCompareSlot();
     void replaceLiveStateFromCompareSlot (int slotIndex);
@@ -174,11 +177,11 @@ private:
     mdsp_dsp::LimiterEnvelope envelope_R_;
     mdsp_dsp::LinearPhaseCrossover detectCrossover_[2];
     mdsp_dsp::LinearPhaseCrossover applyCrossover_[2];
-    std::atomic<int> activeCrossoverBank_ { 0 };   // audio thread owns (writes on swap)
-    std::atomic<int> crossoverFreeBank_   { 1 };   // bank the msg thread may write; audio publishes it
+    std::atomic<int>  activeCrossoverBank_ { 0 };
     std::atomic<bool> crossoverSwapReady_ { false };
     std::atomic<bool> crossoverRedesignPending_ { false };
-    int               crossoverPendingBank_ = 1;     // msg→audio: which bank holds the new kernel
+    int               crossoverPendingBank_ = 1;
+    std::atomic_flag  crossoverBankLock_ = ATOMIC_FLAG_INIT;
     mdsp_dsp::LimiterEnvelope envelopeLow_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
     mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
