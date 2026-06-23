@@ -146,7 +146,6 @@ private:
     mdsp_dsp::LinearPhaseCrossover::Spec readCrossoverSpecFromParams() const;
     void prepareCrossoverBanks (double osSampleRate);
     void rebuildCrossoverKernels();
-    void trySwapCrossoverBank() noexcept;
     bool tryLockCrossoverBank() noexcept { return ! crossoverBankLock_.test_and_set (std::memory_order_acquire); }
     void lockCrossoverBankSpin() noexcept { while (crossoverBankLock_.test_and_set (std::memory_order_acquire)) {} }
     void unlockCrossoverBank() noexcept { crossoverBankLock_.clear (std::memory_order_release); }
@@ -187,6 +186,10 @@ private:
     std::atomic<bool> crossoverSwapReady_ { false };
     int               crossoverPendingBank_ = 1;
     std::atomic_flag  crossoverBankLock_ = ATOMIC_FLAG_INIT;
+    int               xoDuckPhase_      = 0;
+    int               xoDuckPos_        = 0;
+    int               xoFadeOutSamples_ = 1;
+    int               xoFadeInSamples_  = 1;
     std::atomic<bool>          heavyCrossoverDirty_ { false };
     std::atomic<bool>          heavyLookaheadDirty_ { false };
     std::atomic<juce::uint32>  lastHeavyChangeMs_   { 0 };

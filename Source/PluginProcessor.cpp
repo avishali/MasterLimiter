@@ -30,6 +30,16 @@ float mapBandColorToLink (float colorPct) noexcept
     return 1.0f - juce::jlimit (0.0f, 100.0f, colorPct) * 0.01f;
 }
 
+float xoFadeOutGain (int pos, int len) noexcept
+{
+    return 0.5f * (1.0f + std::cos (juce::MathConstants<float>::pi * (float) pos / (float) len));
+}
+
+float xoFadeInGain (int pos, int len) noexcept
+{
+    return 0.5f * (1.0f - std::cos (juce::MathConstants<float>::pi * (float) pos / (float) len));
+}
+
 mdsp_dsp::LimiterEnvelope::Mode mapCharacterIndexToMode (int index) noexcept
 {
     switch (index)
@@ -538,6 +548,11 @@ void MasterLimiterAudioProcessor::prepareCrossoverBanks (double osSampleRate)
     jassert (crossoverOsLatencySamples_ % osFactor == 0); // exact host PDC, no HF phase residual
     crossoverOsLatencyHostSamples_ = crossoverOsLatencySamples_ / osFactor;
 
+    xoFadeOutSamples_ = juce::jmax (1, static_cast<int> (std::llround (0.005 * osSampleRate)));
+    xoFadeInSamples_  = juce::jmax (xoFadeOutSamples_, crossoverOsLatencySamples_);
+    xoDuckPhase_ = 0;
+    xoDuckPos_   = 0;
+
     for (auto& xo : detectCrossover_)
         xo.installActiveKernel (active);
     for (auto& xo : applyCrossover_)
@@ -561,24 +576,6 @@ void MasterLimiterAudioProcessor::rebuildCrossoverKernels()
     applyCrossover_[target].installActiveKernel (active);
     crossoverPendingBank_ = target;
     crossoverSwapReady_.store (true, std::memory_order_release);
-    unlockCrossoverBank();
-}
-
-void MasterLimiterAudioProcessor::trySwapCrossoverBank() noexcept
-{
-    if (! crossoverSwapReady_.load (std::memory_order_acquire))
-        return;
-    if (! tryLockCrossoverBank())
-        return;
-
-    if (crossoverSwapReady_.exchange (false, std::memory_order_acq_rel))
-    {
-        const int newBank = crossoverPendingBank_;
-        detectCrossover_[newBank].reset();
-        applyCrossover_[newBank].reset();
-        activeCrossoverBank_.store (newBank, std::memory_order_release);
-    }
-
     unlockCrossoverBank();
 }
 
@@ -1080,7 +1077,6 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (limiterActive_->get())
     {
-        trySwapCrossoverBank();
         const int xoBank = activeCrossoverBank_.load (std::memory_order_acquire);
 
         juce::dsp::AudioBlock<float> block (buffer);
@@ -1299,6 +1295,54 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         auto* gHighOut = gHighOutBuf_.getWritePointer (0);
         for (int i = 0; i < osN; ++i)
         {
+            float duck = 1.0f;
+
+            if (xoDuckPhase_ == 0)
+            {
+                if (crossoverSwapReady_.load (std::memory_order_acquire))
+                {
+                    xoDuckPhase_ = 1;
+                    xoDuckPos_ = 0;
+                }
+            }
+
+            if (xoDuckPhase_ == 1)
+            {
+                if (xoDuckPos_ < xoFadeOutSamples_)
+                {
+                    duck = xoFadeOutGain (xoDuckPos_, xoFadeOutSamples_);
+                    ++xoDuckPos_;
+                }
+                else
+                    duck = 0.0f;
+
+                if (xoDuckPos_ >= xoFadeOutSamples_)
+                {
+                    if (tryLockCrossoverBank())
+                    {
+                        if (crossoverSwapReady_.exchange (false, std::memory_order_acq_rel))
+                        {
+                            const int nb = crossoverPendingBank_;
+                            detectCrossover_[nb].reset();
+                            applyCrossover_[nb].reset();
+                            activeCrossoverBank_.store (nb, std::memory_order_release);
+                        }
+                        unlockCrossoverBank();
+                        xoDuckPhase_ = 2;
+                        xoDuckPos_ = 0;
+                    }
+                }
+            }
+            else if (xoDuckPhase_ == 2)
+            {
+                duck = xoFadeInGain (xoDuckPos_, xoFadeInSamples_);
+                if (++xoDuckPos_ >= xoFadeInSamples_)
+                {
+                    xoDuckPhase_ = 0;
+                    duck = 1.0f;
+                }
+            }
+
             const float bl = bandLinkSmoothed_.getNextValue();
             const float oneMinusBandLink = 1.0f - bl;
             const float gLinked = std::min (gainLow[i], gainHigh[i]);
@@ -1315,8 +1359,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                 float xDelayed = 0.0f;
                 applyCrossover_[xoBank].processSample (ch, delayed, low, high, xDelayed);
 
-                bandLimitedBuf_.getWritePointer (ch)[i] = linkedGain * xDelayed
-                    + oneMinusBandLink * (low * gainLow[i] + high * gainHigh[i]);
+                bandLimitedBuf_.getWritePointer (ch)[i] = duck * (linkedGain * xDelayed
+                    + oneMinusBandLink * (low * gainLow[i] + high * gainHigh[i]));
             }
         }
 
