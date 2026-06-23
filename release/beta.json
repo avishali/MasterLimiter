@@ -4,8 +4,8 @@
   "platform": "macOS",
   "latest": {
     "version": "0.3.1-beta",
-    "build": 2,
-    "date": "2026-06-10",
+    "build": 3,
+    "date": "2026-06-24",
     "minimum_supported_version": "0.3.1-beta",
     "download_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-0.3.1-beta.pkg",
     "sha256": "c6e387614848b4c5326cfa41df4f985157a7d3aaf764a745899bb296aab66091",

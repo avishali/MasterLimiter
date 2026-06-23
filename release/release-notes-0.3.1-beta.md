@@ -1,24 +1,32 @@
-MasterLimiter 0.3.1-beta
-========================
+MasterLimiter 0.3.1-beta (build 3)
+==================================
 
 A mastering maximizer — early TUNING beta. This build exposes extra "DEV"
-controls so you can help voice the attack/release. Your job: find voicings you
-like, SAVE them as presets, and email the preset files back.
+controls so you can help voice the attack/release and the linear-phase crossover.
+Your job: find voicings you like, SAVE them as presets, and email the preset files back.
 
 Install
 -------
 - macOS, Apple Silicon + Intel (universal). Formats: AU, VST3, AAX (Pro Tools), Standalone.
 - Run the installer (signed + notarized). Rescan plugins in your DAW if needed.
 - Shows as: MelechDSP -> MasterLimiter.
+- Check the plugin header for `main@<git-hash>` — confirms you have this build, not a stale copy.
 - ~14 ms latency (lookahead) — your DAW compensates automatically.
 
-What's new in this build
-------------------------
-- New lookahead-follower release (smoother, program-dependent) — selectable in the DEV window.
-- History Graph window — see gain-reduction over time while you tune.
-- DEV tuning window — Attack, Lookahead (Band/Wide), Release (Time/Poles), grouped by section.
-- User presets — save/load named voicings; A/B compare two settings instantly.
-- Lower latency, all four formats signed.
+What's new in build 3
+---------------------
+- **Linear-phase crossover DEV controls** (Cutoff / Transition / Atten) — drag cleanly, no crash.
+- **Clipper 8× oversampling** — cleaner hard-clip on HF material.
+- **Gesture-commit + duck-and-swap** on crossover changes — brief dip on release, no click per step.
+- DEV panel embedded in the main editor (works in Pro Tools AAX).
+- All four formats signed; AAX is PACE-signed for Pro Tools.
+
+What's still in this beta (from build 2)
+----------------------------------------
+- Lookahead-follower release — selectable in the DEV window.
+- History Graph — gain-reduction over time while you tune.
+- DEV tuning — Attack, Lookahead (Band/Wide), Release (Time/Poles), Crossover.
+- User presets + A/B compare.
 
 60-second mental model
 ----------------------

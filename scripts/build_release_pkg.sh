@@ -14,6 +14,7 @@ source "$SCRIPT_DIR/source_repo_env.sh"
 
 BUILD_DIR="${MASTERLIMITER_RELEASE_BUILD_DIR:-build-release}"
 CONFIG="Release"
+PLUGIN_DEV_MODE="${PLUGIN_DEV_MODE:-OFF}"
 
 PLUGIN_NAME="MasterLimiter"
 PLUGIN_VERSION="0.3.1"
@@ -25,6 +26,7 @@ echo "=========================================="
 echo "  Version: $PLUGIN_VERSION"
 echo "  Company: $COMPANY_NAME"
 echo "  Configuration: $CONFIG"
+echo "  PLUGIN_DEV_MODE: $PLUGIN_DEV_MODE"
 echo "  Universal Binary: arm64 + x86_64"
 echo "=========================================="
 echo ""
@@ -71,7 +73,7 @@ cmake -S "$PROJECT_ROOT" -B "$BUILD_DIR" \
     -DJUCE_PATH="$JUCE_PATH" \
     -DMELECHDSP_HQ_ROOT="$MELECHDSP_HQ_ROOT" \
     -DAAX_SDK_PATH="${AAX_SDK_PATH:-}" \
-    -DPLUGIN_DEV_MODE=OFF \
+    -DPLUGIN_DEV_MODE="${PLUGIN_DEV_MODE}" \
     -DMASTERLIMITER_COPY_AFTER_BUILD=OFF \
     -DUniversalBinary=ON \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="10.13"
