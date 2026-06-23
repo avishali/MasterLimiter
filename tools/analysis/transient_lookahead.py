@@ -41,9 +41,11 @@ def main():
     x, _ = make_signal()
     # Isolate the BAND lookahead: kill the wideband stage's lookahead so any pre-duck
     # can only come from the per-band path (the path F-2b's fix touches).
-    y = render(x, {"input_gain_db": 18.0, "band_color": 100.0,
+    # NOTE: pedalboard exposes the plugin's *display* param names, sanitized — e.g.
+    # input_gain (not input_gain_db), color (not band_color), dev_la_band / dev_la_wide.
+    y = render(x, {"input_gain": 18.0, "color": 100.0,
                    "limiter_active": True, "clipper_active": False,
-                   "dev_lookahead_wide_ms": 0.0, "dev_lookahead_band_ms": 5.0})
+                   "dev_la_wide": 0.0, "dev_la_band": 5.0})
     env = envelope(y)
     # Locate the spike in the OUTPUT (max envelope point) — handles plugin latency.
     sp = int(np.argmax(env))
