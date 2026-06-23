@@ -131,10 +131,13 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     apvts.addParameterListener (param::dev_xover_cutoff_hz.data(), this);
     apvts.addParameterListener (param::dev_xover_transition_hz.data(), this);
     apvts.addParameterListener (param::dev_xover_atten_db.data(), this);
+    apvts.addParameterListener (param::dev_lookahead_band_ms.data(), this);
+    apvts.addParameterListener (param::dev_lookahead_wide_ms.data(), this);
 }
 
 MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
 {
+    stopTimer();
     cancelPendingUpdate();
     apvts.removeParameterListener (param::input_gain_db.data(), this);
     apvts.removeParameterListener (param::ceiling_db.data(), this);
@@ -142,6 +145,8 @@ MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
     apvts.removeParameterListener (param::dev_xover_cutoff_hz.data(), this);
     apvts.removeParameterListener (param::dev_xover_transition_hz.data(), this);
     apvts.removeParameterListener (param::dev_xover_atten_db.data(), this);
+    apvts.removeParameterListener (param::dev_lookahead_band_ms.data(), this);
+    apvts.removeParameterListener (param::dev_lookahead_wide_ms.data(), this);
 }
 
 void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -263,6 +268,10 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devLaReleasePoles_ = apvts.getRawParameterValue (param::dev_la_release_poles.data());
     devLookaheadBandMs_ = apvts.getRawParameterValue (param::dev_lookahead_band_ms.data());
     devLookaheadWideMs_ = apvts.getRawParameterValue (param::dev_lookahead_wide_ms.data());
+    committedLookaheadBandMs_.store (devLookaheadBandMs_ != nullptr ? devLookaheadBandMs_->load() : kLookaheadMs,
+                                     std::memory_order_release);
+    committedLookaheadWideMs_.store (devLookaheadWideMs_ != nullptr ? devLookaheadWideMs_->load() : kLookaheadMs,
+                                     std::memory_order_release);
     devXoverCutoffHz_ = apvts.getRawParameterValue (param::dev_xover_cutoff_hz.data());
     devXoverTransitionHz_ = apvts.getRawParameterValue (param::dev_xover_transition_hz.data());
     devXoverAttenDb_ = apvts.getRawParameterValue (param::dev_xover_atten_db.data());
@@ -407,6 +416,7 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
 void MasterLimiterAudioProcessor::releaseResources()
 {
+    stopTimer();
 }
 
 int MasterLimiterAudioProcessor::readHistorySince (uint32_t& inOutCursor,
@@ -527,7 +537,8 @@ void MasterLimiterAudioProcessor::prepareCrossoverBanks (double osSampleRate)
     crossoverPendingBank_ = 1;
     crossoverBankLock_.clear (std::memory_order_release);
     crossoverSwapReady_.store      (false, std::memory_order_release);
-    crossoverRedesignPending_.store (false, std::memory_order_release);
+    heavyCrossoverDirty_.store     (false, std::memory_order_release);
+    heavyLookaheadDirty_.store     (false, std::memory_order_release);
 }
 
 void MasterLimiterAudioProcessor::rebuildCrossoverKernels()
@@ -568,7 +579,18 @@ void MasterLimiterAudioProcessor::parameterChanged (const juce::String& paramete
         || parameterID == param::dev_xover_atten_db.data())
     {
         juce::ignoreUnused (newValue);
-        crossoverRedesignPending_.store (true, std::memory_order_release);
+        heavyCrossoverDirty_.store (true, std::memory_order_release);
+        lastHeavyChangeMs_.store (juce::Time::getMillisecondCounter(), std::memory_order_release);
+        triggerAsyncUpdate();
+        return;
+    }
+
+    if (parameterID == param::dev_lookahead_band_ms.data()
+        || parameterID == param::dev_lookahead_wide_ms.data())
+    {
+        juce::ignoreUnused (newValue);
+        heavyLookaheadDirty_.store (true, std::memory_order_release);
+        lastHeavyChangeMs_.store (juce::Time::getMillisecondCounter(), std::memory_order_release);
         triggerAsyncUpdate();
         return;
     }
@@ -752,10 +774,33 @@ void MasterLimiterAudioProcessor::restoreCompareStateFromTree (const juce::Value
 
 void MasterLimiterAudioProcessor::handleAsyncUpdate()
 {
-    if (crossoverRedesignPending_.exchange (false, std::memory_order_acq_rel))
-        rebuildCrossoverKernels();
+    if ((heavyCrossoverDirty_.load (std::memory_order_acquire)
+         || heavyLookaheadDirty_.load (std::memory_order_acquire))
+        && ! isTimerRunning())
+        startTimer (kHeavyPollMs);
 
     commitLearnedRef();
+}
+
+void MasterLimiterAudioProcessor::timerCallback()
+{
+    const auto nowMs = juce::Time::getMillisecondCounter();
+    if (nowMs - lastHeavyChangeMs_.load (std::memory_order_acquire)
+        < (juce::uint32) kHeavyDebounceMs)
+        return;
+
+    if (heavyCrossoverDirty_.exchange (false, std::memory_order_acq_rel))
+        rebuildCrossoverKernels();
+
+    if (heavyLookaheadDirty_.exchange (false, std::memory_order_acq_rel))
+    {
+        committedLookaheadBandMs_.store (devLookaheadBandMs_ != nullptr ? devLookaheadBandMs_->load (std::memory_order_relaxed) : kLookaheadMs,
+                                         std::memory_order_release);
+        committedLookaheadWideMs_.store (devLookaheadWideMs_ != nullptr ? devLookaheadWideMs_->load (std::memory_order_relaxed) : kLookaheadMs,
+                                         std::memory_order_release);
+    }
+
+    stopTimer();
 }
 
 void MasterLimiterAudioProcessor::commitLearnedRef()
@@ -1119,10 +1164,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                                                              : 80.0f;
         const int laReleasePoles = 2 + (devLaReleasePoles_ != nullptr ? (int) devLaReleasePoles_->load (std::memory_order_relaxed)
                                                                       : 1);
-        const float devLaBandMs = devLookaheadBandMs_ != nullptr ? devLookaheadBandMs_->load (std::memory_order_relaxed)
-                                                                 : kLookaheadMs;
-        const float devLaWideMs = devLookaheadWideMs_ != nullptr ? devLookaheadWideMs_->load (std::memory_order_relaxed)
-                                                                 : kLookaheadMs;
+        const float devLaBandMs = committedLookaheadBandMs_.load (std::memory_order_acquire);
+        const float devLaWideMs = committedLookaheadWideMs_.load (std::memory_order_acquire);
         const int osMaxLookahead = juce::jmax (1, osMaxLookaheadSamples_);
         const double activeOsRate = osSampleRate_ > 0.0 ? osSampleRate_ : (getSampleRate() * 4.0);
         const int laBandActive = juce::jlimit (1, osMaxLookahead, static_cast<int> (std::llround ((double) devLaBandMs * 1.0e-3 * activeOsRate)));

@@ -25,7 +25,8 @@
 //==============================================================================
 class MasterLimiterAudioProcessor : public juce::AudioProcessor,
                                     private juce::AudioProcessorValueTreeState::Listener,
-                                    private juce::AsyncUpdater
+                                    private juce::AsyncUpdater,
+                                    private juce::Timer
 {
 public:
     enum class LearnState : int { Idle = 0, Armed = 1, Captured = 2 };
@@ -127,6 +128,7 @@ public:
 private:
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
+    void timerCallback() override;
     void cacheGainCeilingLinkParameters();
     void refreshGainCeilingLinkBaseline();
     void applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels);
@@ -179,9 +181,15 @@ private:
     mdsp_dsp::LinearPhaseCrossover applyCrossover_[2];
     std::atomic<int>  activeCrossoverBank_ { 0 };
     std::atomic<bool> crossoverSwapReady_ { false };
-    std::atomic<bool> crossoverRedesignPending_ { false };
     int               crossoverPendingBank_ = 1;
     std::atomic_flag  crossoverBankLock_ = ATOMIC_FLAG_INIT;
+    std::atomic<bool>          heavyCrossoverDirty_ { false };
+    std::atomic<bool>          heavyLookaheadDirty_ { false };
+    std::atomic<juce::uint32>  lastHeavyChangeMs_   { 0 };
+    std::atomic<float>         committedLookaheadBandMs_ { 0.0f };
+    std::atomic<float>         committedLookaheadWideMs_ { 0.0f };
+    static constexpr int kHeavyDebounceMs = 120;
+    static constexpr int kHeavyPollMs     = 30;
     mdsp_dsp::LimiterEnvelope envelopeLow_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
     mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
