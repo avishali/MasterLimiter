@@ -4,16 +4,27 @@
   "platform": "macOS",
   "latest": {
     "version": "0.3.1-beta",
-    "build": 3,
+    "build": 4,
     "date": "2026-06-24",
     "minimum_supported_version": "0.3.1-beta",
     "download_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-0.3.1-beta.pkg",
-    "sha256": "c6e387614848b4c5326cfa41df4f985157a7d3aaf764a745899bb296aab66091",
+    "sha256": "7c590d675a1dc33b3f7ffc09c7058391552f702daa0f79e50258ee0207623597",
     "release_notes_path": "MasterLimiter/macOS/0.3.1-beta/release-notes.md",
     "guide_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Beta-Guide.pdf",
     "manual_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Manual.pdf"
   },
   "releases": [
+    {
+      "version": "0.3.1-beta",
+      "build": 3,
+      "date": "2026-06-24",
+      "minimum_supported_version": "0.3.1-beta",
+      "download_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-0.3.1-beta.pkg",
+      "sha256": "c6e387614848b4c5326cfa41df4f985157a7d3aaf764a745899bb296aab66091",
+      "release_notes_path": "MasterLimiter/macOS/0.3.1-beta/release-notes.md",
+      "guide_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Beta-Guide.pdf",
+      "manual_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Manual.pdf"
+    },
     {
       "version": "0.3.1-beta",
       "build": 2,
@@ -22,8 +33,8 @@
       "download_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-0.3.1-beta.pkg",
       "sha256": "c6e387614848b4c5326cfa41df4f985157a7d3aaf764a745899bb296aab66091",
       "release_notes_path": "MasterLimiter/macOS/0.3.1-beta/release-notes.md",
-    "guide_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Beta-Guide.pdf",
-    "manual_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Manual.pdf"
+      "guide_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Beta-Guide.pdf",
+      "manual_path": "MasterLimiter/macOS/0.3.1-beta/MasterLimiter-Manual.pdf"
     }
   ]
 }

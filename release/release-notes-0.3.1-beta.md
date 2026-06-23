@@ -1,4 +1,4 @@
-MasterLimiter 0.3.1-beta (build 3)
+MasterLimiter 0.3.1-beta (build 4)
 ==================================
 
 A mastering maximizer — early TUNING beta. This build exposes extra "DEV"
@@ -13,20 +13,23 @@ Install
 - Check the plugin header for `main@<git-hash>` — confirms you have this build, not a stale copy.
 - ~14 ms latency (lookahead) — your DAW compensates automatically.
 
-What's new in build 3
+What's new in build 4
 ---------------------
+- **Default voicing baked in** — fresh instances open on avishali's tuned settings:
+  clipper OFF, Color 0%, Release Auto + Reactive, Lookahead release engine,
+  crossover 100 / 120 / 60 Hz. Factory presets pruned to a single "Default".
+- **Compact default UI** — opens at the smallest comfortable size (958×505).
+- **LUFS panel + Reset Peaks relocated** — no clipping at the compact layout;
+  LUFS sits in the left panel beside gain-match; Reset Peaks centered under the meters.
+
+What's still in this beta (from build 3)
+----------------------------------------
 - **Linear-phase crossover DEV controls** (Cutoff / Transition / Atten) — drag cleanly, no crash.
 - **Clipper 8× oversampling** — cleaner hard-clip on HF material.
 - **Gesture-commit + duck-and-swap** on crossover changes — brief dip on release, no click per step.
 - DEV panel embedded in the main editor (works in Pro Tools AAX).
+- Lookahead-follower release, History Graph, user presets + A/B compare.
 - All four formats signed; AAX is PACE-signed for Pro Tools.
-
-What's still in this beta (from build 2)
-----------------------------------------
-- Lookahead-follower release — selectable in the DEV window.
-- History Graph — gain-reduction over time while you tune.
-- DEV tuning — Attack, Lookahead (Band/Wide), Release (Time/Poles), Crossover.
-- User presets + A/B compare.
 
 60-second mental model
 ----------------------
