@@ -46,5 +46,7 @@ inline constexpr std::string_view dev_xover_cutoff_hz { "dev_xover_cutoff_hz" };
 inline constexpr std::string_view dev_xover_transition_hz { "dev_xover_transition_hz" };
 inline constexpr std::string_view dev_xover_atten_db { "dev_xover_atten_db" };
 inline constexpr std::string_view dev_band_stereo_link_pct { "dev_band_stereo_link_pct" };
+inline constexpr std::string_view dev_ms_safety_clamp { "dev_ms_safety_clamp" };
+inline constexpr std::string_view dev_final_ceiling { "dev_final_ceiling" };
 
 } // namespace param

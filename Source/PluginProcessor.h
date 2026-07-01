@@ -102,6 +102,10 @@ public:
     float getMaxGrHighLDb() const noexcept { return maxGrHighLDb_.load (std::memory_order_relaxed); }
     float getMaxGrHighRDb() const noexcept { return maxGrHighRDb_.load (std::memory_order_relaxed); }
     float getMaxClipSinceResetDb() const noexcept { return maxClipSinceResetDb_.load (std::memory_order_relaxed); }
+    float getCurrentMsClampDb() const noexcept { return currentMsClampDb_.load (std::memory_order_relaxed); }
+    float getMaxMsClampDb() const noexcept { return maxMsClampDb_.load (std::memory_order_relaxed); }
+    float getCurrentFinalCeilingDb() const noexcept { return currentFinalCeilingDb_.load (std::memory_order_relaxed); }
+    float getMaxFinalCeilingDb() const noexcept { return maxFinalCeilingDb_.load (std::memory_order_relaxed); }
 
     void resetMaxGr() noexcept
     {
@@ -114,6 +118,11 @@ public:
         maxGrHighRDb_.store (0.0f, std::memory_order_relaxed);
     }
     void resetMaxClip() noexcept { maxClipSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
+    void resetMaxDevClampReadouts() noexcept
+    {
+        maxMsClampDb_.store (0.0f, std::memory_order_relaxed);
+        maxFinalCeilingDb_.store (0.0f, std::memory_order_relaxed);
+    }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
     float getInputPeakRDb() const noexcept { return inputPeakRDb_.load (std::memory_order_relaxed); }
@@ -308,6 +317,8 @@ private:
     std::atomic<float>* devXoverTransitionHz_ = nullptr;
     std::atomic<float>* devXoverAttenDb_ = nullptr;
     std::atomic<float>* devBandStereoLinkPct_ = nullptr;
+    std::atomic<float>* devMsSafetyClamp_ = nullptr;
+    std::atomic<float>* devFinalCeiling_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 
@@ -341,6 +352,10 @@ private:
     std::atomic<float> maxGrHighLDb_ { 0.0f };
     std::atomic<float> maxGrHighRDb_ { 0.0f };
     std::atomic<float> maxClipSinceResetDb_ { 0.0f };
+    std::atomic<float> currentMsClampDb_ { 0.0f };
+    std::atomic<float> maxMsClampDb_ { 0.0f };
+    std::atomic<float> currentFinalCeilingDb_ { 0.0f };
+    std::atomic<float> maxFinalCeilingDb_ { 0.0f };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
     std::atomic<float> inputPeakRDb_ { -100.0f };

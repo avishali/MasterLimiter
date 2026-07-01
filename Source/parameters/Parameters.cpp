@@ -308,5 +308,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         100.0f,
         AudioParameterFloatAttributes().withLabel ("%")));
 
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (dev_ms_safety_clamp, 1),
+        "DEV M/S Safety Clamp",
+        true,
+        AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (dev_final_ceiling, 1),
+        "DEV Final Ceiling",
+        true,
+        AudioParameterBoolAttributes()));
+
     return layout;
 }

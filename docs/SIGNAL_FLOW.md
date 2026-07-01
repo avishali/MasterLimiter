@@ -60,11 +60,11 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.13 — Wideband limiter.** The band-limited signal is peak-detected again (or M/S-encoded if **Stereo Mode = M/S**) and run through `envelope_` (and `envelope_R_` when stereo unlinked). **Stereo Link / M/S Link** (%) blends L/R gain toward `min(L,R)`; at ≥99.95% it takes a single-envelope fast path. This is the safety stage that catches anything the per-band stage let through.
 
-**2.14 — Wideband lookahead + Ceiling + GR tap.** Audio is delayed by `lookaheadWide_` using the active `dev_lookahead_wide_ms` window, multiplied by the wideband gain and by **`ceilingLin`** (the output ceiling gain). In M/S mode a per-sample decoded-peak safety clamp guarantees the reconstructed L/R never exceeds threshold. The **total gain reduction** (`min(bandGain × wideGain)` over the block, L/R) is published to `currentGrDb_/LDb_/RDb_` and the max-since-reset is latched — **this is the GR the meters and the new history graph read.** `lookaheadPad_` then adds `(max−band) + (max−wide)` samples of wet-path delay before downsampling so the active windows remain latency-constant.
+**2.14 — Wideband lookahead + Ceiling + GR tap.** Audio is delayed by `lookaheadWide_` using the active `dev_lookahead_wide_ms` window, multiplied by the wideband gain and by **`ceilingLin`** (the output ceiling gain). In M/S mode a per-sample decoded-peak safety clamp (`msSafetyGain`, gated by DEV `dev_ms_safety_clamp`, default On) guarantees the reconstructed L/R never exceeds threshold; depth is published to `currentMsClampDb_/maxMsClampDb_` (Stereo = 0). The **total gain reduction** (`min(bandGain × wideGain)` over the block, L/R) is published to `currentGrDb_/LDb_/RDb_` and the max-since-reset is latched — **this is the GR the meters and the new history graph read.** `lookaheadPad_` then adds `(max−band) + (max−wide)` samples of wet-path delay before downsampling so the active windows remain latency-constant.
 
 **2.15 — Downsample.** `processSamplesDown` returns to host rate.
 
-**2.16 — Final ceiling brickwall.** `finalCeiling_.process()` — a residual **true-peak (or sample-peak) limiter** that catches inter-sample peaks created by downsampling, so the output true-peak equals the ceiling. (Details: §4.4.)
+**2.16 — Final ceiling brickwall.** `finalCeiling_.process()` (gated by DEV `dev_final_ceiling`, default On) — a residual **true-peak (or sample-peak) limiter** that catches inter-sample peaks created by downsampling. Applied reduction is published to `currentFinalCeilingDb_/maxFinalCeilingDb_` via `getLastBlockMaxReductionDb()`. When Off, overs may exceed the ceiling (audition only). (Details: §4.4.)
 
 **2.17 — Loudness tracking, auto gain-match, bypass cross-fade.**
   - `loudnessTrack_` measures the processed output LUFS; `updateCompensationGainDb` derives a smoothed (~1 s) gain so output LUFS matches the learned reference (±12 dB clamp). Same applied to the dry path.
@@ -110,7 +110,7 @@ Input = peak stream, output = gain coefficient stream (≤1). No audio delay her
   - **LookaheadFollower (new, current best):** removes rate-switching. Recovery is **gated by the minimum gain visible within the lookahead window** (a sliding-window minimum) so the gain only recovers in genuine gaps — *program-dependence comes from the signal, not a guessed time constant*. The recovery slope is a **fixed-time N-pole cascade** (2–4 poles), giving the same smooth S-curve every release. Time = `dev_la_release_ms` (normalized per pole so pole-count changes smoothness, not speed).
 
 ### 4.4 FinalCeilingLimiter
-A small, fixed brickwall after downsampling. 64-sample lookahead + its own 4× true-peak detector. In **TruePeak** mode it oversamples internally to catch inter-sample peaks; in **SamplePeak** mode it just clamps samples. Hardwired Aggressive attack, 100 ms release. Its job is only to mop up residual overshoot so output true-peak = ceiling.
+A small, fixed brickwall after downsampling. 64-sample lookahead + its own 4× true-peak detector. In **TruePeak** mode it oversamples internally to catch inter-sample peaks; in **SamplePeak** mode it just clamps samples. Hardwired Aggressive attack, 100 ms release. Its job is only to mop up residual overshoot so output true-peak = ceiling. DEV toggle `dev_final_ceiling` (default On) can bypass it for audition; `currentFinalCeilingDb_/maxFinalCeilingDb_` report the block's max applied reduction via `FinalCeilingLimiter::getLastBlockMaxReductionDb()` (not a pre/post buffer peak diff — the stage's lookahead would make that misleading).
 
 ### 4.5 TruePeakDetector (metering)
 4× oversampled absolute-max estimate of inter-sample peak. Four instances (IN L/R, OUT L/R) feed the true-peak readouts; overs above 0 dBFS render red with a "+".
@@ -209,6 +209,8 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 | Gain reduction (total / L / R / max) | `currentGrDb_`, `currentGrLDb_`, `currentGrRDb_`, `maxGrSinceResetDb_` | 2.14 |
 | Per-band gain reduction (Low / Mid / High × L/R) | `currentGrLow{L,R}Db_`, `currentGrMid{L,R}Db_`, `currentGrHigh{L,R}Db_`, `maxGr*` holds | 2.14 (post-Color per-channel `gLowOut` / `gHighOut`; Mid = 0 until 3-band slice; history traces use band max of L/R) |
 | Clip reduction | `currentClipDb_`, `maxClipSinceResetDb_` | 2.7 |
+| M/S safety clamp (DEV) | `currentMsClampDb_`, `maxMsClampDb_` | 2.14 (M/S only; gated by `dev_ms_safety_clamp`) |
+| Final ceiling reduction (DEV) | `currentFinalCeilingDb_`, `maxFinalCeilingDb_` | 2.16 (gated by `dev_final_ceiling`) |
 | Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, … | 2.18 |
 | Loudness / comp gain | `LoudnessAnalyzer` snapshots, `compGainDb` | 2.4 / 2.17 |
 

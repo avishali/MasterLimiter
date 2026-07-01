@@ -1567,9 +1567,14 @@ void MainView::paint (juce::Graphics& g)
 
 void MainView::resized()
 {
-    headerArea_ = { 0, 0, 1100, 52 };
+    constexpr int kCanvasW = 1172;
+    constexpr int kRightClusterShift = 72;
+    constexpr int kGrMeterX = 612;
+    constexpr int kGrMeterW = 198;
+
+    headerArea_ = { 0, 0, kCanvasW, 52 };
     maximizerPanelArea_ = { 16, 64, 736, 500 };
-    ioPanelArea_ = { 768, 64, 316, 500 };
+    ioPanelArea_ = { 768 + kRightClusterShift, 64, 316, 500 };
     footerArea_ = {};
 
     header_.setBounds (24, 8, 150, 34);
@@ -1578,10 +1583,10 @@ void MainView::resized()
     btnSavePreset_.setBounds (710, 12, 48, 28);
     btnCompareA_.setBounds (766, 12, 30, 28);
     btnCompareB_.setBounds (802, 12, 30, 28);
-    btnCopyCompare_.setBounds (838, 12, 48, 28);
-    btnDev_.setBounds (894, 12, 48, 28);
-    btnHistory_.setBounds (950, 12, 56, 28);
-    btnBypass_.setBounds (1014, 12, 76, 28);
+    btnCopyCompare_.setBounds (838 + kRightClusterShift, 12, 48, 28);
+    btnDev_.setBounds (894 + kRightClusterShift, 12, 48, 28);
+    btnHistory_.setBounds (950 + kRightClusterShift, 12, 56, 28);
+    btnBypass_.setBounds (1014 + kRightClusterShift, 12, 76, 28);
     btnLimiterActive_.setBounds (232, 126, 34, 34);
 
     lblGainDrive_.setBounds (48, 116, 140, 18);
@@ -1609,11 +1614,11 @@ void MainView::resized()
     btnStereoMode_.setBounds (316, knobY + 48, 86, 24);
     lblStereoLink_.setBounds (414, knobY, knobW, 18);
     sldStereoLink_.setBounds (414, knobY + 18, knobW, knobH);
-    lblClipperDrive_.setBounds (495, 116, 140, 18);
+    lblClipperDrive_.setBounds (505, 116, 100, 18);
     btnClipperActive_.setBounds (450, 134, 34, 34);
-    sldClipperDrive_.setBounds (495, 134, 140, 120);
-    btnClipperMode_.setBounds (515, 260, 100, 22);
-    lblClipperReadout_.setBounds (495, 286, 140, 18);
+    sldClipperDrive_.setBounds (505, 134, 100, 100);
+    btnClipperMode_.setBounds (505, 244, 100, 22);
+    lblClipperReadout_.setBounds (505, 270, 100, 18);
     lblBandColor_.setBounds (526, 314, knobW, 18);
     sldBandColor_.setBounds (526, 332, knobW, knobH);
 
@@ -1625,25 +1630,25 @@ void MainView::resized()
     btnLearnInputGain_.setBounds (304, 528, 84, 30);
     lblLearnInputLufs_.setBounds (396, 528, 96, 30);
 
-    meterGr_.setBounds (650, 104, 88, 354);
+    meterGr_.setBounds (kGrMeterX, 104, kGrMeterW, 354);
 
-    meterIn_.setBounds (790, 112, 116, 358);
-    meterOut_.setBounds (948, 112, 116, 358);
+    meterIn_.setBounds (790 + kRightClusterShift, 112, 116, 358);
+    meterOut_.setBounds (948 + kRightClusterShift, 112, 116, 358);
 
     lblIoInputTrim_.setBounds (0, 0, 0, 0);
-    sldIoInputTrimL_.setBounds (800, 204, 42, 252);
-    sldIoInputTrimR_.setBounds (856, 204, 42, 252);
-    lblIoInputReadoutL_.setBounds (800, 472, 42, 18);
-    lblIoInputReadoutR_.setBounds (856, 472, 42, 18);
-    btnIoInputLink_.setBounds (826, 498, 44, 20);
+    sldIoInputTrimL_.setBounds (800 + kRightClusterShift, 204, 42, 252);
+    sldIoInputTrimR_.setBounds (856 + kRightClusterShift, 204, 42, 252);
+    lblIoInputReadoutL_.setBounds (800 + kRightClusterShift, 472, 42, 18);
+    lblIoInputReadoutR_.setBounds (856 + kRightClusterShift, 472, 42, 18);
+    btnIoInputLink_.setBounds (826 + kRightClusterShift, 498, 44, 20);
     lblIoInputReadout_.setBounds (0, 0, 0, 0);
 
     lblIoOutputTrim_.setBounds (0, 0, 0, 0);
-    sldIoOutputTrimL_.setBounds (960, 204, 42, 252);
-    sldIoOutputTrimR_.setBounds (1014, 204, 42, 252);
-    lblIoOutputReadoutL_.setBounds (960, 472, 42, 18);
-    lblIoOutputReadoutR_.setBounds (1014, 472, 42, 18);
-    btnIoOutputLink_.setBounds (984, 498, 44, 20);
+    sldIoOutputTrimL_.setBounds (960 + kRightClusterShift, 204, 42, 252);
+    sldIoOutputTrimR_.setBounds (1014 + kRightClusterShift, 204, 42, 252);
+    lblIoOutputReadoutL_.setBounds (960 + kRightClusterShift, 472, 42, 18);
+    lblIoOutputReadoutR_.setBounds (1014 + kRightClusterShift, 472, 42, 18);
+    btnIoOutputLink_.setBounds (984 + kRightClusterShift, 498, 44, 20);
     lblIoOutputReadout_.setBounds (0, 0, 0, 0);
 
     const auto inputScaleRef = meterIn_.getScaleReferenceBoundsInParent();
@@ -1656,7 +1661,7 @@ void MainView::resized()
     btnMeterRms_.setBounds (scaleX, 514, scaleW, 20);
 
     lufsPanel_.setBounds (508, 486, 160, 60);
-    btnResetPeaks_.setBounds (884, 538, 84, 22);
+    btnResetPeaks_.setBounds (884 + kRightClusterShift, 538, 84, 22);
 
     sldIoInputTrimL_.toFront (false);
     sldIoInputTrimR_.toFront (false);
@@ -1753,6 +1758,7 @@ void MainView::resetPeakHolds()
     meterOut_.resetPeakHolds();
     processor_.resetMaxGr();
     processor_.resetMaxClip();
+    processor_.resetMaxDevClampReadouts();
     master_limiter_ui::resetClipBallistics (*clipBallistics_);
     clipLedLevel_ = 0.0f;
     lufsPanel_.refresh();

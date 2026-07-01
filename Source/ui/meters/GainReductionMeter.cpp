@@ -142,7 +142,7 @@ void GainReductionMeter::paint (juce::Graphics& g)
     g.drawRoundedRectangle (meterArea.toFloat().reduced (0.5f), m.rMed, m.strokeThin);
 
     auto barArea = meterArea.reduced (7, 7);
-    const int bandGap = 2;
+    const int bandGap = 4;
     const int totalBandGaps = bandGap * (kNumBands - 1);
     const int bandW = juce::jmax (1, (barArea.getWidth() - totalBandGaps) / kNumBands);
 
@@ -189,18 +189,25 @@ void GainReductionMeter::paint (juce::Graphics& g)
         auto band = barArea.removeFromLeft (bandW);
 
         g.setColour (theme.textMuted.withAlpha (0.85f));
-        g.setFont (type.labelFont().withHeight (8.0f));
-        g.drawText (kBandLabels[b], band.removeFromTop (9), juce::Justification::centred, false);
+        g.setFont (type.labelFont().withHeight (9.0f));
+        g.drawText (kBandLabels[b], band.removeFromTop (10), juce::Justification::centred, false);
 
         const bool reserved = (b == 1);
-        const int subGap = 1;
+        const int subGap = 2;
         const int subW = juce::jmax (1, (band.getWidth() - subGap) / kNumChannels);
         auto leftSub = band.removeFromLeft (subW);
+        const float dividerX = (float) band.getX();
         band.removeFromLeft (subGap);
         auto rightSub = band;
 
         drawSubBar (leftSub, displayGrBandChanDb_[b][0], peakHold_[(size_t) b][0]->getHeldDb(), reserved);
         drawSubBar (rightSub, displayGrBandChanDb_[b][1], peakHold_[(size_t) b][1]->getHeldDb(), reserved);
+
+        if (! reserved && band.getHeight() > 12)
+        {
+            g.setColour (theme.grid.withAlpha (0.55f));
+            g.drawVerticalLine ((int) std::round (dividerX), (float) leftSub.getY() + 2.0f, (float) leftSub.getBottom() - 2.0f);
+        }
     }
 
     const auto readoutText = formatDbBare (displayCurrentGrDb_) + " / " + formatDbBare (displayMaxGrDb_);

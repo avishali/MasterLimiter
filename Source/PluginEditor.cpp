@@ -47,6 +47,11 @@ void MasterLimiterAudioProcessorEditor::DevPanel::resized()
     devControls_.setBounds (area);
 }
 
+void MasterLimiterAudioProcessorEditor::DevPanel::syncDevReadouts()
+{
+    devControls_.syncReadouts();
+}
+
 //==============================================================================
 MasterLimiterAudioProcessorEditor::HistoryWindow::HistoryWindow (juce::Colour backgroundColour)
     : juce::DocumentWindow ("MasterLimiter History Graph",
@@ -123,6 +128,9 @@ void MasterLimiterAudioProcessorEditor::timerCallback()
 
     mainView.syncMetersFromProcessor();
     mainView.repaintMeterStrip();
+
+    if (devPanel_.isVisible())
+        devPanel_.syncDevReadouts();
 }
 
 void MasterLimiterAudioProcessorEditor::toggleHistoryGraph()

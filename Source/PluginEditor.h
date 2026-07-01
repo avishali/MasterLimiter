@@ -24,10 +24,10 @@ public:
     void resized() override;
 
 private:
-    static constexpr int kDesignWidth = 1100;
+    static constexpr int kDesignWidth = 1172;
     static constexpr int kDesignHeight = 580;
     static constexpr int kDevDockWidth = 360;
-    static constexpr int kMinBaseWidth = 958;
+    static constexpr int kMinBaseWidth = 1020;
     static constexpr int kMinBaseHeight = 505;
     static constexpr int kMaxBaseWidth = 4000;
     static constexpr int kMaxBaseHeight = 2109;
@@ -39,6 +39,7 @@ private:
 
         void paint (juce::Graphics& g) override;
         void resized() override;
+        void syncDevReadouts();
 
         std::function<void()> onClose;
 

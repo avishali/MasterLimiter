@@ -2,6 +2,55 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-02 — Fix FinalCeiling GR readout (real applied reduction)
+
+**Status:** ✅ Build + AU pass + installed; proof test + audition pending.
+
+**Deliverables**
+- FinalCeiling DEV readout now uses `getLastBlockMaxReductionDb()` instead of pre/post `bufferAbsMax` diff (lookahead made the old path bogus).
+- Removed unused `bufferAbsMax` helper.
+
+**Gate**
+- [x] Build clean; AU validates; installed to user folders.
+- [ ] Proof test: 0 dB drive · Color 0 · SP · pink −6 dBFS → Final Ceiling ~0.0 / ~0.0 (was ~6.7).
+- [ ] Real drive: Final Ceiling tracks plausible GR; M/S clamp readout unchanged.
+- [ ] avishali audition: Color 100 at real drive — report true FinalCeiling load.
+
+---
+
+## 2026-07-01 — DEV: M/S safety clamp + Final Ceiling toggles + metering
+
+**Status:** ✅ Build + AU pass; audition pending.
+
+**Deliverables**
+- DEV bools `dev_ms_safety_clamp` / `dev_final_ceiling` (default On, bit-identical when On).
+- Atomics `currentMsClampDb_`, `currentFinalCeilingDb_` + max holds.
+- DEV dock **PEAK CONTROL** section with toggles and current/max readouts.
+
+**Gate**
+- [x] Build clean; AU validates; latency unchanged.
+- [ ] M/S clamp metering + toggle behavior verified.
+- [ ] avishali audition: M/S density A/B with clamp on vs off.
+
+---
+
+## 2026-07-01 — UI widen + relayout (post-A2 GR meter room)
+
+**Status:** 🔶 Implemented locally; Release build + AU validation pass; audition pending.
+
+**Deliverables**
+- Canvas width 1100 → 1172 (`kMinBaseWidth` 1020); height unchanged.
+- Clipper knob shrunk 140×120 → 100×100; GR meter widened to 198px at x=612.
+- Right cluster (meters, I/O trims, header buttons x≥838) shifted +72 px.
+- GR meter sub-bar spacing polish (wider gaps, L/R hairline dividers).
+
+**Gate**
+- [x] Release build clean; AU validates (`auval -v aufx MaLm Melc` PASS).
+- [ ] No overlaps; resize + DEV dock stable (manual confirm).
+- [ ] avishali audition: layout balanced, GR meter legible.
+
+---
+
 ## 2026-07-01 — Slice A2: Per-band stereo unlink + L/R-per-band GR meter
 
 **Status:** 🔶 Implemented locally; Release build + AU validation pass; audition pending.

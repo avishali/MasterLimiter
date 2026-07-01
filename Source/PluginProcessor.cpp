@@ -132,6 +132,8 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_xover_transition_hz.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_xover_atten_db.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_band_stereo_link_pct.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_ms_safety_clamp.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_final_ceiling.data()) != nullptr);
 
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
     jassert (pluginBypass_ != nullptr);
@@ -309,6 +311,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devXoverTransitionHz_ = apvts.getRawParameterValue (param::dev_xover_transition_hz.data());
     devXoverAttenDb_ = apvts.getRawParameterValue (param::dev_xover_atten_db.data());
     devBandStereoLinkPct_ = apvts.getRawParameterValue (param::dev_band_stereo_link_pct.data());
+    devMsSafetyClamp_ = apvts.getRawParameterValue (param::dev_ms_safety_clamp.data());
+    devFinalCeiling_ = apvts.getRawParameterValue (param::dev_final_ceiling.data());
     jassert (limiterActive_ != nullptr);
     jassert (pluginBypass_ != nullptr);
     jassert (clipperActive_ != nullptr);
@@ -1578,6 +1582,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         float minLowR = 1.0f;
         float minHighL = 1.0f;
         float minHighR = 1.0f;
+        float minMsSafety = 1.0f;
+        const bool msClampOn = devMsSafetyClamp_ == nullptr || devMsSafetyClamp_->load (std::memory_order_relaxed) >= 0.5f;
 
         if (! useMsMode)
         {
@@ -1632,12 +1638,13 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
                 const float decodedPeak = std::max (std::abs (outL[i]), std::abs (outR[i]));
                 float msSafetyGain = 1.0f;
-                if (decodedPeak > thresholdLin)
+                if (msClampOn && decodedPeak > thresholdLin)
                 {
                     msSafetyGain = thresholdLin / decodedPeak;
                     outL[i] *= msSafetyGain;
                     outR[i] *= msSafetyGain;
                 }
+                minMsSafety = std::min (minMsSafety, msSafetyGain);
 
                 outL[i] *= ceilingLin;
                 outR[i] *= ceilingLin;
@@ -1653,6 +1660,13 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
         if (nch == 1 || fastPath)
             minTotalR = minTotalL;
+
+        const float msClampDb = useMsMode
+            ? juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minMsSafety, -120.0f))
+            : 0.0f;
+        currentMsClampDb_.store (msClampDb, std::memory_order_relaxed);
+        if (msClampDb > maxMsClampDb_.load (std::memory_order_relaxed))
+            maxMsClampDb_.store (msClampDb, std::memory_order_relaxed);
 
         const float grL = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minTotalL, -120.0f));
         const float grR = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minTotalR, -120.0f));
@@ -1709,7 +1723,16 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         }
 
         limiterOversampler_.processSamplesDown (block);
-        finalCeiling_.process (buffer);
+
+        float fcGrDb = 0.0f;
+        if (devFinalCeiling_ == nullptr || devFinalCeiling_->load (std::memory_order_relaxed) >= 0.5f)
+        {
+            finalCeiling_.process (buffer);
+            fcGrDb = finalCeiling_.getLastBlockMaxReductionDb();
+        }
+        currentFinalCeilingDb_.store (fcGrDb, std::memory_order_relaxed);
+        if (fcGrDb > maxFinalCeilingDb_.load (std::memory_order_relaxed))
+            maxFinalCeilingDb_.store (fcGrDb, std::memory_order_relaxed);
     }
     else
     {
@@ -1723,6 +1746,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         currentGrHighLDb_.store (0.0f, std::memory_order_relaxed);
         currentGrHighRDb_.store (0.0f, std::memory_order_relaxed);
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
+        currentMsClampDb_.store (0.0f, std::memory_order_relaxed);
+        currentFinalCeilingDb_.store (0.0f, std::memory_order_relaxed);
 
         for (int ch = 0; ch < nch; ++ch)
             buffer.copyFrom (ch, 0, dryScratch_, ch, 0, n);

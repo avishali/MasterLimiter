@@ -17,6 +17,7 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
+    void syncReadouts();
 
 private:
     void setupGroup (juce::GroupComponent& group);
@@ -25,7 +26,9 @@ private:
     void setupCombo (juce::ComboBox& combo);
     void updateManualReleaseEnabled (bool enabled);
     void updateAttackModeControls (int attackModeIdx);
+    static juce::String formatClampReadout (float currentDb, float maxDb);
 
+    MasterLimiterAudioProcessor& processor_;
     mdsp_ui::UiContext& ui_;
     juce::AudioProcessorValueTreeState& apvts_;
 
@@ -81,6 +84,12 @@ private:
     juce::Label lblBandStereoLink_ {};
     juce::Slider sldBandStereoLink_;
 
+    juce::GroupComponent groupPeakControl_ { "PeakControlGroup", "PEAK CONTROL (DEV)" };
+    juce::ToggleButton btnMsSafetyClamp_ { "M/S Safety Clamp" };
+    juce::Label lblMsClampReadout_ {};
+    juce::ToggleButton btnFinalCeiling_ { "Final Ceiling" };
+    juce::Label lblFinalCeilingReadout_ {};
+
     juce::GroupComponent groupManualRelease_ { "ManualReleaseGroup", "RELEASE - Manual" };
     juce::Label lblSustainRatio_ {};
     juce::Slider sldSustainRatio_;
@@ -101,6 +110,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLowScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attHighScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandStereoLink_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMsSafetyClamp_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attFinalCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;
     std::unique_ptr<juce::ParameterAttachment> attReleaseAuto_;
     std::unique_ptr<juce::ParameterAttachment> attAttackModeListener_;
