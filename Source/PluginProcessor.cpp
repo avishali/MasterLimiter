@@ -1064,8 +1064,15 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     {
         const float pL = dryScratch_.getMagnitude (0, 0, n);
         const float pR = (nch > 1) ? dryScratch_.getMagnitude (1, 0, n) : pL;
-        inputPeakLDb_.store (juce::Decibels::gainToDecibels (pL, -120.0f), std::memory_order_relaxed);
-        inputPeakRDb_.store (juce::Decibels::gainToDecibels (pR, -120.0f), std::memory_order_relaxed);
+        const float inPeakLDb = juce::Decibels::gainToDecibels (pL, -120.0f);
+        const float inPeakRDb = juce::Decibels::gainToDecibels (pR, -120.0f);
+        inputPeakLDb_.store (inPeakLDb, std::memory_order_relaxed);
+        inputPeakRDb_.store (inPeakRDb, std::memory_order_relaxed);
+
+        if (inPeakLDb > maxInputPeakLDb_.load (std::memory_order_relaxed))
+            maxInputPeakLDb_.store (inPeakLDb, std::memory_order_relaxed);
+        if (inPeakRDb > maxInputPeakRDb_.load (std::memory_order_relaxed))
+            maxInputPeakRDb_.store (inPeakRDb, std::memory_order_relaxed);
 
         float* tpLData[] = { dryScratch_.getWritePointer (0) };
         float* tpRData[] = { dryScratch_.getWritePointer (nch > 1 ? 1 : 0) };
@@ -1780,6 +1787,11 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         outputPeakLDb_.store (outLdb, std::memory_order_relaxed);
         outputPeakRDb_.store (outRdb, std::memory_order_relaxed);
 
+        if (outLdb > maxOutputPeakLDb_.load (std::memory_order_relaxed))
+            maxOutputPeakLDb_.store (outLdb, std::memory_order_relaxed);
+        if (outRdb > maxOutputPeakRDb_.load (std::memory_order_relaxed))
+            maxOutputPeakRDb_.store (outRdb, std::memory_order_relaxed);
+
         float* tpLData[] = { buffer.getWritePointer (0) };
         float* tpRData[] = { buffer.getWritePointer (nch > 1 ? 1 : 0) };
         juce::AudioBuffer<float> tpLView (tpLData, 1, n);
@@ -1848,6 +1860,8 @@ void MasterLimiterAudioProcessor::resetOutputTruePeakHolds() noexcept
     outputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
     maxOutputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
     maxOutputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
+    maxOutputPeakLDb_.store (-100.0f, std::memory_order_relaxed);
+    maxOutputPeakRDb_.store (-100.0f, std::memory_order_relaxed);
     outputTpDb_.store (-100.0f, std::memory_order_relaxed);
 }
 
@@ -1857,6 +1871,8 @@ void MasterLimiterAudioProcessor::resetInputTruePeakHolds() noexcept
     inputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
     maxInputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
     maxInputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
+    maxInputPeakLDb_.store (-100.0f, std::memory_order_relaxed);
+    maxInputPeakRDb_.store (-100.0f, std::memory_order_relaxed);
 }
 
 void MasterLimiterAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)

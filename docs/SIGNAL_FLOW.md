@@ -30,7 +30,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.2 — Dry capture (delay-aligned).** A copy of the (post-input-trim) signal is pushed through `dryDelay_` (a delay line set to the plugin's total latency) into `dryScratch_`. This keeps the dry signal sample-aligned with the processed signal so the **Bypass cross-fade** (2.17) is phase-correct.
 
-**2.3 — Input metering tap.** Input **peak**, **RMS** (smoothed mean-square), and **true-peak** (4× ISP) for L/R are measured here and published to atomics for the meters. Max-true-peak holds are latched.
+**2.3 — Input metering tap.** Input **peak**, **RMS** (smoothed mean-square), and **true-peak** (4× ISP) for L/R are measured here and published to atomics for the meters. Max sample-peak and max true-peak holds are latched until Reset peaks.
 
 **2.4 — Loudness reference.** `loudnessRef_` measures the dry input LUFS (used for the learn reference and dry compensation).
 
@@ -70,7 +70,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
   - `loudnessTrack_` measures the processed output LUFS; `updateCompensationGainDb` derives a smoothed (~1 s) gain so output LUFS matches the learned reference (±12 dB clamp). Same applied to the dry path.
   - **Bypass cross-fade:** `bypassFade_` blends live↔dry sample-by-sample (click-free bypass), using the delay-aligned dry copy from 2.2.
 
-**2.18 — I/O Output gain + output metering.** `applyIoOutputGain()`, then output peak/RMS/true-peak are measured and published.
+**2.18 — I/O Output gain + output metering.** `applyIoOutputGain()`, then output peak/RMS/true-peak are measured and published. Max sample-peak and max true-peak holds latch until Reset peaks.
 
 ---
 
@@ -205,16 +205,18 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 
 | Quantity | Atomic(s) | Tapped at step |
 |---|---|---|
-| Input peak / RMS / true-peak L/R | `inputPeakLDb_`, `inputRmsLDb_`, `inputTruePeakLDb_`, … | 2.3 |
+| Input peak / RMS / true-peak L/R | `inputPeakLDb_`, `inputRmsLDb_`, `inputTruePeakLDb_`, `maxInputPeak{L,R}Db_`, `maxInputTruePeak{L,R}Db_`, … | 2.3 |
 | Gain reduction (total / L / R / max) | `currentGrDb_`, `currentGrLDb_`, `currentGrRDb_`, `maxGrSinceResetDb_` | 2.14 |
 | Per-band gain reduction (Low / Mid / High × L/R) | `currentGrLow{L,R}Db_`, `currentGrMid{L,R}Db_`, `currentGrHigh{L,R}Db_`, `maxGr*` holds | 2.14 (post-Color per-channel `gLowOut` / `gHighOut`; Mid = 0 until 3-band slice; history traces use band max of L/R) |
 | Clip reduction | `currentClipDb_`, `maxClipSinceResetDb_` | 2.7 |
 | M/S safety clamp (DEV) | `currentMsClampDb_`, `maxMsClampDb_` | 2.14 (M/S only; gated by `dev_ms_safety_clamp`) |
 | Final ceiling reduction (DEV) | `currentFinalCeilingDb_`, `maxFinalCeilingDb_` | 2.16 (gated by `dev_final_ceiling`) |
-| Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, … | 2.18 |
+| Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, `maxOutputPeak{L,R}Db_`, `maxOutputTruePeak{L,R}Db_`, … | 2.18 |
 | Loudness / comp gain | `LoudnessAnalyzer` snapshots, `compGainDb` | 2.4 / 2.17 |
 
 The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R sub-bars** per band (MID reserved until 3-band slice); the bottom readout remains total current / max. `dev_band_stereo_link_pct` (DEV, default 100%) controls per-band stereo unlink in Stereo mode only.
+
+**I/O meter readouts** (each channel): four labeled rows — **TP** (latched max true-peak), **SP** (smoothed current sample-peak), **MAX** (latched max sample-peak, processor atomics), **RMS** (smoothed RMS). SP/RMS numeric ballistics use ~850 ms hold + ~950 ms release; meter bars use separate `DisplayLevelSmoother` ballistics. Reset peaks clears TP/MAX holds via `resetInputTruePeakHolds()` / `resetOutputTruePeakHolds()`.
 
 ---
 

@@ -42,6 +42,9 @@ juce::String formatTruePeakReadout (float tpDb)
 
     return (tpDb > 0.0f ? juce::String ("+") : juce::String()) + juce::String (tpDb, 1);
 }
+
+constexpr float kNumericReadoutHoldSec = 0.85f;
+constexpr float kNumericReadoutReleaseTauSec = 0.95f;
 } // namespace
 
 void MeterGroupComponent::PeakNumericSmoother::reset() noexcept
@@ -50,7 +53,7 @@ void MeterGroupComponent::PeakNumericSmoother::reset() noexcept
     holdTicksLeft = 0;
 }
 
-void MeterGroupComponent::PeakNumericSmoother::tick (float raw, float dtSec, int holdTicksAt30Hz) noexcept
+void MeterGroupComponent::PeakNumericSmoother::tick (float raw, float dtSec, int holdTicksAt30Hz, float releaseTauSec) noexcept
 {
     if (! std::isfinite (raw))
         raw = -200.0f;
@@ -70,7 +73,7 @@ void MeterGroupComponent::PeakNumericSmoother::tick (float raw, float dtSec, int
         return;
     }
 
-    const float tau = 0.3f;
+    const float tau = juce::jmax (0.05f, releaseTauSec);
     const float a = 1.0f - std::exp (-dtSec / tau);
     held += (raw - held) * a;
     duty = held;
@@ -204,8 +207,6 @@ void MeterGroupComponent::handlePeakReset() noexcept
     provider1_.updateFromValues (rPeak, rRms, false, false);
     provider0_.resetPeakHold();
     provider1_.resetPeakHold();
-    maxPeakLDb_ = -200.0f;
-    maxPeakRDb_ = -200.0f;
     if (kind_ == BusKind::Input)
         processor_.resetInputTruePeakHolds();
     if (kind_ == BusKind::Output)
@@ -276,7 +277,7 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
 {
     juce::ignoreUnused (hostSampleRate);
 
-    const int holdTicks = juce::jmax (1, static_cast<int> (std::round (1.0f / juce::jmax (1.0e-6f, dtSec))));
+    const int numericHoldTicks = juce::jmax (1, static_cast<int> (std::round (kNumericReadoutHoldSec / juce::jmax (1.0e-6f, dtSec))));
 
     if (kind_ == BusKind::GainReduction)
     {
@@ -305,16 +306,12 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     const float lRms = (kind_ == BusKind::Input) ? processor_.getInputRmsLDb() : processor_.getOutputRmsLDb();
     const float rRms = (kind_ == BusKind::Input) ? processor_.getInputRmsRDb() : processor_.getOutputRmsRDb();
 
-    peakSmooth0_.tick (lPeak, dtSec, holdTicks);
-    peakSmooth1_.tick (rPeak, dtSec, holdTicks);
-    rmsSmooth0_.tick (lRms, dtSec, holdTicks);
-    rmsSmooth1_.tick (rRms, dtSec, holdTicks);
+    peakSmooth0_.tick (lPeak, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
+    peakSmooth1_.tick (rPeak, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
+    rmsSmooth0_.tick (lRms, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
+    rmsSmooth1_.tick (rRms, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
     displaySmooth0_.tick (lPeak, lRms, dtSec);
     displaySmooth1_.tick (rPeak, rRms, dtSec);
-    if (std::isfinite (lPeak))
-        maxPeakLDb_ = juce::jmax (maxPeakLDb_, lPeak);
-    if (std::isfinite (rPeak))
-        maxPeakRDb_ = juce::jmax (maxPeakRDb_, rPeak);
 
     constexpr float kClipThresholdDb = 0.0f;  // digital full-scale
     const bool clippedL = renderState0_.clipLatched || (std::isfinite (lPeak) && lPeak >= kClipThresholdDb);
@@ -326,8 +323,10 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
 
     const auto lPeakText = formatPeakReadout (peakSmooth0_.duty);
     const auto rPeakText = formatPeakReadout (peakSmooth1_.duty);
-    const auto lMaxText = formatMaxPeakReadout (maxPeakLDb_);
-    const auto rMaxText = formatMaxPeakReadout (maxPeakRDb_);
+    const float lMaxDb = kind_ == BusKind::Input ? processor_.getMaxInputPeakLDb() : processor_.getMaxOutputPeakLDb();
+    const float rMaxDb = kind_ == BusKind::Input ? processor_.getMaxInputPeakRDb() : processor_.getMaxOutputPeakRDb();
+    const auto lMaxText = formatMaxPeakReadout (lMaxDb);
+    const auto rMaxText = formatMaxPeakReadout (rMaxDb);
     const auto lRmsText = formatRmsReadout (rmsSmooth0_.duty);
     const auto rRmsText = formatRmsReadout (rmsSmooth1_.duty);
     const bool showTruePeak = kind_ == BusKind::Input || kind_ == BusKind::Output;

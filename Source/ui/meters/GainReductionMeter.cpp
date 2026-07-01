@@ -136,10 +136,10 @@ void GainReductionMeter::paint (juce::Graphics& g)
     const auto meterArea = meterBounds_.isEmpty() ? fallbackMeter : meterBounds_;
     const auto readoutArea = readoutBounds_.isEmpty() ? fallbackReadout : readoutBounds_;
 
-    g.setColour (theme.background.darker (0.18f));
-    g.fillRoundedRectangle (meterArea.toFloat(), m.rMed);
-    g.setColour (theme.grid.withAlpha (0.82f));
-    g.drawRoundedRectangle (meterArea.toFloat().reduced (0.5f), m.rMed, m.strokeThin);
+    g.setColour (theme.panel.withAlpha (0.9f));
+    g.fillRoundedRectangle (meterArea.toFloat(), m.rSmall);
+    g.setColour (theme.background.withAlpha (0.65f));
+    g.drawRoundedRectangle (meterArea.toFloat(), m.rSmall, m.strokeThin);
 
     auto barArea = meterArea.reduced (7, 7);
     const int bandGap = 4;

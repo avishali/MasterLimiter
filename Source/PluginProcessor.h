@@ -132,6 +132,8 @@ public:
     float getInputTruePeakRDb() const noexcept { return inputTruePeakRDb_.load (std::memory_order_relaxed); }
     float getMaxInputTruePeakLDb() const noexcept { return maxInputTruePeakLDb_.load (std::memory_order_relaxed); }
     float getMaxInputTruePeakRDb() const noexcept { return maxInputTruePeakRDb_.load (std::memory_order_relaxed); }
+    float getMaxInputPeakLDb() const noexcept { return maxInputPeakLDb_.load (std::memory_order_relaxed); }
+    float getMaxInputPeakRDb() const noexcept { return maxInputPeakRDb_.load (std::memory_order_relaxed); }
     float getOutputPeakLDb() const noexcept { return outputPeakLDb_.load (std::memory_order_relaxed); }
     float getOutputPeakRDb() const noexcept { return outputPeakRDb_.load (std::memory_order_relaxed); }
     float getOutputRmsLDb() const noexcept { return outputRmsLDb_.load (std::memory_order_relaxed); }
@@ -141,6 +143,8 @@ public:
     float getOutputTruePeakRDb() const noexcept { return outputTruePeakRDb_.load (std::memory_order_relaxed); }
     float getMaxOutputTruePeakLDb() const noexcept { return maxOutputTruePeakLDb_.load (std::memory_order_relaxed); }
     float getMaxOutputTruePeakRDb() const noexcept { return maxOutputTruePeakRDb_.load (std::memory_order_relaxed); }
+    float getMaxOutputPeakLDb() const noexcept { return maxOutputPeakLDb_.load (std::memory_order_relaxed); }
+    float getMaxOutputPeakRDb() const noexcept { return maxOutputPeakRDb_.load (std::memory_order_relaxed); }
     void resetInputTruePeakHolds() noexcept;
     void resetOutputTruePeakHolds() noexcept;
 
@@ -365,6 +369,8 @@ private:
     std::atomic<float> inputTruePeakRDb_ { -100.0f };
     std::atomic<float> maxInputTruePeakLDb_ { -100.0f };
     std::atomic<float> maxInputTruePeakRDb_ { -100.0f };
+    std::atomic<float> maxInputPeakLDb_ { -100.0f };
+    std::atomic<float> maxInputPeakRDb_ { -100.0f };
     std::atomic<float> outputPeakLDb_ { -100.0f };
     std::atomic<float> outputPeakRDb_ { -100.0f };
     std::atomic<float> outputRmsLDb_ { -100.0f };
@@ -374,6 +380,8 @@ private:
     std::atomic<float> outputTruePeakRDb_ { -100.0f };
     std::atomic<float> maxOutputTruePeakLDb_ { -100.0f };
     std::atomic<float> maxOutputTruePeakRDb_ { -100.0f };
+    std::atomic<float> maxOutputPeakLDb_ { -100.0f };
+    std::atomic<float> maxOutputPeakRDb_ { -100.0f };
     std::atomic<float> lastLinkedInputGainDb_ { 0.0f };
     std::atomic<float> lastLinkedCeilingDb_ { 0.0f };
     std::atomic<bool> gainCeilingLinkWasEnabled_ { false };

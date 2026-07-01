@@ -53,7 +53,7 @@ private:
         int holdTicksLeft { 0 };
 
         void reset() noexcept;
-        void tick (float raw, float dtSec, int holdTicksAt30Hz) noexcept;
+        void tick (float raw, float dtSec, int holdTicksAt30Hz, float releaseTauSec) noexcept;
         static juce::String formatDb (float v) noexcept;
     };
 
@@ -82,8 +82,6 @@ private:
     DisplayLevelSmoother displaySmooth0_ {};
     DisplayLevelSmoother displaySmooth1_ {};
     GrNumericSmoother grSmooth_ {};
-    float maxPeakLDb_ { -200.0f };
-    float maxPeakRDb_ { -200.0f };
 
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;

@@ -2,6 +2,24 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-02 — I/O meter readouts polish (labels, MAX hold, ballistics) + GR panel frame
+
+**Status:** ✅ Build + AU pass + installed; audition pending.
+
+**Deliverables**
+- I/O readouts labeled TP / SP / MAX / RMS with right-aligned values.
+- MAX sample-peak hold routed through processor atomics (`maxInput/OutputPeak{L,R}Db_`), cleared with TP on Reset peaks.
+- SP/RMS numeric ballistics slowed (~850 ms hold, ~950 ms release); bar ballistics unchanged.
+- GR panel frame matched to I/O meter panels (`theme.panel` fill, `rSmall`).
+
+**Gate**
+- [x] Build clean; AU validates; installed to user folders.
+- [ ] Labels align; MAX holds like TP until Reset; SP/RMS readable.
+- [ ] GR panel frame matches In/Out meters.
+- [ ] avishali audition: readouts clear and labeled.
+
+---
+
 ## 2026-07-02 — Fix FinalCeiling GR readout (real applied reduction)
 
 **Status:** ✅ Build + AU pass + installed; proof test + audition pending.

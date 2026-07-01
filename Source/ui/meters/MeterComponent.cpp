@@ -231,7 +231,7 @@ void MeterComponent::resized()
 
     if (kind_ == Kind::Level)
     {
-        numericArea_ = b.removeFromTop (62).reduced (2, 2);
+        numericArea_ = b.removeFromTop (66).reduced (2, 2);
         labelArea_ = {};
         ledArea_ = {};
         meterArea_ = b.reduced (6, 2);
@@ -611,7 +611,7 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     if (truePeakReadoutActive_)
     {
         const auto tpColour = truePeakReadoutOver_ ? theme.danger : theme.textMuted.withAlpha (0.78f);
-        auto caption = tpBounds.removeFromLeft (15);
+        auto caption = tpBounds.removeFromLeft (18);
         g.setFont (juce::Font (juce::FontOptions().withHeight (8.0f)).boldened());
         g.setColour (tpColour.withAlpha (truePeakReadoutOver_ ? 0.95f : 0.62f));
         g.drawText ("TP", caption, juce::Justification::centredLeft);
@@ -621,19 +621,26 @@ void MeterComponent::paintLevel (juce::Graphics& g)
         g.drawText (truePeakReadoutText_, tpBounds, juce::Justification::centredRight);
     }
 
-    g.setFont (juce::Font (juce::FontOptions().withHeight (9.4f)));
-
-    g.setColour (peakColour.withAlpha (0.9f));
-    g.drawText (peakLine, peakBounds, juce::Justification::centred);
-
-    if (maxLine.isNotEmpty())
+    const auto captionMuted = theme.textMuted.withAlpha (0.62f);
+    auto drawLabeledRow = [&] (juce::Rectangle<int> rowBounds,
+                               const char* caption,
+                               const juce::String& value,
+                               juce::Colour valueColour,
+                               juce::Colour captionColour)
     {
-        g.setColour (theme.warning.withAlpha (0.82f));
-        g.drawText (maxLine, peakMaxBounds, juce::Justification::centred);
-    }
+        auto captionArea = rowBounds.removeFromLeft (18);
+        g.setFont (juce::Font (juce::FontOptions().withHeight (8.0f)).boldened());
+        g.setColour (captionColour);
+        g.drawText (caption, captionArea, juce::Justification::centredLeft);
 
-    g.setColour (theme.text.withAlpha (0.68f));
-    g.drawText (rmsLine, rmsBounds, juce::Justification::centred);
+        g.setFont (juce::Font (juce::FontOptions().withHeight (9.4f)).boldened());
+        g.setColour (valueColour);
+        g.drawText (value, rowBounds, juce::Justification::centredRight);
+    };
+
+    drawLabeledRow (peakBounds, "SP", peakLine, peakColour.withAlpha (0.9f), captionMuted);
+    drawLabeledRow (peakMaxBounds, "MAX", maxLine, theme.warning.withAlpha (0.82f), captionMuted);
+    drawLabeledRow (rmsBounds, "RMS", rmsLine, theme.text.withAlpha (0.68f), captionMuted);
 
     if (renderState_.bypassed)
     {
