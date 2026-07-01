@@ -1856,23 +1856,23 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
 void MasterLimiterAudioProcessor::resetOutputTruePeakHolds() noexcept
 {
-    outputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
-    outputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
-    maxOutputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
-    maxOutputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
-    maxOutputPeakLDb_.store (-100.0f, std::memory_order_relaxed);
-    maxOutputPeakRDb_.store (-100.0f, std::memory_order_relaxed);
-    outputTpDb_.store (-100.0f, std::memory_order_relaxed);
+    outputTruePeakLDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    outputTruePeakRDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxOutputTruePeakLDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxOutputTruePeakRDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxOutputPeakLDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxOutputPeakRDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    outputTpDb_.store (kMeterFloorDb, std::memory_order_relaxed);
 }
 
 void MasterLimiterAudioProcessor::resetInputTruePeakHolds() noexcept
 {
-    inputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
-    inputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
-    maxInputTruePeakLDb_.store (-100.0f, std::memory_order_relaxed);
-    maxInputTruePeakRDb_.store (-100.0f, std::memory_order_relaxed);
-    maxInputPeakLDb_.store (-100.0f, std::memory_order_relaxed);
-    maxInputPeakRDb_.store (-100.0f, std::memory_order_relaxed);
+    inputTruePeakLDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    inputTruePeakRDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxInputTruePeakLDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxInputTruePeakRDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxInputPeakLDb_.store (kMeterFloorDb, std::memory_order_relaxed);
+    maxInputPeakRDb_.store (kMeterFloorDb, std::memory_order_relaxed);
 }
 
 void MasterLimiterAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)

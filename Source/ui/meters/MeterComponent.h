@@ -40,6 +40,13 @@ public:
     void setNumericReadoutOverride (bool active, juce::String peak, juce::String maxPeak, juce::String rms) noexcept;
     void setTruePeakReadout (bool active, juce::String text, bool over) noexcept;
 
+    /** When true, parent draws TP/SP/MAX/RMS captions in the center gutter. */
+    void setExternalReadoutCaptions (bool external) noexcept;
+    /** Level readout values align toward the stereo center gutter. */
+    void setReadoutAlignTowardCenter (bool fromRight) noexcept;
+
+    juce::Rectangle<int> getNumericArea() const noexcept { return numericArea_; }
+
     void setClipResetCallback (Callback cb, void* ctx) noexcept;
     void setPeakResetCallback (Callback cb, void* ctx) noexcept;
 
@@ -76,6 +83,8 @@ private:
     bool truePeakReadoutActive_ { false };
     bool truePeakReadoutOver_ { false };
     juce::String truePeakReadoutText_;
+    bool externalReadoutCaptions_ { false };
+    bool readoutAlignFromRight_ { true };
 
     Callback onClipReset_ = nullptr;
     Callback onPeakReset_ = nullptr;

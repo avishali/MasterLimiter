@@ -2,6 +2,25 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-02 — M1: I/O meter estimator unification
+
+**Status:** ✅ Build + AU pass + installed; audition pending.
+
+**Deliverables**
+- SP number and bar peak share `DisplayLevelSmoother.peakDb` (60 dB/s release, instant rise).
+- Bar MAX line and MAX number both use processor-latched `getMax*PeakLDb()`.
+- RMS number reads direct DSP tap (300 ms avg); removed second UI hold stage.
+- Unified `kMeterFloorDb = −120` for atomics, resets, formatters.
+
+**Gate**
+- [x] Build clean; AU validates; installed.
+- [ ] Transient SP decay ~250 ms; bar/SP identical.
+- [ ] MAX line = MAX number until Reset.
+- [ ] RMS number/bar track; −110 reads −110 not "-inf".
+- [ ] avishali audition: meters trustworthy to 0.1 dB.
+
+---
+
 ## 2026-07-02 — I/O meter readouts polish (labels, MAX hold, ballistics) + GR panel frame
 
 **Status:** ✅ Build + AU pass + installed; audition pending.

@@ -30,6 +30,9 @@ class MasterLimiterAudioProcessor : public juce::AudioProcessor,
                                     private juce::Timer
 {
 public:
+    /** Unified silence floor for I/O meter atomics, conversions, and "-inf" display. */
+    static constexpr float kMeterFloorDb = -120.0f;
+
     enum class LearnState : int { Idle = 0, Armed = 1, Captured = 2 };
 
     MasterLimiterAudioProcessor();
@@ -361,27 +364,27 @@ private:
     std::atomic<float> currentFinalCeilingDb_ { 0.0f };
     std::atomic<float> maxFinalCeilingDb_ { 0.0f };
 
-    std::atomic<float> inputPeakLDb_ { -100.0f };
-    std::atomic<float> inputPeakRDb_ { -100.0f };
-    std::atomic<float> inputRmsLDb_ { -100.0f };
-    std::atomic<float> inputRmsRDb_ { -100.0f };
-    std::atomic<float> inputTruePeakLDb_ { -100.0f };
-    std::atomic<float> inputTruePeakRDb_ { -100.0f };
-    std::atomic<float> maxInputTruePeakLDb_ { -100.0f };
-    std::atomic<float> maxInputTruePeakRDb_ { -100.0f };
-    std::atomic<float> maxInputPeakLDb_ { -100.0f };
-    std::atomic<float> maxInputPeakRDb_ { -100.0f };
-    std::atomic<float> outputPeakLDb_ { -100.0f };
-    std::atomic<float> outputPeakRDb_ { -100.0f };
-    std::atomic<float> outputRmsLDb_ { -100.0f };
-    std::atomic<float> outputRmsRDb_ { -100.0f };
-    std::atomic<float> outputTpDb_ { -100.0f };
-    std::atomic<float> outputTruePeakLDb_ { -100.0f };
-    std::atomic<float> outputTruePeakRDb_ { -100.0f };
-    std::atomic<float> maxOutputTruePeakLDb_ { -100.0f };
-    std::atomic<float> maxOutputTruePeakRDb_ { -100.0f };
-    std::atomic<float> maxOutputPeakLDb_ { -100.0f };
-    std::atomic<float> maxOutputPeakRDb_ { -100.0f };
+    std::atomic<float> inputPeakLDb_ { kMeterFloorDb };
+    std::atomic<float> inputPeakRDb_ { kMeterFloorDb };
+    std::atomic<float> inputRmsLDb_ { kMeterFloorDb };
+    std::atomic<float> inputRmsRDb_ { kMeterFloorDb };
+    std::atomic<float> inputTruePeakLDb_ { kMeterFloorDb };
+    std::atomic<float> inputTruePeakRDb_ { kMeterFloorDb };
+    std::atomic<float> maxInputTruePeakLDb_ { kMeterFloorDb };
+    std::atomic<float> maxInputTruePeakRDb_ { kMeterFloorDb };
+    std::atomic<float> maxInputPeakLDb_ { kMeterFloorDb };
+    std::atomic<float> maxInputPeakRDb_ { kMeterFloorDb };
+    std::atomic<float> outputPeakLDb_ { kMeterFloorDb };
+    std::atomic<float> outputPeakRDb_ { kMeterFloorDb };
+    std::atomic<float> outputRmsLDb_ { kMeterFloorDb };
+    std::atomic<float> outputRmsRDb_ { kMeterFloorDb };
+    std::atomic<float> outputTpDb_ { kMeterFloorDb };
+    std::atomic<float> outputTruePeakLDb_ { kMeterFloorDb };
+    std::atomic<float> outputTruePeakRDb_ { kMeterFloorDb };
+    std::atomic<float> maxOutputTruePeakLDb_ { kMeterFloorDb };
+    std::atomic<float> maxOutputTruePeakRDb_ { kMeterFloorDb };
+    std::atomic<float> maxOutputPeakLDb_ { kMeterFloorDb };
+    std::atomic<float> maxOutputPeakRDb_ { kMeterFloorDb };
     std::atomic<float> lastLinkedInputGainDb_ { 0.0f };
     std::atomic<float> lastLinkedCeilingDb_ { 0.0f };
     std::atomic<bool> gainCeilingLinkWasEnabled_ { false };

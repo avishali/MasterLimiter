@@ -4,6 +4,8 @@
 
 namespace
 {
+constexpr float kMeterFloorDb = MasterLimiterAudioProcessor::kMeterFloorDb;
+
 juce::String channelLabel (int channelCount, int index)
 {
     if (channelCount <= 1)
@@ -12,9 +14,14 @@ juce::String channelLabel (int channelCount, int index)
     return (index == 0) ? "L" : "R";
 }
 
+bool isBelowMeterFloor (float v) noexcept
+{
+    return ! std::isfinite (v) || v <= kMeterFloorDb;
+}
+
 juce::String formatDbBare (float v)
 {
-    if (! std::isfinite (v) || v <= -100.0f)
+    if (isBelowMeterFloor (v))
         return "-inf";
 
     return juce::String (v, 1);
@@ -37,55 +44,12 @@ juce::String formatRmsReadout (float rmsDb)
 
 juce::String formatTruePeakReadout (float tpDb)
 {
-    if (! std::isfinite (tpDb) || tpDb <= -100.0f)
+    if (isBelowMeterFloor (tpDb))
         return "-inf";
 
     return (tpDb > 0.0f ? juce::String ("+") : juce::String()) + juce::String (tpDb, 1);
 }
-
-constexpr float kNumericReadoutHoldSec = 0.85f;
-constexpr float kNumericReadoutReleaseTauSec = 0.95f;
 } // namespace
-
-void MeterGroupComponent::PeakNumericSmoother::reset() noexcept
-{
-    held = duty = -200.0f;
-    holdTicksLeft = 0;
-}
-
-void MeterGroupComponent::PeakNumericSmoother::tick (float raw, float dtSec, int holdTicksAt30Hz, float releaseTauSec) noexcept
-{
-    if (! std::isfinite (raw))
-        raw = -200.0f;
-
-    if (raw > held)
-    {
-        held = raw;
-        duty = raw;
-        holdTicksLeft = holdTicksAt30Hz;
-        return;
-    }
-
-    if (holdTicksLeft > 0)
-    {
-        --holdTicksLeft;
-        duty = held;
-        return;
-    }
-
-    const float tau = juce::jmax (0.05f, releaseTauSec);
-    const float a = 1.0f - std::exp (-dtSec / tau);
-    held += (raw - held) * a;
-    duty = held;
-}
-
-juce::String MeterGroupComponent::PeakNumericSmoother::formatDb (float v) noexcept
-{
-    if (! std::isfinite (v) || v <= -100.0f)
-        return "-inf";
-
-    return juce::String (v, 1) + " dB";
-}
 
 void MeterGroupComponent::GrNumericSmoother::reset() noexcept
 {
@@ -113,8 +77,8 @@ juce::String MeterGroupComponent::GrNumericSmoother::formatDb (float g) noexcept
 
 void MeterGroupComponent::DisplayLevelSmoother::reset (float peak, float rms) noexcept
 {
-    peakDb = std::isfinite (peak) ? peak : -200.0f;
-    rmsDb = std::isfinite (rms) ? rms : -200.0f;
+    peakDb = std::isfinite (peak) ? peak : kMeterFloorDb;
+    rmsDb = std::isfinite (rms) ? rms : kMeterFloorDb;
 }
 
 void MeterGroupComponent::DisplayLevelSmoother::tick (float peak, float rms, float dtSec) noexcept
@@ -122,8 +86,8 @@ void MeterGroupComponent::DisplayLevelSmoother::tick (float peak, float rms, flo
     auto smooth = [] (float raw, float current, float dt) noexcept
     {
         if (! std::isfinite (raw))
-            raw = -200.0f;
-        if (! std::isfinite (current) || current <= -199.0f)
+            raw = kMeterFloorDb;
+        if (! std::isfinite (current) || current <= kMeterFloorDb + 0.5f)
             return raw;
         if (raw >= current)
             return raw;
@@ -172,6 +136,10 @@ MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
         meter1_->setPeakResetCallback (&MeterGroupComponent::peakResetThunk, this);
         meter0_->setClipResetCallback (&MeterGroupComponent::peakResetThunk, this);
         meter1_->setClipResetCallback (&MeterGroupComponent::peakResetThunk, this);
+        meter0_->setExternalReadoutCaptions (true);
+        meter1_->setExternalReadoutCaptions (true);
+        meter0_->setReadoutAlignTowardCenter (true);
+        meter1_->setReadoutAlignTowardCenter (false);
         addAndMakeVisible (*meter0_);
         addAndMakeVisible (*meter1_);
 
@@ -181,7 +149,7 @@ MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
         provider1_.setDisplayMode (DisplayMode::Rms);
         provider0_.setHoldEnabled (true);
         provider1_.setHoldEnabled (true);
-        pushLevelRenderStates();
+        pushLevelRenderStates (kMeterFloorDb, kMeterFloorDb);
     }
 }
 
@@ -211,20 +179,17 @@ void MeterGroupComponent::handlePeakReset() noexcept
         processor_.resetInputTruePeakHolds();
     if (kind_ == BusKind::Output)
         processor_.resetOutputTruePeakHolds();
-    peakSmooth0_.reset();
-    peakSmooth1_.reset();
-    rmsSmooth0_.reset();
-    rmsSmooth1_.reset();
     displaySmooth0_.reset (lPeak, lRms);
     displaySmooth1_.reset (rPeak, rRms);
-    pushLevelRenderStates();
+    pushLevelRenderStates (kMeterFloorDb, kMeterFloorDb);
 }
 
 int MeterGroupComponent::getPreferredWidth() const noexcept
 {
     const auto& m = ui_.metrics();
     const int meterW = m.meterGroupMeterW;
-    const int gap = m.meterGroupGap;
+    const int gap = (kind_ == BusKind::Input || kind_ == BusKind::Output) ? kReadoutLabelGutterW
+                                                                          : m.meterGroupGap;
     return (channelCount_ <= 1) ? meterW : (meterW * 2 + gap);
 }
 
@@ -238,7 +203,9 @@ void MeterGroupComponent::setScaleMode (ScaleMode mode) noexcept
     scaleMode_ = mode;
     provider0_.setScaleMode (mode);
     provider1_.setScaleMode (mode);
-    pushLevelRenderStates();
+    const float lMax = kind_ == BusKind::Input ? processor_.getMaxInputPeakLDb() : processor_.getMaxOutputPeakLDb();
+    const float rMax = kind_ == BusKind::Input ? processor_.getMaxInputPeakRDb() : processor_.getMaxOutputPeakRDb();
+    pushLevelRenderStates (lMax, rMax);
     repaint();
 }
 
@@ -262,10 +229,12 @@ juce::Rectangle<int> MeterGroupComponent::getScaleReferenceBoundsInParent() cons
         .translated (getX(), getY());
 }
 
-void MeterGroupComponent::pushLevelRenderStates()
+void MeterGroupComponent::pushLevelRenderStates (float maxPeakLDb, float maxPeakRDb)
 {
     provider0_.fillRenderState (renderState0_);
     provider1_.fillRenderState (renderState1_);
+    renderState0_.maxPeakDb = maxPeakLDb;
+    renderState1_.maxPeakDb = maxPeakRDb;
 
     if (meter0_ != nullptr)
         meter0_->setRenderState (renderState0_);
@@ -276,8 +245,6 @@ void MeterGroupComponent::pushLevelRenderStates()
 void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
 {
     juce::ignoreUnused (hostSampleRate);
-
-    const int numericHoldTicks = juce::jmax (1, static_cast<int> (std::round (kNumericReadoutHoldSec / juce::jmax (1.0e-6f, dtSec))));
 
     if (kind_ == BusKind::GainReduction)
     {
@@ -305,37 +272,35 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     const float rPeak = (kind_ == BusKind::Input) ? processor_.getInputPeakRDb() : processor_.getOutputPeakRDb();
     const float lRms = (kind_ == BusKind::Input) ? processor_.getInputRmsLDb() : processor_.getOutputRmsLDb();
     const float rRms = (kind_ == BusKind::Input) ? processor_.getInputRmsRDb() : processor_.getOutputRmsRDb();
+    const float lMaxDb = kind_ == BusKind::Input ? processor_.getMaxInputPeakLDb() : processor_.getMaxOutputPeakLDb();
+    const float rMaxDb = kind_ == BusKind::Input ? processor_.getMaxInputPeakRDb() : processor_.getMaxOutputPeakRDb();
 
-    peakSmooth0_.tick (lPeak, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
-    peakSmooth1_.tick (rPeak, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
-    rmsSmooth0_.tick (lRms, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
-    rmsSmooth1_.tick (rRms, dtSec, numericHoldTicks, kNumericReadoutReleaseTauSec);
     displaySmooth0_.tick (lPeak, lRms, dtSec);
     displaySmooth1_.tick (rPeak, rRms, dtSec);
 
-    constexpr float kClipThresholdDb = 0.0f;  // digital full-scale
+    constexpr float kClipThresholdDb = 0.0f;
     const bool clippedL = renderState0_.clipLatched || (std::isfinite (lPeak) && lPeak >= kClipThresholdDb);
     const bool clippedR = renderState1_.clipLatched || (std::isfinite (rPeak) && rPeak >= kClipThresholdDb);
 
     provider0_.updateFromValues (displaySmooth0_.peakDb, displaySmooth0_.rmsDb, clippedL, false);
     provider1_.updateFromValues (displaySmooth1_.peakDb, displaySmooth1_.rmsDb, clippedR, false);
-    pushLevelRenderStates();
+    pushLevelRenderStates (lMaxDb, rMaxDb);
 
-    const auto lPeakText = formatPeakReadout (peakSmooth0_.duty);
-    const auto rPeakText = formatPeakReadout (peakSmooth1_.duty);
-    const float lMaxDb = kind_ == BusKind::Input ? processor_.getMaxInputPeakLDb() : processor_.getMaxOutputPeakLDb();
-    const float rMaxDb = kind_ == BusKind::Input ? processor_.getMaxInputPeakRDb() : processor_.getMaxOutputPeakRDb();
+    const auto lPeakText = formatPeakReadout (displaySmooth0_.peakDb);
+    const auto rPeakText = formatPeakReadout (displaySmooth1_.peakDb);
     const auto lMaxText = formatMaxPeakReadout (lMaxDb);
     const auto rMaxText = formatMaxPeakReadout (rMaxDb);
-    const auto lRmsText = formatRmsReadout (rmsSmooth0_.duty);
-    const auto rRmsText = formatRmsReadout (rmsSmooth1_.duty);
+    const auto lRmsText = formatRmsReadout (lRms);
+    const auto rRmsText = formatRmsReadout (rRms);
     const bool showTruePeak = kind_ == BusKind::Input || kind_ == BusKind::Output;
     const float lTruePeak = kind_ == BusKind::Input ? processor_.getMaxInputTruePeakLDb()
                            : kind_ == BusKind::Output ? processor_.getMaxOutputTruePeakLDb()
-                           : -200.0f;
+                           : kMeterFloorDb;
     const float rTruePeak = kind_ == BusKind::Input ? processor_.getMaxInputTruePeakRDb()
                            : kind_ == BusKind::Output ? processor_.getMaxOutputTruePeakRDb()
-                           : -200.0f;
+                           : kMeterFloorDb;
+
+    tpReadoutOver_ = (lTruePeak > 0.0f) || (rTruePeak > 0.0f);
 
     if (meter0_ != nullptr)
     {
@@ -347,6 +312,41 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
         meter1_->setTruePeakReadout (showTruePeak, formatTruePeakReadout (rTruePeak), rTruePeak > 0.0f);
         meter1_->setNumericReadoutOverride (true, rPeakText, rMaxText, rRmsText);
     }
+
+    if (! readoutLabelArea_.isEmpty())
+        repaint (readoutLabelArea_);
+}
+
+void MeterGroupComponent::paintReadoutCaptions (juce::Graphics& g)
+{
+    if (readoutLabelArea_.isEmpty())
+        return;
+
+    const auto& theme = ui_.theme();
+    const auto captionMuted = theme.textMuted.withAlpha (0.62f);
+    const auto tpCaptionColour = tpReadoutOver_ ? theme.danger.withAlpha (0.95f) : captionMuted;
+
+    auto bounds = readoutLabelArea_.reduced (0, 3);
+    juce::Rectangle<int> tpBounds;
+    tpBounds = bounds.removeFromTop (13);
+
+    const int rowH = bounds.getHeight() / 3;
+    auto spBounds = bounds.removeFromTop (rowH);
+    auto maxBounds = bounds.removeFromTop (rowH);
+    auto rmsBounds = bounds;
+
+    g.setFont (juce::Font (juce::FontOptions().withHeight (8.0f)).boldened());
+
+    auto drawCaption = [&] (juce::Rectangle<int> area, const char* text, juce::Colour colour)
+    {
+        g.setColour (colour);
+        g.drawText (text, area, juce::Justification::centred);
+    };
+
+    drawCaption (tpBounds, "TP", tpCaptionColour);
+    drawCaption (spBounds, "SP", captionMuted);
+    drawCaption (maxBounds, "MAX", theme.warning.withAlpha (0.72f));
+    drawCaption (rmsBounds, "RMS", captionMuted);
 }
 
 void MeterGroupComponent::paint (juce::Graphics& g)
@@ -389,6 +389,12 @@ void MeterGroupComponent::paint (juce::Graphics& g)
     g.drawLine (right + 6.0f, lineY, labelRight - 9.0f, lineY, 1.0f);
 }
 
+void MeterGroupComponent::paintOverChildren (juce::Graphics& g)
+{
+    if (kind_ == BusKind::Input || kind_ == BusKind::Output)
+        paintReadoutCaptions (g);
+}
+
 void MeterGroupComponent::resized()
 {
     const auto& m = ui_.metrics();
@@ -424,7 +430,9 @@ void MeterGroupComponent::layoutLevelMeters()
 {
     const auto& m = ui_.metrics();
     const int meterW = m.meterGroupMeterW;
-    const int gap = m.meterGroupGap;
+    const int gap = kReadoutLabelGutterW;
+
+    readoutLabelArea_ = {};
 
     if (channelCount_ <= 1)
     {
@@ -443,11 +451,17 @@ void MeterGroupComponent::layoutLevelMeters()
     row = row.withSizeKeepingCentre (totalW, row.getHeight());
 
     auto left = row.removeFromLeft (meterW);
-    row.removeFromLeft (gap);
+    auto gutter = row.removeFromLeft (gap);
     auto right = row.removeFromLeft (meterW);
 
     if (meter0_ != nullptr)
         meter0_->setBounds (left);
     if (meter1_ != nullptr)
         meter1_->setBounds (right);
+
+    if (meter0_ != nullptr && meter1_ != nullptr)
+    {
+        const auto lNum = meter0_->getNumericArea().translated (meter0_->getX(), meter0_->getY());
+        readoutLabelArea_ = gutter.withY (lNum.getY()).withHeight (lNum.getHeight());
+    }
 }

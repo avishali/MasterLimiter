@@ -216,7 +216,7 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 
 The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R sub-bars** per band (MID reserved until 3-band slice); the bottom readout remains total current / max. `dev_band_stereo_link_pct` (DEV, default 100%) controls per-band stereo unlink in Stereo mode only.
 
-**I/O meter readouts** (each channel): four labeled rows — **TP** (latched max true-peak), **SP** (smoothed current sample-peak), **MAX** (latched max sample-peak, processor atomics), **RMS** (smoothed RMS). SP/RMS numeric ballistics use ~850 ms hold + ~950 ms release; meter bars use separate `DisplayLevelSmoother` ballistics. Reset peaks clears TP/MAX holds via `resetInputTruePeakHolds()` / `resetOutputTruePeakHolds()`.
+**I/O meter readouts** (each channel): four labeled rows — **TP** (latched max true-peak), **SP** (current sample-peak, shared with bar via `DisplayLevelSmoother` at 60 dB/s release), **MAX** (latched max sample-peak, same value drives bar max line + number), **RMS** (300 ms power average from DSP tap, no second UI hold; bar uses `displaySmooth.rmsDb`). Floor unified at `kMeterFloorDb = −120`. Reset peaks clears TP/MAX holds via `resetInputTruePeakHolds()` / `resetOutputTruePeakHolds()`.
 
 ---
 

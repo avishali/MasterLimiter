@@ -37,25 +37,15 @@ public:
     juce::Rectangle<int> getScaleReferenceBoundsInParent() const noexcept;
 
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;
     void resized() override;
 
 private:
     static void peakResetThunk (void* ctx) noexcept;
 
     void handlePeakReset() noexcept;
-    void pushLevelRenderStates();
+    void pushLevelRenderStates (float maxPeakLDb, float maxPeakRDb);
     void layoutLevelMeters();
-
-    struct PeakNumericSmoother
-    {
-        float held { -200.0f };
-        float duty { -200.0f };
-        int holdTicksLeft { 0 };
-
-        void reset() noexcept;
-        void tick (float raw, float dtSec, int holdTicksAt30Hz, float releaseTauSec) noexcept;
-        static juce::String formatDb (float v) noexcept;
-    };
 
     struct GrNumericSmoother
     {
@@ -68,17 +58,13 @@ private:
 
     struct DisplayLevelSmoother
     {
-        float peakDb { -200.0f };
-        float rmsDb { -200.0f };
+        float peakDb { MasterLimiterAudioProcessor::kMeterFloorDb };
+        float rmsDb { MasterLimiterAudioProcessor::kMeterFloorDb };
 
         void reset (float peak, float rms) noexcept;
         void tick (float peak, float rms, float dtSec) noexcept;
     };
 
-    PeakNumericSmoother peakSmooth0_ {};
-    PeakNumericSmoother peakSmooth1_ {};
-    PeakNumericSmoother rmsSmooth0_ {};
-    PeakNumericSmoother rmsSmooth1_ {};
     DisplayLevelSmoother displaySmooth0_ {};
     DisplayLevelSmoother displaySmooth1_ {};
     GrNumericSmoother grSmooth_ {};
@@ -101,6 +87,12 @@ private:
     juce::Rectangle<int> headerArea_;
     juce::Rectangle<int> labelArea_;
     juce::Rectangle<int> metersArea_;
+    juce::Rectangle<int> readoutLabelArea_;
+    bool tpReadoutOver_ { false };
+
+    static constexpr int kReadoutLabelGutterW = 22;
+
+    void paintReadoutCaptions (juce::Graphics& g);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MeterGroupComponent)
 };

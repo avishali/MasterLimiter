@@ -170,6 +170,24 @@ void MeterComponent::setTruePeakReadout (bool active, juce::String text, bool ov
     repaint();
 }
 
+void MeterComponent::setExternalReadoutCaptions (bool external) noexcept
+{
+    if (externalReadoutCaptions_ == external)
+        return;
+
+    externalReadoutCaptions_ = external;
+    repaint();
+}
+
+void MeterComponent::setReadoutAlignTowardCenter (bool fromRight) noexcept
+{
+    if (readoutAlignFromRight_ == fromRight)
+        return;
+
+    readoutAlignFromRight_ = fromRight;
+    repaint();
+}
+
 void MeterComponent::setClipResetCallback (Callback cb, void* ctx) noexcept
 {
     onClipReset_ = cb;
@@ -608,39 +626,27 @@ void MeterComponent::paintLevel (juce::Graphics& g)
     auto peakMaxBounds = numBounds.removeFromTop (rowH);
     auto rmsBounds = numBounds;
 
+    const auto valueJustification = readoutAlignFromRight_ ? juce::Justification::centredRight
+                                                           : juce::Justification::centredLeft;
+
     if (truePeakReadoutActive_)
     {
         const auto tpColour = truePeakReadoutOver_ ? theme.danger : theme.textMuted.withAlpha (0.78f);
-        auto caption = tpBounds.removeFromLeft (18);
-        g.setFont (juce::Font (juce::FontOptions().withHeight (8.0f)).boldened());
-        g.setColour (tpColour.withAlpha (truePeakReadoutOver_ ? 0.95f : 0.62f));
-        g.drawText ("TP", caption, juce::Justification::centredLeft);
-
         g.setFont (juce::Font (juce::FontOptions().withHeight (9.4f)).boldened());
         g.setColour (tpColour);
-        g.drawText (truePeakReadoutText_, tpBounds, juce::Justification::centredRight);
+        g.drawText (truePeakReadoutText_, tpBounds, valueJustification);
     }
 
-    const auto captionMuted = theme.textMuted.withAlpha (0.62f);
-    auto drawLabeledRow = [&] (juce::Rectangle<int> rowBounds,
-                               const char* caption,
-                               const juce::String& value,
-                               juce::Colour valueColour,
-                               juce::Colour captionColour)
-    {
-        auto captionArea = rowBounds.removeFromLeft (18);
-        g.setFont (juce::Font (juce::FontOptions().withHeight (8.0f)).boldened());
-        g.setColour (captionColour);
-        g.drawText (caption, captionArea, juce::Justification::centredLeft);
+    g.setFont (juce::Font (juce::FontOptions().withHeight (9.4f)).boldened());
 
-        g.setFont (juce::Font (juce::FontOptions().withHeight (9.4f)).boldened());
-        g.setColour (valueColour);
-        g.drawText (value, rowBounds, juce::Justification::centredRight);
-    };
+    g.setColour (peakColour.withAlpha (0.9f));
+    g.drawText (peakLine, peakBounds, valueJustification);
 
-    drawLabeledRow (peakBounds, "SP", peakLine, peakColour.withAlpha (0.9f), captionMuted);
-    drawLabeledRow (peakMaxBounds, "MAX", maxLine, theme.warning.withAlpha (0.82f), captionMuted);
-    drawLabeledRow (rmsBounds, "RMS", rmsLine, theme.text.withAlpha (0.68f), captionMuted);
+    g.setColour (theme.warning.withAlpha (0.82f));
+    g.drawText (maxLine, peakMaxBounds, valueJustification);
+
+    g.setColour (theme.text.withAlpha (0.68f));
+    g.drawText (rmsLine, rmsBounds, valueJustification);
 
     if (renderState_.bypassed)
     {
