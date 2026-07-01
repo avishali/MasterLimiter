@@ -53,6 +53,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &groupLookaheadRelease_,
                          &groupAdaptiveRelease_,
                          &groupBandScaling_,
+                         &groupBandStereo_,
                          &groupManualRelease_ })
     {
         setupGroup (*group);
@@ -126,6 +127,10 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldHighScale_, 2, {});
     sldHighScale_.setTooltip ("High-band and wideband auto-release timing multiplier.");
 
+    setupLabel (lblBandStereoLink_, "Band Link");
+    setupSlider (sldBandStereoLink_, 0, " %");
+    sldBandStereoLink_.setTooltip ("Per-band L/R unlink (Stereo mode) - 100 = linked (current), 0 = fully independent per band.");
+
     setupLabel (lblSustainRatio_, "Sustain Ratio");
     setupSlider (sldSustainRatio_, 2, {});
     sldSustainRatio_.setTooltip ("Manual-release sustain split. Active only when Release Auto is Off.");
@@ -134,7 +139,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &lblXoverCutoff_, &lblXoverTransition_, &lblXoverAtten_,
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_,
-                         &lblHighScale_, &lblSustainRatio_ })
+                         &lblHighScale_, &lblBandStereoLink_, &lblSustainRatio_ })
     {
         content_.addAndMakeVisible (*label);
     }
@@ -142,7 +147,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     for (auto* slider : { &sldAttack_, &sldRealAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
                           &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
                           &sldLaRelease_, &sldSigmaAttack_, &sldSigmaDecay_,
-                          &sldLowScale_, &sldHighScale_, &sldSustainRatio_ })
+                          &sldLowScale_, &sldHighScale_, &sldBandStereoLink_, &sldSustainRatio_ })
     {
         content_.addAndMakeVisible (*slider);
     }
@@ -166,6 +171,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attSigmaDecay_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_sigma_decay_scale), sldSigmaDecay_);
     attLowScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_low_band_release_scale), sldLowScale_);
     attHighScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_high_band_release_scale), sldHighScale_);
+    attBandStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_band_stereo_link_pct), sldBandStereoLink_);
     attSustainRatio_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldSustainRatio_);
 
     if (auto* releaseAuto = apvts_.getParameter (pid (param::release_auto)))
@@ -217,7 +223,8 @@ void DevControlsComponent::resized()
         for (auto* slider : { &sldAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
                               &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
                               &sldLaRelease_,
-                              &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldHighScale_, &sldSustainRatio_ })
+                              &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldHighScale_,
+                              &sldBandStereoLink_, &sldSustainRatio_ })
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
 
@@ -278,6 +285,9 @@ void DevControlsComponent::resized()
     placeSliderRow (inner.removeFromTop (rowH), lblLowScale_, sldLowScale_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblHighScale_, sldHighScale_);
+
+    inner = placeGroup (groupBandStereo_, 72);
+    placeSliderRow (inner.removeFromTop (rowH), lblBandStereoLink_, sldBandStereoLink_);
 
     inner = placeGroup (groupManualRelease_, 72);
     placeSliderRow (inner.removeFromTop (rowH), lblSustainRatio_, sldSustainRatio_);

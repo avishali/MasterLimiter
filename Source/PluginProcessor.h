@@ -87,22 +87,31 @@ public:
     float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
     float getCurrentGrLDb() const noexcept { return currentGrLDb_.load (std::memory_order_relaxed); }
     float getCurrentGrRDb() const noexcept { return currentGrRDb_.load (std::memory_order_relaxed); }
-    float getCurrentGrLowDb() const noexcept { return currentGrLowDb_.load (std::memory_order_relaxed); }
-    float getCurrentGrMidDb() const noexcept { return currentGrMidDb_.load (std::memory_order_relaxed); }
-    float getCurrentGrHighDb() const noexcept { return currentGrHighDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrLowLDb() const noexcept { return currentGrLowLDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrLowRDb() const noexcept { return currentGrLowRDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrMidLDb() const noexcept { return currentGrMidLDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrMidRDb() const noexcept { return currentGrMidRDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrHighLDb() const noexcept { return currentGrHighLDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrHighRDb() const noexcept { return currentGrHighRDb_.load (std::memory_order_relaxed); }
     float getCurrentClipDb() const noexcept { return currentClipDb_.load (std::memory_order_relaxed); }
     float getMaxGrSinceResetDb() const noexcept { return maxGrSinceResetDb_.load (std::memory_order_relaxed); }
-    float getMaxGrLowDb() const noexcept { return maxGrLowDb_.load (std::memory_order_relaxed); }
-    float getMaxGrMidDb() const noexcept { return maxGrMidDb_.load (std::memory_order_relaxed); }
-    float getMaxGrHighDb() const noexcept { return maxGrHighDb_.load (std::memory_order_relaxed); }
+    float getMaxGrLowLDb() const noexcept { return maxGrLowLDb_.load (std::memory_order_relaxed); }
+    float getMaxGrLowRDb() const noexcept { return maxGrLowRDb_.load (std::memory_order_relaxed); }
+    float getMaxGrMidLDb() const noexcept { return maxGrMidLDb_.load (std::memory_order_relaxed); }
+    float getMaxGrMidRDb() const noexcept { return maxGrMidRDb_.load (std::memory_order_relaxed); }
+    float getMaxGrHighLDb() const noexcept { return maxGrHighLDb_.load (std::memory_order_relaxed); }
+    float getMaxGrHighRDb() const noexcept { return maxGrHighRDb_.load (std::memory_order_relaxed); }
     float getMaxClipSinceResetDb() const noexcept { return maxClipSinceResetDb_.load (std::memory_order_relaxed); }
 
     void resetMaxGr() noexcept
     {
         maxGrSinceResetDb_.store (0.0f, std::memory_order_relaxed);
-        maxGrLowDb_.store (0.0f, std::memory_order_relaxed);
-        maxGrMidDb_.store (0.0f, std::memory_order_relaxed);
-        maxGrHighDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrLowLDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrLowRDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrMidLDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrMidRDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrHighLDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrHighRDb_.store (0.0f, std::memory_order_relaxed);
     }
     void resetMaxClip() noexcept { maxClipSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
 
@@ -216,6 +225,8 @@ private:
     static constexpr int kHeavyPollMs     = 30;
     mdsp_dsp::LimiterEnvelope envelopeLow_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
+    mdsp_dsp::LimiterEnvelope envelopeLowR_;
+    mdsp_dsp::LimiterEnvelope envelopeHighR_;
     mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
     mdsp_dsp::HalfbandPolyphaseOS clipperOversampler_;   // 1-stage (2×), runs inside the 4× domain
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> clipperOsAlignDelay_ { 4096 };
@@ -225,13 +236,23 @@ private:
     juce::AudioBuffer<float> peakBufR_;
     juce::AudioBuffer<float> gainBufR_;
     juce::AudioBuffer<float> peakLowBuf_;
+    juce::AudioBuffer<float> peakLowLBuf_;
+    juce::AudioBuffer<float> peakLowRBuf_;
     juce::AudioBuffer<float> gainLowBuf_;
+    juce::AudioBuffer<float> gainLowLBuf_;
+    juce::AudioBuffer<float> gainLowRBuf_;
     juce::AudioBuffer<float> peakHighBuf_;
+    juce::AudioBuffer<float> peakHighLBuf_;
+    juce::AudioBuffer<float> peakHighRBuf_;
     juce::AudioBuffer<float> gainHighBuf_;
+    juce::AudioBuffer<float> gainHighLBuf_;
+    juce::AudioBuffer<float> gainHighRBuf_;
     juce::AudioBuffer<float> bandLowBuf_;
     juce::AudioBuffer<float> bandHighBuf_;
     juce::AudioBuffer<float> gLowOutBuf_;
     juce::AudioBuffer<float> gHighOutBuf_;
+    juce::AudioBuffer<float> gLowOutRBuf_;
+    juce::AudioBuffer<float> gHighOutRBuf_;
     juce::AudioBuffer<float> bandLimitedBuf_;
     mdsp_dsp::FinalCeilingLimiter finalCeiling_;
     mdsp_dsp::TruePeakDetector inputTruePeakL_;
@@ -286,6 +307,7 @@ private:
     std::atomic<float>* devXoverCutoffHz_ = nullptr;
     std::atomic<float>* devXoverTransitionHz_ = nullptr;
     std::atomic<float>* devXoverAttenDb_ = nullptr;
+    std::atomic<float>* devBandStereoLinkPct_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 
@@ -304,14 +326,20 @@ private:
     std::atomic<float> currentGrDb_ { 0.0f };
     std::atomic<float> currentGrLDb_ { 0.0f };
     std::atomic<float> currentGrRDb_ { 0.0f };
-    std::atomic<float> currentGrLowDb_ { 0.0f };
-    std::atomic<float> currentGrMidDb_ { 0.0f };
-    std::atomic<float> currentGrHighDb_ { 0.0f };
+    std::atomic<float> currentGrLowLDb_ { 0.0f };
+    std::atomic<float> currentGrLowRDb_ { 0.0f };
+    std::atomic<float> currentGrMidLDb_ { 0.0f };
+    std::atomic<float> currentGrMidRDb_ { 0.0f };
+    std::atomic<float> currentGrHighLDb_ { 0.0f };
+    std::atomic<float> currentGrHighRDb_ { 0.0f };
     std::atomic<float> currentClipDb_ { 0.0f };
     std::atomic<float> maxGrSinceResetDb_ { 0.0f };
-    std::atomic<float> maxGrLowDb_ { 0.0f };
-    std::atomic<float> maxGrMidDb_ { 0.0f };
-    std::atomic<float> maxGrHighDb_ { 0.0f };
+    std::atomic<float> maxGrLowLDb_ { 0.0f };
+    std::atomic<float> maxGrLowRDb_ { 0.0f };
+    std::atomic<float> maxGrMidLDb_ { 0.0f };
+    std::atomic<float> maxGrMidRDb_ { 0.0f };
+    std::atomic<float> maxGrHighLDb_ { 0.0f };
+    std::atomic<float> maxGrHighRDb_ { 0.0f };
     std::atomic<float> maxClipSinceResetDb_ { 0.0f };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };

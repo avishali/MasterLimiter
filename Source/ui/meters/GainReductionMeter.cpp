@@ -43,8 +43,11 @@ GainReductionMeter::GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAud
 {
     for (int b = 0; b < kNumBands; ++b)
     {
-        ball_[(size_t) b] = std::make_unique<mdsp_ui::meters::MeterBallistics>();
-        peakHold_[(size_t) b] = std::make_unique<mdsp_ui::meters::PeakHoldModel>();
+        for (int ch = 0; ch < kNumChannels; ++ch)
+        {
+            ball_[(size_t) b][(size_t) ch] = std::make_unique<mdsp_ui::meters::MeterBallistics>();
+            peakHold_[(size_t) b][(size_t) ch] = std::make_unique<mdsp_ui::meters::PeakHoldModel>();
+        }
     }
 
     setOpaque (false);
@@ -55,18 +58,21 @@ GainReductionMeter::~GainReductionMeter() = default;
 
 void GainReductionMeter::sync (float dtSec)
 {
-    const float raw[kNumBands] = {
-        processor_.getCurrentGrLowDb(),
-        processor_.getCurrentGrMidDb(),
-        processor_.getCurrentGrHighDb()
+    const float raw[kNumBands][kNumChannels] = {
+        { processor_.getCurrentGrLowLDb(), processor_.getCurrentGrLowRDb() },
+        { processor_.getCurrentGrMidLDb(), processor_.getCurrentGrMidRDb() },
+        { processor_.getCurrentGrHighLDb(), processor_.getCurrentGrHighRDb() }
     };
     const auto config = makeGrBallisticsConfig();
 
     for (int b = 0; b < kNumBands; ++b)
     {
-        float v = std::isfinite (raw[b]) ? std::abs (raw[b]) : 0.0f;
-        displayGrBandDb_[b] = ball_[(size_t) b]->process (juce::jmax (0.0f, v), dtSec, config);
-        peakHold_[(size_t) b]->process (displayGrBandDb_[b], dtSec, config);
+        for (int ch = 0; ch < kNumChannels; ++ch)
+        {
+            float v = std::isfinite (raw[b][ch]) ? std::abs (raw[b][ch]) : 0.0f;
+            displayGrBandChanDb_[b][ch] = ball_[(size_t) b][(size_t) ch]->process (juce::jmax (0.0f, v), dtSec, config);
+            peakHold_[(size_t) b][(size_t) ch]->process (displayGrBandChanDb_[b][ch], dtSec, config);
+        }
     }
 
     const float rawCur = processor_.getCurrentGrDb();
@@ -81,9 +87,12 @@ void GainReductionMeter::resetPeakHolds() noexcept
 {
     for (int b = 0; b < kNumBands; ++b)
     {
-        displayGrBandDb_[b] = 0.0f;
-        ball_[(size_t) b]->reset (0.0f);
-        peakHold_[(size_t) b]->reset (0.0f);
+        for (int ch = 0; ch < kNumChannels; ++ch)
+        {
+            displayGrBandChanDb_[b][ch] = 0.0f;
+            ball_[(size_t) b][(size_t) ch]->reset (0.0f);
+            peakHold_[(size_t) b][(size_t) ch]->reset (0.0f);
+        }
     }
 
     displayCurrentGrDb_ = 0.0f;
@@ -133,11 +142,11 @@ void GainReductionMeter::paint (juce::Graphics& g)
     g.drawRoundedRectangle (meterArea.toFloat().reduced (0.5f), m.rMed, m.strokeThin);
 
     auto barArea = meterArea.reduced (7, 7);
-    const int gap = 2;
-    const int totalGaps = gap * (kNumBands - 1);
-    const int barW = juce::jmax (1, (barArea.getWidth() - totalGaps) / kNumBands);
+    const int bandGap = 2;
+    const int totalBandGaps = bandGap * (kNumBands - 1);
+    const int bandW = juce::jmax (1, (barArea.getWidth() - totalBandGaps) / kNumBands);
 
-    auto drawBar = [&] (juce::Rectangle<int> bar, float grDb, float peakGrDb, bool reserved)
+    auto drawSubBar = [&] (juce::Rectangle<int> bar, float grDb, float peakGrDb, bool reserved)
     {
         const auto slot = bar.toFloat();
         g.setColour (theme.panel.withAlpha (0.82f));
@@ -159,14 +168,14 @@ void GainReductionMeter::paint (juce::Graphics& g)
             {
                 const float y = peakSlot.getY() + normaliseGr (peakGrDb) * peakSlot.getHeight();
                 g.setColour (theme.warning.brighter (0.35f).withAlpha (0.78f));
-                g.drawLine (peakSlot.getX() + 2.0f, y, peakSlot.getRight() - 2.0f, y, m.strokeThin);
+                g.drawLine (peakSlot.getX() + 1.0f, y, peakSlot.getRight() - 1.0f, y, m.strokeThin);
             }
         }
         else
         {
             g.setColour (theme.textMuted.withAlpha (0.45f));
-            g.setFont (type.labelFont().withHeight (12.0f));
-            g.drawText ("–", slot, juce::Justification::centred, false);
+            g.setFont (type.labelFont().withHeight (10.0f));
+            g.drawText ("-", slot, juce::Justification::centred, false);
         }
 
         g.setColour (theme.grid.withAlpha (0.72f));
@@ -176,15 +185,22 @@ void GainReductionMeter::paint (juce::Graphics& g)
     for (int b = 0; b < kNumBands; ++b)
     {
         if (b > 0)
-            barArea.removeFromLeft (gap);
-        auto bar = barArea.removeFromLeft (barW);
+            barArea.removeFromLeft (bandGap);
+        auto band = barArea.removeFromLeft (bandW);
 
         g.setColour (theme.textMuted.withAlpha (0.85f));
-        g.setFont (type.labelFont().withHeight (9.0f));
-        g.drawText (kBandLabels[b], bar.removeFromTop (10), juce::Justification::centred, false);
+        g.setFont (type.labelFont().withHeight (8.0f));
+        g.drawText (kBandLabels[b], band.removeFromTop (9), juce::Justification::centred, false);
 
         const bool reserved = (b == 1);
-        drawBar (bar, displayGrBandDb_[b], peakHold_[(size_t) b]->getHeldDb(), reserved);
+        const int subGap = 1;
+        const int subW = juce::jmax (1, (band.getWidth() - subGap) / kNumChannels);
+        auto leftSub = band.removeFromLeft (subW);
+        band.removeFromLeft (subGap);
+        auto rightSub = band;
+
+        drawSubBar (leftSub, displayGrBandChanDb_[b][0], peakHold_[(size_t) b][0]->getHeldDb(), reserved);
+        drawSubBar (rightSub, displayGrBandChanDb_[b][1], peakHold_[(size_t) b][1]->getHeldDb(), reserved);
     }
 
     const auto readoutText = formatDbBare (displayCurrentGrDb_) + " / " + formatDbBare (displayMaxGrDb_);

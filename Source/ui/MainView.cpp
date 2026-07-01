@@ -1111,7 +1111,8 @@ void MainView::updateCompareButtons()
     const int active = processor_.getActiveCompareSlot();
     btnCompareA_.setToggleState (active == 0, juce::dontSendNotification);
     btnCompareB_.setToggleState (active == 1, juce::dontSendNotification);
-    btnCopyCompare_.setButtonText (active == 0 ? "A→B" : "B→A");
+    btnCopyCompare_.setButtonText (active == 0 ? juce::String::fromUTF8 (u8"A→B")
+                                              : juce::String::fromUTF8 (u8"B→A"));
 }
 
 void MainView::showPresetMessage (const juce::String& title, const juce::String& message)

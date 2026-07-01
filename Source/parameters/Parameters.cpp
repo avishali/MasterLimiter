@@ -301,5 +301,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         60.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
 
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_band_stereo_link_pct, 1),
+        "DEV Band Stereo Link",
+        NormalisableRange<float> (0.0f, 100.0f, 1.0f),
+        100.0f,
+        AudioParameterFloatAttributes().withLabel ("%")));
+
     return layout;
 }

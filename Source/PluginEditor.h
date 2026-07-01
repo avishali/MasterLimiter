@@ -43,8 +43,8 @@ private:
         std::function<void()> onClose;
 
     private:
-        juce::Label title_ { {}, "DEV CONTROLS — tuning (temporary)" };
-        juce::TextButton closeButton_ { "✕" };
+        juce::Label title_ { {}, "DEV CONTROLS - tuning (temporary)" };
+        juce::TextButton closeButton_ { juce::String::fromUTF8 (u8"✕") }; // close glyph (multiplication-x)
         DevControlsComponent devControls_;
     };
 

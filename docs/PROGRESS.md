@@ -2,6 +2,29 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-01 — Slice A2: Per-band stereo unlink + L/R-per-band GR meter
+
+**Status:** 🔶 Implemented locally; Release build + AU validation pass; audition pending.
+
+**Deliverables**
+- DSP: per-channel band detection/envelopes/Color/apply in **Stereo mode** when
+  `dev_band_stereo_link_pct` &lt; 100%; default 100% and M/S mode unchanged.
+- DEV param `dev_band_stereo_link_pct` + dock slider **Band Stereo Link**.
+- GR atomics extended to per-band × per-channel (`currentGrLowLDb_` …); history
+  traces unchanged (band max of L/R).
+- GR meter: LO/MID/HI groups each with L/R sub-bars within 88px footprint.
+
+**Gate**
+- [x] Release build clean, no new warnings.
+- [x] AU validates (`auval -v aufx MaLm Melc` PASS).
+- [ ] Latency unchanged vs Slice A (manual confirm).
+- [ ] Stereo Band Link 100% null vs Slice A ≤ −100 dBFS.
+- [ ] M/S mode bit-identical at all Band Link values.
+- [ ] Band Link &lt; 100%: hard-pan transient moves one channel's bar only.
+- [ ] avishali audition: per-band L/R read legible; Band Link sweep useful.
+
+---
+
 ## 2026-07-01 — Slice A: Per-band GR visualization (3-band-ready metering)
 
 **Status:** 🔶 Implemented locally; Release build + AU validation pass; audition pending.

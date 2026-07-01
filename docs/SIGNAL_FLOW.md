@@ -47,16 +47,16 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.8 — Input gain.** `input_gain_db` (0–24 dB), smoothed, multiplied in. **This is the knob that drives gain reduction** (the limiter threshold is fixed at 1.0 — see §3).
 
-**2.9 — 2-band split for detection.** `detectCrossover_` (`mdsp_dsp::LinearPhaseCrossover`, DEV-tunable cutoff/transition/atten, prepared at **4× OS rate**) splits each channel into **low/high**; per-sample band peaks (`peakLow`, `peakHigh`) are collected. Detection lookahead is reduced by the crossover group delay so gain-to-audio timing matches the IIR-era alignment.
+**2.9 — 2-band split for detection.** `detectCrossover_` (`mdsp_dsp::LinearPhaseCrossover`, DEV-tunable cutoff/transition/atten, prepared at **4× OS rate**) splits each channel into **low/high**. In **Stereo mode** with `dev_band_stereo_link_pct` &lt; 100%, per-channel band peaks are collected (`peakLowL/R`, `peakHighL/R`); at 100% (default) or in **M/S mode**, peaks are stereo-linked (`max(|L|,|R|)`) as before. Detection lookahead is reduced by the crossover group delay so gain-to-audio timing matches the IIR-era alignment.
 
-**2.10 — Per-band limiter envelopes.** `envelopeLow_.process()` and `envelopeHigh_.process()` turn the band peak streams into **gain coefficients** (`gainLow`, `gainHigh`, each ≤ 1.0). These are *gain computers only* — they output a gain curve, they don't touch audio yet. (Details: §4.3.)
+**2.10 — Per-band limiter envelopes.** `envelopeLow_` / `envelopeHigh_` (and `envelopeLowR_` / `envelopeHighR_` when per-band stereo unlink is active) turn band peak streams into **gain coefficients** (`gainLow`, `gainHigh`, each ≤ 1.0). In Stereo mode, `dev_band_stereo_link_pct` blends per-channel band gains toward `min(L,R)` — at 100% a single linked envelope runs (bit-identical to pre-A2). In **M/S mode** the band stage remains fully linked. These are *gain computers only* — they don't touch audio yet. (Details: §4.3.)
 
 **2.11 — Color / band-link blend.** Per sample, `bandLinkSmoothed_` = `mapBandColorToLink(color)` = `1 − color/100`:
   - **Color 0% → fully linked** (`bl = 1`): both bands take `min(gainLow, gainHigh)` → behaves like a transparent wideband limiter.
   - **Color 100% → independent** (`bl = 0`): each band keeps its own gain → multiband character (the loudness-cap-breaking, low-IMD mode).
-  The blend is applied both to the gains and to the audio reconstruction.
+  The blend is applied both to the gains and to the audio reconstruction. When per-band stereo unlink is active, Color blend runs **per channel** before apply.
 
-**2.12 — Lookahead delay + band gain application.** The audio is delayed by `lookahead_` using the active `dev_lookahead_band_ms` window (so the gain curve, computed from the *future* peak, lands *before* the peak arrives — that's the lookahead attack). `applyCrossover_` re-splits the delayed audio; the linked term uses **`xDelayed`** (phase-coherent with `low+high`) blended by `bl` against the band-weighted split → `bandLimitedBuf_`.
+**2.12 — Lookahead delay + band gain application.** The audio is delayed by `lookahead_` using the active `dev_lookahead_band_ms` window (so the gain curve, computed from the *future* peak, lands *before* the peak arrives — that's the lookahead attack). `applyCrossover_` re-splits the delayed audio; the linked term uses **`xDelayed`** (phase-coherent with `low+high`) blended by `bl` against the band-weighted split → `bandLimitedBuf_`. In Stereo unlink mode each channel applies its own band gains independently.
 
 **2.13 — Wideband limiter.** The band-limited signal is peak-detected again (or M/S-encoded if **Stereo Mode = M/S**) and run through `envelope_` (and `envelope_R_` when stereo unlinked). **Stereo Link / M/S Link** (%) blends L/R gain toward `min(L,R)`; at ≥99.95% it takes a single-envelope fast path. This is the safety stage that catches anything the per-band stage let through.
 
@@ -207,12 +207,12 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 |---|---|---|
 | Input peak / RMS / true-peak L/R | `inputPeakLDb_`, `inputRmsLDb_`, `inputTruePeakLDb_`, … | 2.3 |
 | Gain reduction (total / L / R / max) | `currentGrDb_`, `currentGrLDb_`, `currentGrRDb_`, `maxGrSinceResetDb_` | 2.14 |
-| Per-band gain reduction (Low / Mid / High / max) | `currentGrLowDb_`, `currentGrMidDb_`, `currentGrHighDb_`, `maxGrLowDb_`, `maxGrMidDb_`, `maxGrHighDb_` | 2.14 (post-Color `gLowOut` / `gHighOut`; Mid = 0 until 3-band slice) |
+| Per-band gain reduction (Low / Mid / High × L/R) | `currentGrLow{L,R}Db_`, `currentGrMid{L,R}Db_`, `currentGrHigh{L,R}Db_`, `maxGr*` holds | 2.14 (post-Color per-channel `gLowOut` / `gHighOut`; Mid = 0 until 3-band slice; history traces use band max of L/R) |
 | Clip reduction | `currentClipDb_`, `maxClipSinceResetDb_` | 2.7 |
 | Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, … | 2.18 |
 | Loudness / comp gain | `LoudnessAnalyzer` snapshots, `compGainDb` | 2.4 / 2.17 |
 
-The **GR meter** displays per-band reduction (LO / MID / HI columns) with a reserved empty MID slot until the 3-band DSP slice lands; the bottom readout remains total current / max. L/R channel GR remains available via atomics for numeric use but is no longer the primary GR meter view.
+The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R sub-bars** per band (MID reserved until 3-band slice); the bottom readout remains total current / max. `dev_band_stereo_link_pct` (DEV, default 100%) controls per-band stereo unlink in Stereo mode only.
 
 ---
 

@@ -18,6 +18,7 @@ class GainReductionMeter : public juce::Component
 {
 public:
     static constexpr int kNumBands = 3;
+    static constexpr int kNumChannels = 2;
 
     GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAudioProcessor& processor);
     ~GainReductionMeter() override;
@@ -35,9 +36,9 @@ private:
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
 
-    float displayGrBandDb_[kNumBands] { 0.0f, 0.0f, 0.0f };
-    std::array<std::unique_ptr<mdsp_ui::meters::MeterBallistics>, kNumBands> ball_;
-    std::array<std::unique_ptr<mdsp_ui::meters::PeakHoldModel>, kNumBands> peakHold_;
+    float displayGrBandChanDb_[kNumBands][kNumChannels] {};
+    std::array<std::array<std::unique_ptr<mdsp_ui::meters::MeterBallistics>, kNumChannels>, kNumBands> ball_;
+    std::array<std::array<std::unique_ptr<mdsp_ui::meters::PeakHoldModel>, kNumChannels>, kNumBands> peakHold_;
     float displayCurrentGrDb_ { 0.0f };
     float displayMaxGrDb_ { 0.0f };
 

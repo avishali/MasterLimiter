@@ -77,6 +77,10 @@ private:
     juce::Label lblHighScale_ {};
     juce::Slider sldHighScale_;
 
+    juce::GroupComponent groupBandStereo_ { "BandStereoGroup", "BAND - Stereo link" };
+    juce::Label lblBandStereoLink_ {};
+    juce::Slider sldBandStereoLink_;
+
     juce::GroupComponent groupManualRelease_ { "ManualReleaseGroup", "RELEASE - Manual" };
     juce::Label lblSustainRatio_ {};
     juce::Slider sldSustainRatio_;
@@ -96,6 +100,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSigmaDecay_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLowScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attHighScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandStereoLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;
     std::unique_ptr<juce::ParameterAttachment> attReleaseAuto_;
     std::unique_ptr<juce::ParameterAttachment> attAttackModeListener_;

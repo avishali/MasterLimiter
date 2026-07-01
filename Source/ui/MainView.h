@@ -156,7 +156,7 @@ private:
     juce::TextButton btnSavePreset_ { "Save" };
     juce::TextButton btnCompareA_ { "A" };
     juce::TextButton btnCompareB_ { "B" };
-    juce::TextButton btnCopyCompare_ { "A→B" };
+    juce::TextButton btnCopyCompare_ { juce::String::fromUTF8 (u8"A→B") };
 
     juce::Label lblGainDrive_ { {}, "Gain" };
     ValueSlider sldGainDrive_;
