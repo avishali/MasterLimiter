@@ -116,7 +116,7 @@ A small, fixed brickwall after downsampling. 64-sample lookahead + its own 4× t
 4× oversampled absolute-max estimate of inter-sample peak. Four instances (IN L/R, OUT L/R) feed the true-peak readouts; overs above 0 dBFS render red with a "+".
 
 ### 4.6 Loudness (`loudnessRef_`, `loudnessTrack_`, `LoudnessAnalyzer`)
-ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @38.13 Hz), `LUFS = −0.691 + 10·log10(meanSquare)`. Windows: Momentary 0.4 s, **Short-term 3 s** (used for gain-match), Integrated from reset. **Auto gain-match:** captures a learned reference LUFS, then nudges a smoothed (~1 s) compensation gain so processed LUFS tracks the reference (±12 dB) — lets you A/B at matched loudness.
+ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @38.13 Hz), `LUFS = −0.691 + 10·log10(meanSquare)`. Windows: Momentary 0.4 s, **Short-term 3 s** (used for gain-match), **Integrated** from reset with BS.1770-4 §4 gating (400 ms blocks, 100 ms hop, −70 LUFS absolute + −10 LU relative). **Auto gain-match:** captures a learned reference LUFS, then nudges a smoothed (~1 s) compensation gain so processed LUFS tracks the reference (±12 dB) — lets you A/B at matched loudness.
 
 ---
 
@@ -214,7 +214,7 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 | Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, `maxOutputPeak{L,R}Db_`, `maxOutputTruePeak{L,R}Db_`, … | 2.18 |
 | Loudness / comp gain | `LoudnessAnalyzer` snapshots, `compGainDb` | 2.4 / 2.17 |
 
-The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R sub-bars** per band (MID reserved until 3-band slice); the bottom readout remains total current / max. `dev_band_stereo_link_pct` (DEV, default 100%) controls per-band stereo unlink in Stereo mode only.
+The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R sub-bars** per band (MID reserved until 3-band slice). Scale: **0–12 dB** with **sqrt low-end expansion** (0–3 dB owns the bottom half of the bar); ticks at −0.5/−1/−2/−3/−6/−12 dB. Bottom readout is **total** GR (deepest band × wideband, current / max since reset); bars show per-band values. Ballistics: 1 ms attack, ~180 ms release. `dev_band_stereo_link_pct` (DEV, default 100%) controls per-band stereo unlink in Stereo mode only.
 
 **I/O meter readouts** (each channel): four labeled rows — **TP** (latched max true-peak), **SP** (current sample-peak, shared with bar via `DisplayLevelSmoother` at 60 dB/s release), **MAX** (latched max sample-peak, same value drives bar max line + number), **RMS** (300 ms power average from DSP tap, no second UI hold; bar uses `displaySmooth.rmsDb`). Floor unified at `kMeterFloorDb = −120`. Reset peaks clears TP/MAX holds via `resetInputTruePeakHolds()` / `resetOutputTruePeakHolds()`.
 

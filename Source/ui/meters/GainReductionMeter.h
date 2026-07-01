@@ -39,11 +39,14 @@ private:
     float displayGrBandChanDb_[kNumBands][kNumChannels] {};
     std::array<std::array<std::unique_ptr<mdsp_ui::meters::MeterBallistics>, kNumChannels>, kNumBands> ball_;
     std::array<std::array<std::unique_ptr<mdsp_ui::meters::PeakHoldModel>, kNumChannels>, kNumBands> peakHold_;
-    float displayCurrentGrDb_ { 0.0f };
     float displayMaxGrDb_ { 0.0f };
+    float readoutHeldGrDb_ { 0.0f };
+    float readoutCurrentGrDb_ { 0.0f };
+    int readoutHoldTicksLeft_ { 0 };
 
     juce::Rectangle<int> meterBounds_;
     juce::Rectangle<int> readoutBounds_;
+    juce::Rectangle<int> scaleGutterArea_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GainReductionMeter)
 };

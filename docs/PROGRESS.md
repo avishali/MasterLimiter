@@ -2,6 +2,58 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-02 — M4: Clip readout clarity + hold
+
+**Status:** ✅ Build + AU pass + installed; audition pending.
+
+**Deliverables**
+- Readout relabeled **CLIP GR** with tooltip clarifying clipper depth vs output overs.
+- Current-depth number uses `PeakHoldModel` (~850 ms hold, 12 dB/s decay) instead of 50 ms release.
+- Max side unchanged (processor latch); click still resets max.
+- Hygiene: comment on intentional bar max latch; FullRange anchor unification deferred.
+
+**Gate**
+- [x] Build clean; AU validates; installed; no DSP/param/latency change.
+- [ ] avishali audition: clip figure legible and unambiguous.
+
+---
+
+## 2026-07-02 — M3: Integrated LUFS gating (BS.1770-4 §4)
+
+**Status:** ✅ SDK tests + plugin build/AU pass + installed; SDK commit + submodule bump pending; audition pending.
+
+**Deliverables (SDK `mdsp_dsp::LoudnessAnalyzer`)**
+- Integrated loudness now uses 400 ms gating blocks with 100 ms hop (75% overlap).
+- Absolute gate at −70 LUFS; relative gate −10 LU below abs-gated mean.
+- Preallocated ring (cap 72000 blocks ≈ 2 h); allocation-free after `prepare()`.
+- Momentary (0.4 s) and Short-term (3 s) paths unchanged.
+- New unit test `Test_LoudnessIntegratedGating.cpp`.
+
+**Gate**
+- [x] SDK tests pass (`mdsp_dsp_tests "Loudness"`).
+- [ ] SDK committed/pushed; `third_party/melechdsp-hq` submodule bumped.
+- [x] Plugin build clean; AU validates; installed.
+- [ ] avishali audition: "I" agrees with youlean/Insight within ~0.1–0.3 LU on a real master.
+
+---
+
+## 2026-07-02 — M2: GR meter mastering scale
+
+**Status:** ✅ Build + AU pass + installed; audition pending.
+
+**Deliverables**
+- Sqrt low-end expansion on 0–12 dB scale (0–3 dB owns bottom half of bar).
+- Scale ticks at −0.5/−1/−2/−3/−6/−12 dB; fill uses `fillRect` (no corner-radius dead zone).
+- Bar ballistics release ~180 ms; readout labeled **total** (band×wide vs per-band bars).
+
+**Gate**
+- [x] Build clean; AU validates; installed.
+- [ ] ~0.5–1 dB GR clearly visible on bars.
+- [ ] Total readout values unchanged; "total" label present.
+- [ ] avishali audition: 0.1 dB mastering range readable.
+
+---
+
 ## 2026-07-02 — M1: I/O meter estimator unification
 
 **Status:** ✅ Build + AU pass + installed; audition pending.

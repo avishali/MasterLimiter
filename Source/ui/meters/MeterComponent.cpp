@@ -20,6 +20,9 @@ struct LevelScaleAnchor
     float norm;
 };
 
+// Ozone-style FullRange tick anchors for the painted dB scale. Bar peak mapping uses the
+// same table via dbToNormForScale(); shared MeterRenderStateProvider::normaliseDb uses a
+// different perceptual anchor set — unification deferred to avoid scale/bar regression.
 constexpr LevelScaleAnchor kOzoneFullRangeAnchors[] {
     { -120.0f, 0.00f },
     { -50.0f,  0.10f },

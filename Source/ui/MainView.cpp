@@ -126,7 +126,7 @@ juce::String formatPositiveBare (float v)
 
 juce::String formatClipReadout (float currentDb, float maxDb)
 {
-    return "Clip " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
+    return "CLIP GR " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
 }
 
 juce::String scaleLabel (MeterGroupComponent::ScaleMode mode)
@@ -808,7 +808,9 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnClipperActive_.setTooltip ("Toggle the clipper stage on/off.");
     sldClipperDrive_.setTooltip ("Sets the clipper threshold from -12 to 0 dB.");
     btnClipperMode_.setTooltip ("Toggles the clipper curve between Hard and Soft.");
-    lblClipperReadout_.setTooltip ("Shows current and maximum clip reduction in dB; click to reset max.");
+    lblClipperReadout_.setTooltip ("Clipper gain-reduction depth in dB (current / max since reset). "
+                                   "Not an output-over indicator — output is limited by the ceiling stage. "
+                                   "Click to reset max.");
     btnGainCeilingLink_.setTooltip ("When enabled, Gain and Ceiling move inversely.");
     btnGainMatchAutoTrack_.setTooltip ("Continuously matches limiter output loudness to the learned reference.");
     btnLearnInputGain_.setTooltip ("Click to learn a 3 s LUFS reference. Right-click to clear it.");
@@ -1573,7 +1575,6 @@ void MainView::resized()
     constexpr int kGrMeterW = 198;
 
     headerArea_ = { 0, 0, kCanvasW, 52 };
-    maximizerPanelArea_ = { 16, 64, 736, 500 };
     ioPanelArea_ = { 768 + kRightClusterShift, 64, 316, 500 };
     footerArea_ = {};
 
@@ -1631,9 +1632,10 @@ void MainView::resized()
     lblLearnInputLufs_.setBounds (396, 528, 96, 30);
 
     meterGr_.setBounds (kGrMeterX, 104, kGrMeterW, 354);
+    maximizerPanelArea_ = { 16, 64, meterGr_.getRight() + 12 - 16, 500 };
 
-    meterIn_.setBounds (790 + kRightClusterShift, 112, 116, 358);
-    meterOut_.setBounds (948 + kRightClusterShift, 112, 116, 358);
+    meterIn_.setBounds (790 + kRightClusterShift, 112, 118, 358);
+    meterOut_.setBounds (948 + kRightClusterShift, 112, 118, 358);
 
     lblIoInputTrim_.setBounds (0, 0, 0, 0);
     sldIoInputTrimL_.setBounds (800 + kRightClusterShift, 204, 42, 252);

@@ -147,6 +147,8 @@ MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
         provider1_.setScaleMode (scaleMode_);
         provider0_.setDisplayMode (DisplayMode::Rms);
         provider1_.setDisplayMode (DisplayMode::Rms);
+        // holdEnabled=true latches the bar max marker until Reset Peaks; the provider's
+        // 1500 ms / 12 dB·s decay branch only runs when hold is disabled.
         provider0_.setHoldEnabled (true);
         provider1_.setHoldEnabled (true);
         pushLevelRenderStates (kMeterFloorDb, kMeterFloorDb);

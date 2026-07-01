@@ -17,19 +17,21 @@ PROMPTS/SLICE_M2_GR_MASTERING_SCALE_CLOSE.md  (new)
 ```
 **Non-goals / STOP:** no processor/atomic/DSP change; no change to the GR *values*; no meter-footprint/layout change (that's done); don't touch the I/O meters.
 
-## Changes (`GainReductionMeter.cpp`)
-1. **Full-scale → 6 dB** with a **low-end-expanded (sqrt) mapping.** Replace `kMaxGrDb = 12.0f` with `6.0f`, and `normaliseGr`:
+## Changes (`GainReductionMeter.cpp`) — build on the current WIP
+> The working tree already has: `kMaxGrDb = 12`, `grDbToY`, `kGrScaleMarksDb {1,3,6,12}`, `makeTopDownFill` returning empty (dead-zone threshold already gone), and `tickGrReadoutSmoother`. **Keep all of that.** M2 adds the low-end expansion on top.
+
+1. **Keep full-scale = 12 dB (avishali: "extend to −12"), but expand the low end with a sqrt mapping.** Change `normaliseGr` from linear to sqrt:
    ```cpp
    float normaliseGr (float grDb) noexcept
    {
-       const float x = juce::jlimit (0.0f, 1.0f, grDb / kMaxGrDb);
-       return std::sqrt (x);   // dedicate most of the bar to 0..3 dB
+       const float x = juce::jlimit (0.0f, 1.0f, grDb / kMaxGrDb);   // kMaxGrDb = 12
+       return std::sqrt (x);   // dedicate the bottom half of the bar to 0..3 dB
    }
    ```
-   Result: 0.5 dB → 29% (~87px), 1 dB → 41%, 3 dB → 71%, 6 dB → full. The 0–3 dB region now owns ~70% of the bar. (Both the fill and the peak-hold tick route through `normaliseGr`/`grDbToY`, so they stay consistent automatically.)
-2. **Scale ticks:** update `kGrScaleMarksDb` to a mastering set: **`{0.5, 1, 2, 3, 6}`** dB (they map through `normaliseGr`, so they land at the sqrt positions).
-3. **Drop the dead zone:** the `if (fill.getHeight() > 0.5f)` guard → `> 0.0f` (or remove; `makeTopDownFill` already returns empty ≤ 0). Consider `fillRect` instead of `fillRoundedRectangle` for the *fill* so sub-corner-radius slivers render as a visible line rather than being eaten by the corner radius.
-4. **Release for readability:** `makeGrBallisticsConfig` release `50 → ~180 ms` (keep attack 1 ms, hold 1000 ms) so small transient GR lingers long enough to read instead of flickering.
+   Result at `kMaxGrDb=12`: 0.5 dB → 20%, 1 dB → 29%, 2 dB → 41%, **3 dB → 50%**, 6 dB → 71%, 12 dB → full. The 0–3 dB mastering range now owns the bottom half of the bar while the scale still reaches −12. (Fill + peak-hold tick both route through `normaliseGr`/`grDbToY`, so they stay consistent automatically.)
+2. **Scale ticks:** extend `kGrScaleMarksDb` to include the low end: **`{0.5, 1, 2, 3, 6, 12}`** dB (they map through `normaliseGr`, landing at the sqrt positions; the low marks are readable because the sqrt expands that region). Keep the 12 top mark.
+3. **Fill rendering:** the dead-zone threshold is already removed (`makeTopDownFill` returns empty ≤ 0). If small slivers still get eaten by the corner radius, use `fillRect` for the *fill* body so a thin line still renders.
+4. **Release for readability:** `makeGrBallisticsConfig` release `50 → ~180 ms` (keep attack 1 ms, hold 1000 ms) so small transient GR lingers long enough to read.
 5. **Label the total readout:** the bottom numeric is **total** GR (deepest band × wideband) while the bars are **per-band** — add a small "total" caption (or tooltip) so it doesn't read as inconsistent with the bars.
 
 ## Build, verify, close

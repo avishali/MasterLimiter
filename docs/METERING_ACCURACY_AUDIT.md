@@ -41,26 +41,26 @@ Fix philosophy (mastering meter):
 | 2 | **Bar peak ≠ SP number** (bar 60 dB/s; number frozen 26 frames) | `MeterGroupComponent.cpp:120-137` vs `56-80` | 2–20 dB mismatch on transients | drive bar peak + SP number from **one** value | **M1 ✅** |
 | 3 | **Bar MAX line ≠ MAX number** (line from smoothed peak; number from raw max) | `MeterRenderStateProvider.cpp:121-122` vs `PluginProcessor.cpp:1072-1075` | dB mismatch on short transients | bar MAX line = `dbToNormForScale(getMax*PeakLDb())` | **M1 ✅** |
 | 4 | **RMS number double-smoothed** (300 ms power avg → 2nd 0.87 s hold) | `MeterGroupComponent.cpp:316-317,335-336` | RMS reads high + lags on decays; bar≠number | RMS number = **direct** `rmsDbFromMeanSquare(ms)` | **M1 ✅** |
-| 5 | **GR bars invisible < 2 dB** — linear 0–12 dB scale + 0.5px threshold + 50 ms flicker | `GainReductionMeter.cpp:14,32-35,214,22-30` | the reported bug; 0.1–3 dB range unreadable | 0–6 dB **sqrt / low-end-expanded** scale; drop threshold; release ~150–250 ms | M2 |
-| 6 | **Integrated LUFS not BS.1770-gated** (no −70 abs / −10 rel) | `LoudnessAnalyzer.cpp:105-107,145-151` | **I** reads systematically low, often > 1 dB | add absolute + relative gating | M3 |
+| 5 | **GR bars invisible < 2 dB** — linear 0–12 dB scale + 0.5px threshold + 50 ms flicker | `GainReductionMeter.cpp:14,32-35,214,22-30` | the reported bug; 0.1–3 dB range unreadable | 0–12 dB **sqrt / low-end-expanded** scale; drop threshold; release ~180 ms | **M2 ✅** |
+| 6 | **Integrated LUFS not BS.1770-gated** (no −70 abs / −10 rel) | `LoudnessAnalyzer.cpp` (integrated path) | **I** reads systematically low, often > 1 dB | add absolute + relative gating | **M3 ✅** |
 
 ### Tier 2 — real, smaller
 
 | # | Finding | Where | Fix | Slice |
 |---|---|---|---|---|
-| 7 | **"Clip x.x/y.y" is clipper GR-depth, not output overs**; current-depth decays 50 ms, no hold (`clipHoldMs` ignored by `MeterBallistics`) | `PluginProcessor.cpp:1176-1191`, `ClipBallistics.cpp:11-26`, `MainView.cpp:127-129` | relabel/clarify; add hold to the current-depth number | M4 |
+| 7 | **"Clip x.x/y.y" is clipper GR-depth, not output overs**; current-depth decays 50 ms, no hold (`MeterBallistics` ignored `clipHoldMs`) | `PluginProcessor.cpp:1176-1191`, `ClipBallistics.cpp`, `MainView.cpp` | relabel "CLIP GR" + tooltip; peak-hold readout ~850 ms | **M4 ✅** |
 | 8 | **Inconsistent floors −100/−120/−200** → real −110 dBFS prints "-inf" | `PluginProcessor.h:364-384`, `MeterGroupComponent.cpp:16-18,52`, conversions at −120 | unify one `kMeterFloorDb = -120` for conversion, init, reset, "-inf" test | **M1 ✅** |
-| 9 | GR numeric readout is **total (band×wide)**; bars are **per-band** — looks inconsistent | `GainReductionMeter.cpp` readout | label it "total" (or add a total bar) | M2 |
-| 10 | Dead peak-hold-decay path (`holdEnabled_==true` bypasses the 1500 ms/12 dB·s decay → latches); FullRange uses a **local** anchor table not the shared `normaliseDb` | `MeterRenderStateProvider.cpp:129-137`, `MeterComponent.cpp:23-34,205-206` | reconcile intent (latch is fine, delete/annotate dead code); unify FullRange mapping on shared lib | M4 |
+| 9 | GR numeric readout is **total (band×wide)**; bars are **per-band** — looks inconsistent | `GainReductionMeter.cpp` readout | label it "total" (or add a total bar) | **M2 ✅** |
+| 10 | Dead peak-hold-decay path (`holdEnabled_==true` bypasses the 1500 ms/12 dB·s decay → latches); FullRange uses a **local** anchor table not the shared `normaliseDb` | `MeterRenderStateProvider.cpp:129-137`, `MeterComponent.cpp:23-34,205-206` | annotate latch intent; FullRange unification deferred | **M4 ✅** (annotate) |
 
 ---
 
 ## 3. Slice plan
 
 - **M1 — Estimator unification** ✅ (product): SP number = bar peak (`DisplayLevelSmoother`); bar MAX line = `getMax*PeakLDb`; RMS number = direct DSP tap; floor −120. → findings 1–4, 8.
-- **M2 — GR mastering scale** (product, `GainReductionMeter`): 0–6 dB sqrt scale, drop 0.5px threshold, release ~150–250 ms, "total" label. → 5, 9. **Do first** (live complaint).
-- **M3 — Integrated LUFS gating** (SDK `LoudnessAnalyzer`): BS.1770 absolute + relative gating. → 6.
-- **M4 — Clip readout clarity + hold + hygiene** (product): clarify clipper-depth label + hold; delete/annotate dead peak-hold-decay; unify FullRange mapping. → 7, 10.
+- **M2 — GR mastering scale** ✅ (product, `GainReductionMeter`): 0–12 dB sqrt low-end expansion, no fill dead-zone, release ~180 ms, "total" readout label. → 5, 9.
+- **M3 — Integrated LUFS gating** ✅ (SDK `LoudnessAnalyzer`): BS.1770-4 §4 absolute (−70 LUFS) + relative (−10 LU) gating on 400 ms blocks / 100 ms hop. → 6.
+- **M4 — Clip readout clarity + hold + hygiene** ✅ (product): "CLIP GR" label/tooltip; current depth peak-hold ~850 ms; max latch unchanged; annotate bar max latch + defer FullRange unification. → 7, 10.
 
 Most findings are in the **shared `mdsp_ui`** meter helpers or apply family-wide — fixes there benefit every MelechDSP product.
 
