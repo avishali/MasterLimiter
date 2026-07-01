@@ -18,6 +18,7 @@ const juce::Colour accent       = juce::Colour::fromRGB (0x33, 0xd2, 0xbe);
 const juce::Colour accentBright = juce::Colour::fromRGB (0x5b, 0xe7, 0xd6);
 const juce::Colour warning      = juce::Colour::fromRGB (0xe8, 0x70, 0x4f);
 const juce::Colour clip         = juce::Colour::fromRGB (0xff, 0x5a, 0x4f);
+const juce::Colour bandHigh     = juce::Colour::fromRGB (0x9b, 0x8c, 0xff);
 } // namespace palette
 
 constexpr float kLevelTopDb = 0.0f;
@@ -217,6 +218,9 @@ HistoryGraphComponent::PixelFrame HistoryGraphComponent::frameForPixel (int x, i
         result.outDb = std::max (result.outDb, frame.outDb);
         result.inDb = std::max (result.inDb, frame.inDb);
         result.clipDb = std::max (result.clipDb, frame.clipDb);
+        result.grLowDb = std::max (result.grLowDb, frame.grLowDb);
+        result.grMidDb = std::max (result.grMidDb, frame.grMidDb);
+        result.grHighDb = std::max (result.grHighDb, frame.grHighDb);
         result.valid = true;
     }
 
@@ -341,11 +345,16 @@ void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float
 
     juce::Path outputFill;
     juce::Path grFill;
-    juce::Path grStroke;
+    juce::Path grLowStroke;
+    juce::Path grMidStroke;
+    juce::Path grHighStroke;
     juce::Path inputLine;
     juce::Path clipOverlay;
     bool hasOutput = false;
     bool hasGr = false;
+    bool hasGrLow = false;
+    bool hasGrMid = false;
+    bool hasGrHigh = false;
     bool hasInput = false;
     bool hasClip = false;
 
@@ -372,11 +381,42 @@ void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float
         if (! hasGr)
         {
             grFill.lineTo (px, graph.getY());
-            grStroke.startNewSubPath (px, grDepthY);
             hasGr = true;
         }
         grFill.lineTo (px, grDepthY);
-        grStroke.lineTo (px, grDepthY);
+
+        const float grLowY = grY (frame.grLowDb, graph);
+        if (! hasGrLow)
+        {
+            grLowStroke.startNewSubPath (px, grLowY);
+            hasGrLow = true;
+        }
+        else
+        {
+            grLowStroke.lineTo (px, grLowY);
+        }
+
+        const float grMidY = grY (frame.grMidDb, graph);
+        if (! hasGrMid)
+        {
+            grMidStroke.startNewSubPath (px, grMidY);
+            hasGrMid = true;
+        }
+        else
+        {
+            grMidStroke.lineTo (px, grMidY);
+        }
+
+        const float grHighY = grY (frame.grHighDb, graph);
+        if (! hasGrHigh)
+        {
+            grHighStroke.startNewSubPath (px, grHighY);
+            hasGrHigh = true;
+        }
+        else
+        {
+            grHighStroke.lineTo (px, grHighY);
+        }
 
         const float inY = levelY (frame.inDb, graph);
         if (! hasInput)
@@ -410,12 +450,28 @@ void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float
     {
         grFill.lineTo (graph.getRight(), graph.getY());
         grFill.closeSubPath();
-        g.setColour (palette::warning.withAlpha (0.42f));
+        g.setColour (palette::warning.withAlpha (0.18f));
         g.fillPath (grFill);
+    }
+
+    const float bandStroke = 1.4f;
+
+    if (hasGrLow)
+    {
         g.setColour (palette::warning.withAlpha (0.95f));
-        g.strokePath (grStroke, juce::PathStrokeType (1.5f));
-        g.setColour (palette::warning.brighter (0.25f).withAlpha (0.55f));
-        g.strokePath (grStroke, juce::PathStrokeType (1.0f));
+        g.strokePath (grLowStroke, juce::PathStrokeType (bandStroke));
+    }
+
+    if (hasGrMid)
+    {
+        g.setColour (palette::accent.withAlpha (0.95f));
+        g.strokePath (grMidStroke, juce::PathStrokeType (bandStroke));
+    }
+
+    if (hasGrHigh)
+    {
+        g.setColour (palette::bandHigh.withAlpha (0.95f));
+        g.strokePath (grHighStroke, juce::PathStrokeType (bandStroke));
     }
 
     if (hasInput)
@@ -428,6 +484,30 @@ void HistoryGraphComponent::drawTraces (juce::Graphics& g, juce::Rectangle<float
     {
         g.setColour (palette::clip.withAlpha (0.78f));
         g.fillPath (clipOverlay);
+    }
+
+    if (hasGrLow || hasGrMid || hasGrHigh)
+    {
+        const auto& type = ui_.type();
+        g.setFont (type.labelFont().withHeight (9.0f));
+
+        struct LegendEntry { juce::Colour colour; const char* label; };
+        const LegendEntry entries[] = {
+            { palette::warning, "LO" },
+            { palette::accent, "MID" },
+            { palette::bandHigh, "HI" }
+        };
+
+        auto legend = juce::Rectangle<float> (graph.getRight() - 52.0f, graph.getY() + 4.0f, 48.0f, 36.0f);
+        for (const auto& entry : entries)
+        {
+            auto row = legend.removeFromTop (12.0f);
+            g.setColour (entry.colour);
+            g.fillRoundedRectangle (row.removeFromLeft (10.0f).reduced (0.0f, 2.0f), 2.0f);
+            row.removeFromLeft (4.0f);
+            g.setColour (palette::textMuted);
+            g.drawText (entry.label, row, juce::Justification::centredLeft);
+        }
     }
 
     if (! hasOutput && ! hasGr && ! hasInput)

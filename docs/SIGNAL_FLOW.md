@@ -201,15 +201,18 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 ---
 
 ## 7. Metering taps (what's measured where — read this before the history graph)
-Most metering is **instantaneous scalar atomics** written by the audio thread and read by the UI at **30 Hz** (`PluginEditor` timer → `MainView::syncMetersFromProcessor`). The history graph additionally drains a lock-free SPSC ring of ~0.5 ms frames (`grDb`, `outDb`, `inDb`, `clipDb`) captured from per-sample GR/clip envelopes and sample values.
+Most metering is **instantaneous scalar atomics** written by the audio thread and read by the UI at **30 Hz** (`PluginEditor` timer → `MainView::syncMetersFromProcessor`). The history graph additionally drains a lock-free SPSC ring of ~0.5 ms frames (`grDb`, `outDb`, `inDb`, `clipDb`, `grLowDb`, `grMidDb`, `grHighDb`) captured from per-sample GR/clip envelopes and sample values.
 
 | Quantity | Atomic(s) | Tapped at step |
 |---|---|---|
 | Input peak / RMS / true-peak L/R | `inputPeakLDb_`, `inputRmsLDb_`, `inputTruePeakLDb_`, … | 2.3 |
-| Gain reduction (wide / L / R / max) | `currentGrDb_`, `currentGrLDb_`, `currentGrRDb_`, `maxGrSinceResetDb_` | 2.14 |
+| Gain reduction (total / L / R / max) | `currentGrDb_`, `currentGrLDb_`, `currentGrRDb_`, `maxGrSinceResetDb_` | 2.14 |
+| Per-band gain reduction (Low / Mid / High / max) | `currentGrLowDb_`, `currentGrMidDb_`, `currentGrHighDb_`, `maxGrLowDb_`, `maxGrMidDb_`, `maxGrHighDb_` | 2.14 (post-Color `gLowOut` / `gHighOut`; Mid = 0 until 3-band slice) |
 | Clip reduction | `currentClipDb_`, `maxClipSinceResetDb_` | 2.7 |
 | Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, … | 2.18 |
 | Loudness / comp gain | `LoudnessAnalyzer` snapshots, `compGainDb` | 2.4 / 2.17 |
+
+The **GR meter** displays per-band reduction (LO / MID / HI columns) with a reserved empty MID slot until the 3-band DSP slice lands; the bottom readout remains total current / max. L/R channel GR remains available via atomics for numeric use but is no longer the primary GR meter view.
 
 ---
 

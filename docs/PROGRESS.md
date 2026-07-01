@@ -2,6 +2,29 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-01 — Slice A: Per-band GR visualization (3-band-ready metering)
+
+**Status:** 🔶 Implemented locally; Release build + AU validation pass; audition pending.
+
+**Deliverables**
+- Processor: per-band GR atomics (`currentGrLowDb_` / `Mid` / `High` + max
+  holds) tapped from post-Color `gLowOut` / `gHighOut` minima; `HistoryFrame`
+  extended with `grLowDb` / `grMidDb` / `grHighDb` (Mid = 0 until Slice B).
+- UI: GR meter refactored from L/R channels to LO / MID / HI columns (MID
+  reserved slot); History Graph adds band GR traces + legend; total GR readout
+  unchanged.
+- Docs: `SIGNAL_FLOW.md` §7 updated; `PROMPTS/SLICE_BAND_GR_VIZ_CLOSE.md`.
+
+**Gate**
+- [x] Release build clean, no new warnings.
+- [x] AU validates (`auval -v aufx MaLm Melc` PASS).
+- [ ] Parameter count unchanged; latency unchanged (manual confirm vs prior build).
+- [ ] LO/HI bars move independently at Color 100 %, together at Color 0 %.
+- [ ] History graph band traces + legend visible; MID flat at 0.
+- [ ] avishali audition: per-band read legible; L/R → per-band trade acceptable.
+
+---
+
 ## 2026-06-22 — Slice F-2b: Linear-phase crossover integration
 
 **Status:** ✅ Implemented locally; Release build clean (Standalone/AU/VST3);

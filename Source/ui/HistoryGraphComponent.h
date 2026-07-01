@@ -28,6 +28,9 @@ private:
         float outDb = -120.0f;
         float inDb = -120.0f;
         float clipDb = 0.0f;
+        float grLowDb = 0.0f;
+        float grMidDb = 0.0f;
+        float grHighDb = 0.0f;
         bool valid = false;
     };
 

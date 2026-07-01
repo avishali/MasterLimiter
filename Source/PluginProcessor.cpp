@@ -421,6 +421,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     historyFrameSamples_ = juce::jmax (1, static_cast<int> (std::llround (sampleRate * 0.0005)));
     historySampleCounter_ = 0;
     frameMaxGrDb_ = 0.0f;
+    frameMaxGrLowDb_ = 0.0f;
+    frameMaxGrMidDb_ = 0.0f;
+    frameMaxGrHighDb_ = 0.0f;
     frameMaxOutDb_ = -120.0f;
     frameMaxInDb_ = -120.0f;
     frameMaxClipDb_ = 0.0f;
@@ -1429,11 +1432,17 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         auto* gainWideR = fastPath ? gainWideL : gainBufR_.getWritePointer (0);
         float minTotalL = 1.0f;
         float minTotalR = 1.0f;
+        float minLow = 1.0f;
+        float minMid = 1.0f;
+        float minHigh = 1.0f;
 
         if (! useMsMode)
         {
             for (int i = 0; i < osN; ++i)
             {
+                minLow = std::min (minLow, gLowOut[i]);
+                minHigh = std::min (minHigh, gHighOut[i]);
+
                 const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
                 const int hostIdx = juce::jmin (n - 1, i * n / osN);
                 for (int ch = 0; ch < nch; ++ch)
@@ -1460,6 +1469,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             auto* outR = osBlock.getChannelPointer (1);
             for (int i = 0; i < osN; ++i)
             {
+                minLow = std::min (minLow, gLowOut[i]);
+                minHigh = std::min (minHigh, gHighOut[i]);
+
                 const float delayedL = lookaheadWide_.pushPop (0, bandLimitedL[i]);
                 const float delayedR = lookaheadWide_.pushPop (1, bandLimitedR[i]);
                 const float mid = 0.5f * (delayedL + delayedR) * gainWideL[i];
@@ -1495,9 +1507,26 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
         const float grL = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minTotalL, -120.0f));
         const float grR = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minTotalR, -120.0f));
+        const float grLow = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minLow, -120.0f));
+        const float grMid = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minMid, -120.0f));
+        const float grHigh = juce::jmax (0.0f, -juce::Decibels::gainToDecibels (minHigh, -120.0f));
         currentGrLDb_.store (grL, std::memory_order_relaxed);
         currentGrRDb_.store (grR, std::memory_order_relaxed);
         currentGrDb_.store (std::max (grL, grR), std::memory_order_relaxed);
+        currentGrLowDb_.store (grLow, std::memory_order_relaxed);
+        currentGrMidDb_.store (grMid, std::memory_order_relaxed);
+        currentGrHighDb_.store (grHigh, std::memory_order_relaxed);
+
+        if (grLow > maxGrLowDb_.load (std::memory_order_relaxed))
+            maxGrLowDb_.store (grLow, std::memory_order_relaxed);
+        if (grMid > maxGrMidDb_.load (std::memory_order_relaxed))
+            maxGrMidDb_.store (grMid, std::memory_order_relaxed);
+        if (grHigh > maxGrHighDb_.load (std::memory_order_relaxed))
+            maxGrHighDb_.store (grHigh, std::memory_order_relaxed);
+
+        frameMaxGrLowDb_ = std::max (frameMaxGrLowDb_, grLow);
+        frameMaxGrMidDb_ = std::max (frameMaxGrMidDb_, grMid);
+        frameMaxGrHighDb_ = std::max (frameMaxGrHighDb_, grHigh);
 
         const float frameMaxGr = std::max (currentGrLDb_.load (std::memory_order_relaxed),
                                            currentGrRDb_.load (std::memory_order_relaxed));
@@ -1526,6 +1555,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         currentGrDb_.store (0.0f, std::memory_order_relaxed);
         currentGrLDb_.store (0.0f, std::memory_order_relaxed);
         currentGrRDb_.store (0.0f, std::memory_order_relaxed);
+        currentGrLowDb_.store (0.0f, std::memory_order_relaxed);
+        currentGrMidDb_.store (0.0f, std::memory_order_relaxed);
+        currentGrHighDb_.store (0.0f, std::memory_order_relaxed);
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
 
         for (int ch = 0; ch < nch; ++ch)
@@ -1601,10 +1633,16 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             if (++historySampleCounter_ >= historyFrameSamples_)
             {
                 const uint32_t w = historyWriteIdx_.load (std::memory_order_relaxed);
-                historyRing_[w & static_cast<uint32_t> (kHistoryRingSize - 1)] = { frameMaxGrDb_, frameMaxOutDb_, frameMaxInDb_, frameMaxClipDb_ };
+                historyRing_[w & static_cast<uint32_t> (kHistoryRingSize - 1)] = {
+                    frameMaxGrDb_, frameMaxOutDb_, frameMaxInDb_, frameMaxClipDb_,
+                    frameMaxGrLowDb_, frameMaxGrMidDb_, frameMaxGrHighDb_
+                };
                 historyWriteIdx_.store (w + 1, std::memory_order_release);
                 historySampleCounter_ = 0;
                 frameMaxGrDb_ = 0.0f;
+                frameMaxGrLowDb_ = 0.0f;
+                frameMaxGrMidDb_ = 0.0f;
+                frameMaxGrHighDb_ = 0.0f;
                 frameMaxOutDb_ = -120.0f;
                 frameMaxInDb_ = -120.0f;
                 frameMaxClipDb_ = 0.0f;

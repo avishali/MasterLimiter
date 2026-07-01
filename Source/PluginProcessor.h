@@ -72,6 +72,9 @@ public:
         float outDb = -120.0f;
         float inDb = -120.0f;
         float clipDb = 0.0f;
+        float grLowDb = 0.0f;
+        float grMidDb = 0.0f;
+        float grHighDb = 0.0f;
     };
 
     int readHistorySince (uint32_t& inOutCursor, HistoryFrame* out, int maxOut) const noexcept;
@@ -84,11 +87,23 @@ public:
     float getCurrentGrDb() const noexcept { return currentGrDb_.load (std::memory_order_relaxed); }
     float getCurrentGrLDb() const noexcept { return currentGrLDb_.load (std::memory_order_relaxed); }
     float getCurrentGrRDb() const noexcept { return currentGrRDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrLowDb() const noexcept { return currentGrLowDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrMidDb() const noexcept { return currentGrMidDb_.load (std::memory_order_relaxed); }
+    float getCurrentGrHighDb() const noexcept { return currentGrHighDb_.load (std::memory_order_relaxed); }
     float getCurrentClipDb() const noexcept { return currentClipDb_.load (std::memory_order_relaxed); }
     float getMaxGrSinceResetDb() const noexcept { return maxGrSinceResetDb_.load (std::memory_order_relaxed); }
+    float getMaxGrLowDb() const noexcept { return maxGrLowDb_.load (std::memory_order_relaxed); }
+    float getMaxGrMidDb() const noexcept { return maxGrMidDb_.load (std::memory_order_relaxed); }
+    float getMaxGrHighDb() const noexcept { return maxGrHighDb_.load (std::memory_order_relaxed); }
     float getMaxClipSinceResetDb() const noexcept { return maxClipSinceResetDb_.load (std::memory_order_relaxed); }
 
-    void resetMaxGr() noexcept { maxGrSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
+    void resetMaxGr() noexcept
+    {
+        maxGrSinceResetDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrLowDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrMidDb_.store (0.0f, std::memory_order_relaxed);
+        maxGrHighDb_.store (0.0f, std::memory_order_relaxed);
+    }
     void resetMaxClip() noexcept { maxClipSinceResetDb_.store (0.0f, std::memory_order_relaxed); }
 
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
@@ -289,8 +304,14 @@ private:
     std::atomic<float> currentGrDb_ { 0.0f };
     std::atomic<float> currentGrLDb_ { 0.0f };
     std::atomic<float> currentGrRDb_ { 0.0f };
+    std::atomic<float> currentGrLowDb_ { 0.0f };
+    std::atomic<float> currentGrMidDb_ { 0.0f };
+    std::atomic<float> currentGrHighDb_ { 0.0f };
     std::atomic<float> currentClipDb_ { 0.0f };
     std::atomic<float> maxGrSinceResetDb_ { 0.0f };
+    std::atomic<float> maxGrLowDb_ { 0.0f };
+    std::atomic<float> maxGrMidDb_ { 0.0f };
+    std::atomic<float> maxGrHighDb_ { 0.0f };
     std::atomic<float> maxClipSinceResetDb_ { 0.0f };
 
     std::atomic<float> inputPeakLDb_ { -100.0f };
@@ -323,6 +344,9 @@ private:
     int historyFrameSamples_ = 0;
     int historySampleCounter_ = 0;
     float frameMaxGrDb_ = 0.0f;
+    float frameMaxGrLowDb_ = 0.0f;
+    float frameMaxGrMidDb_ = 0.0f;
+    float frameMaxGrHighDb_ = 0.0f;
     float frameMaxOutDb_ = -120.0f;
     float frameMaxInDb_ = -120.0f;
     float frameMaxClipDb_ = 0.0f;

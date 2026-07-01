@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -16,6 +17,8 @@ class PeakHoldModel;
 class GainReductionMeter : public juce::Component
 {
 public:
+    static constexpr int kNumBands = 3;
+
     GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAudioProcessor& processor);
     ~GainReductionMeter() override;
 
@@ -32,14 +35,11 @@ private:
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
 
-    float displayGrLDb_ { 0.0f };
-    float displayGrRDb_ { 0.0f };
+    float displayGrBandDb_[kNumBands] { 0.0f, 0.0f, 0.0f };
+    std::array<std::unique_ptr<mdsp_ui::meters::MeterBallistics>, kNumBands> ball_;
+    std::array<std::unique_ptr<mdsp_ui::meters::PeakHoldModel>, kNumBands> peakHold_;
     float displayCurrentGrDb_ { 0.0f };
     float displayMaxGrDb_ { 0.0f };
-    std::unique_ptr<mdsp_ui::meters::MeterBallistics> ballL_;
-    std::unique_ptr<mdsp_ui::meters::MeterBallistics> ballR_;
-    std::unique_ptr<mdsp_ui::meters::PeakHoldModel> peakHoldL_;
-    std::unique_ptr<mdsp_ui::meters::PeakHoldModel> peakHoldR_;
 
     juce::Rectangle<int> meterBounds_;
     juce::Rectangle<int> readoutBounds_;
