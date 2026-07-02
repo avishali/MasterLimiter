@@ -65,8 +65,22 @@ private:
         void tick (float peak, float rms, float dtSec) noexcept;
     };
 
+    // Readable peak-hold for the SP *number* only (the bar stays live on
+    // displaySmooth). Holds the recent peak long enough to read, then decays
+    // to the live value — honest (recent peak), not the old stale 1 s hold.
+    struct PeakReadoutHold
+    {
+        float held { MasterLimiterAudioProcessor::kMeterFloorDb };
+        int holdLeft { 0 };
+
+        void reset() noexcept;
+        void tick (float raw, float dtSec, int holdTicks, float releaseTauSec) noexcept;
+    };
+
     DisplayLevelSmoother displaySmooth0_ {};
     DisplayLevelSmoother displaySmooth1_ {};
+    PeakReadoutHold spHold0_ {};
+    PeakReadoutHold spHold1_ {};
     GrNumericSmoother grSmooth_ {};
 
     mdsp_ui::UiContext& ui_;

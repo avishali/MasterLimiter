@@ -1598,10 +1598,13 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             {
                 const float gDeepBandL = std::min (gLowOut[i], gHighOut[i]);
                 const float gDeepBandR = std::min (gLowOutR[i], gHighOutR[i]);
-                minLowL = std::min (minLowL, gLowOut[i]);
-                minLowR = std::min (minLowR, gLowOutR[i]);
-                minHighL = std::min (minHighL, gHighOut[i]);
-                minHighR = std::min (minHighR, gHighOutR[i]);
+                // Per-band bars show TOTAL reduction each band's content receives
+                // (band stage x wideband stage), so they fill from low drive where
+                // the wideband does the early limiting, not just the band stage.
+                minLowL = std::min (minLowL, gLowOut[i] * gainWideL[i]);
+                minLowR = std::min (minLowR, gLowOutR[i] * gainWideR[i]);
+                minHighL = std::min (minHighL, gHighOut[i] * gainWideL[i]);
+                minHighR = std::min (minHighR, gHighOutR[i] * gainWideR[i]);
 
                 const int hostIdx = juce::jmin (n - 1, i * n / osN);
                 for (int ch = 0; ch < nch; ++ch)
@@ -1630,9 +1633,11 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             for (int i = 0; i < osN; ++i)
             {
                 const float gDeepBand = std::min (gLowOut[i], gHighOut[i]);
-                minLowL = std::min (minLowL, gLowOut[i]);
+                // Per-band bars = band x wideband (mid gain as the representative
+                // wide reduction in M/S; side + msSafetyGain omitted here).
+                minLowL = std::min (minLowL, gLowOut[i] * gainWideL[i]);
                 minLowR = minLowL;
-                minHighL = std::min (minHighL, gHighOut[i]);
+                minHighL = std::min (minHighL, gHighOut[i] * gainWideL[i]);
                 minHighR = minHighL;
 
                 const float delayedL = lookaheadWide_.pushPop (0, bandLimitedL[i]);

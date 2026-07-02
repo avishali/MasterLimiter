@@ -100,6 +100,33 @@ void MeterGroupComponent::DisplayLevelSmoother::tick (float peak, float rms, flo
     rmsDb = smooth (rms, rmsDb, dtSec);
 }
 
+void MeterGroupComponent::PeakReadoutHold::reset() noexcept
+{
+    held = kMeterFloorDb;
+    holdLeft = 0;
+}
+
+void MeterGroupComponent::PeakReadoutHold::tick (float raw, float dtSec,
+                                                 int holdTicks, float releaseTauSec) noexcept
+{
+    if (! std::isfinite (raw))
+        raw = kMeterFloorDb;
+
+    if (raw >= held)               // new/higher peak: latch and re-arm the hold
+    {
+        held = raw;
+        holdLeft = holdTicks;
+        return;
+    }
+    if (holdLeft > 0)              // hold the recent peak long enough to read
+    {
+        --holdLeft;
+        return;
+    }
+    const float a = 1.0f - std::exp (-dtSec / juce::jmax (1.0e-3f, releaseTauSec));
+    held += (raw - held) * a;      // then decay (dB domain) toward the live value
+}
+
 MeterGroupComponent::MeterGroupComponent (mdsp_ui::UiContext& ui,
                                           MasterLimiterAudioProcessor& processor,
                                           BusKind kind)
@@ -280,6 +307,14 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     displaySmooth0_.tick (lPeak, lRms, dtSec);
     displaySmooth1_.tick (rPeak, rRms, dtSec);
 
+    // SP *number* peak-hold (readable), separate from the live bar. ~700 ms hold
+    // then decay; feeds only the numeric readout.
+    constexpr float kSpReadoutHoldSec = 0.70f;
+    constexpr float kSpReadoutReleaseTauSec = 0.50f;
+    const int spHoldTicks = juce::jmax (1, static_cast<int> (std::round (kSpReadoutHoldSec / juce::jmax (1.0e-6f, dtSec))));
+    spHold0_.tick (lPeak, dtSec, spHoldTicks, kSpReadoutReleaseTauSec);
+    spHold1_.tick (rPeak, dtSec, spHoldTicks, kSpReadoutReleaseTauSec);
+
     constexpr float kClipThresholdDb = 0.0f;
     const bool clippedL = renderState0_.clipLatched || (std::isfinite (lPeak) && lPeak >= kClipThresholdDb);
     const bool clippedR = renderState1_.clipLatched || (std::isfinite (rPeak) && rPeak >= kClipThresholdDb);
@@ -288,8 +323,8 @@ void MeterGroupComponent::sync (double hostSampleRate, float dtSec)
     provider1_.updateFromValues (displaySmooth1_.peakDb, displaySmooth1_.rmsDb, clippedR, false);
     pushLevelRenderStates (lMaxDb, rMaxDb);
 
-    const auto lPeakText = formatPeakReadout (displaySmooth0_.peakDb);
-    const auto rPeakText = formatPeakReadout (displaySmooth1_.peakDb);
+    const auto lPeakText = formatPeakReadout (spHold0_.held);
+    const auto rPeakText = formatPeakReadout (spHold1_.held);
     const auto lMaxText = formatMaxPeakReadout (lMaxDb);
     const auto rMaxText = formatMaxPeakReadout (rMaxDb);
     const auto lRmsText = formatRmsReadout (lRms);
