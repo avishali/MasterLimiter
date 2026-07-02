@@ -86,17 +86,33 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldLookaheadWide_, 2, " ms");
     sldLookaheadWide_.setTooltip ("Wideband audio delay and envelope lookahead window.");
 
-    setupLabel (lblXoverCutoff_, "Cutoff");
+    setupLabel (lblXoverCutoff_, "Lo/Mid Cut");
     setupSlider (sldXoverCutoff_, 0, " Hz");
-    sldXoverCutoff_.setTooltip ("Linear-phase crossover split frequency.");
+    sldXoverCutoff_.setTooltip ("Stage-1 linear-phase split (Low vs Mid+High).");
 
-    setupLabel (lblXoverTransition_, "Transition");
+    setupLabel (lblXoverTransition_, "Lo/Mid Trans");
     setupSlider (sldXoverTransition_, 0, " Hz");
-    sldXoverTransition_.setTooltip ("Transition width; wider = gentler split / shorter latency kernel.");
+    sldXoverTransition_.setTooltip ("Stage-1 transition width; wider = gentler split / shorter kernel.");
 
-    setupLabel (lblXoverAtten_, "Atten");
+    setupLabel (lblXoverAtten_, "Lo/Mid Atten");
     setupSlider (sldXoverAtten_, 0, " dB");
-    sldXoverAtten_.setTooltip ("Stop-band attenuation; lower = shorter kernel.");
+    sldXoverAtten_.setTooltip ("Stage-1 stop-band attenuation; lower = shorter kernel.");
+
+    setupLabel (lblXoverHiCutoff_, "Mid/Hi Cut");
+    setupSlider (sldXoverHiCutoff_, 0, " Hz");
+    sldXoverHiCutoff_.setTooltip ("Stage-2 linear-phase split (Mid vs High).");
+
+    setupLabel (lblXoverHiTransition_, "Mid/Hi Trans");
+    setupSlider (sldXoverHiTransition_, 0, " Hz");
+    sldXoverHiTransition_.setTooltip ("Stage-2 transition width.");
+
+    setupLabel (lblXoverHiAtten_, "Mid/Hi Atten");
+    setupSlider (sldXoverHiAtten_, 0, " dB");
+    sldXoverHiAtten_.setTooltip ("Stage-2 stop-band attenuation.");
+
+    setupLabel (lblBandLink_, "Band Link");
+    setupSlider (sldBandLink_, 0, " %");
+    sldBandLink_.setTooltip ("Multiband link — 0 = glued/linked, 100 = independent 3-band. Shipping control TBD.");
 
     setupLabel (lblReleaseEngine_, "Engine");
     setupCombo (cmbReleaseEngine_);
@@ -127,6 +143,10 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldLowScale_, 2, {});
     sldLowScale_.setTooltip ("Low-band auto-release timing multiplier.");
 
+    setupLabel (lblMidScale_, "Mid x");
+    setupSlider (sldMidScale_, 2, {});
+    sldMidScale_.setTooltip ("Mid-band auto-release timing multiplier.");
+
     setupLabel (lblHighScale_, "High/Wide x");
     setupSlider (sldHighScale_, 2, {});
     sldHighScale_.setTooltip ("High-band and wideband auto-release timing multiplier.");
@@ -153,8 +173,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
 
     for (auto* label : { &lblAttackMode_, &lblAttack_, &lblRealAttack_, &lblLookaheadBand_, &lblLookaheadWide_,
                          &lblXoverCutoff_, &lblXoverTransition_, &lblXoverAtten_,
+                         &lblXoverHiCutoff_, &lblXoverHiTransition_, &lblXoverHiAtten_, &lblBandLink_,
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
-                         &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_,
+                         &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_, &lblMidScale_,
                          &lblHighScale_, &lblBandStereoLink_, &lblMsClampReadout_,
                          &lblFinalCeilingReadout_, &lblSustainRatio_ })
     {
@@ -163,8 +184,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
 
     for (auto* slider : { &sldAttack_, &sldRealAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
                           &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
+                          &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                           &sldLaRelease_, &sldSigmaAttack_, &sldSigmaDecay_,
-                          &sldLowScale_, &sldHighScale_, &sldBandStereoLink_, &sldSustainRatio_ })
+                          &sldLowScale_, &sldMidScale_, &sldHighScale_, &sldBandStereoLink_, &sldSustainRatio_ })
     {
         content_.addAndMakeVisible (*slider);
     }
@@ -183,12 +205,17 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attXoverCutoff_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_cutoff_hz), sldXoverCutoff_);
     attXoverTransition_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_transition_hz), sldXoverTransition_);
     attXoverAtten_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_atten_db), sldXoverAtten_);
+    attXoverHiCutoff_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_hi_cutoff_hz), sldXoverHiCutoff_);
+    attXoverHiTransition_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_hi_transition_hz), sldXoverHiTransition_);
+    attXoverHiAtten_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_hi_atten_db), sldXoverHiAtten_);
+    attBandLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::band_color), sldBandLink_);
     attReleaseEngine_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_release_engine), cmbReleaseEngine_);
     attLaRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_la_release_ms), sldLaRelease_);
     attLaPoles_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_la_release_poles), cmbLaPoles_);
     attSigmaAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_sigma_attack_ms), sldSigmaAttack_);
     attSigmaDecay_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_sigma_decay_scale), sldSigmaDecay_);
     attLowScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_low_band_release_scale), sldLowScale_);
+    attMidScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mid_band_release_scale), sldMidScale_);
     attHighScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_high_band_release_scale), sldHighScale_);
     attBandStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_band_stereo_link_pct), sldBandStereoLink_);
     attMsSafetyClamp_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_ms_safety_clamp), btnMsSafetyClamp_);
@@ -243,8 +270,9 @@ void DevControlsComponent::resized()
     {
         for (auto* slider : { &sldAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
                               &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
+                              &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                               &sldLaRelease_,
-                              &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldHighScale_,
+                              &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldMidScale_, &sldHighScale_,
                               &sldBandStereoLink_, &sldSustainRatio_ })
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
@@ -282,12 +310,20 @@ void DevControlsComponent::resized()
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblLookaheadWide_, sldLookaheadWide_);
 
-    inner = placeGroup (groupCrossover_, 136);
+    inner = placeGroup (groupCrossover_, 248);
     placeSliderRow (inner.removeFromTop (rowH), lblXoverCutoff_, sldXoverCutoff_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblXoverTransition_, sldXoverTransition_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblXoverAtten_, sldXoverAtten_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblXoverHiCutoff_, sldXoverHiCutoff_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblXoverHiTransition_, sldXoverHiTransition_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblXoverHiAtten_, sldXoverHiAtten_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblBandLink_, sldBandLink_);
 
     inner = placeGroup (groupReleaseEngine_, 72);
     placeComboRow (inner.removeFromTop (rowH), lblReleaseEngine_, cmbReleaseEngine_);
@@ -302,8 +338,10 @@ void DevControlsComponent::resized()
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblSigmaDecay_, sldSigmaDecay_);
 
-    inner = placeGroup (groupBandScaling_, 104);
+    inner = placeGroup (groupBandScaling_, 136);
     placeSliderRow (inner.removeFromTop (rowH), lblLowScale_, sldLowScale_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblMidScale_, sldMidScale_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblHighScale_, sldHighScale_);
 

@@ -2,6 +2,28 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-02 — 3-band multiband DSP (Slice B / SLICE_3BAND_DSP)
+
+**Status:** ✅ Build + AU pass; offline null + independence + audition pending (avishali).
+
+**Deliverables**
+- **Crossover tree:** stage-1 `detectCrossover_`/`applyCrossover_` (Lo/Mid) + stage-2 `detectXoMidHi_`/`applyXoMidHi_` (Mid/Hi) + `detectLowAlign_`/`applyLowAlign_` (M2). Total group delay M1+M2; duck-swap covers whole tree.
+- **Mid band:** `envelopeMid_`/`envelopeMidR_`, peak/gain buffers, N-band Color link (`min(low,mid,high)`).
+- **DEV params:** `dev_xover_hi_*`, `dev_mid_band_release_scale`; Band Link (`band_color`) relocated to DEV CROSSOVER section.
+- **UI:** shipping Color knob disabled (frozen attachment kept); GR meter MID bar live; per-band SOLO listen toggles.
+- **Docs:** `SIGNAL_FLOW.md` §1/§2.9–2.12/§4.1/§6/§8 updated; ADR-0012 in HQ.
+
+**Gate**
+- [x] Plugin build clean; AU validates.
+- [x] Reported latency = prior + M2 (fixed-latency pad unchanged).
+- [ ] Transparency null (Band Link 0, offline rig).
+- [ ] Independence (Band Link 100, per-band GR bars).
+- [ ] True-peak at ceiling across Band Link 0/50/100.
+- [ ] Crossover DEV live-sweep click-free (duck-swap race).
+- [ ] avishali audition: 3-band de-pumping vs 2-band; pick default splits/releases.
+
+---
+
 ## 2026-07-02 — M4: Clip readout clarity + hold
 
 **Status:** ✅ Build + AU pass + installed; audition pending.

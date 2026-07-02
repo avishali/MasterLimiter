@@ -838,7 +838,12 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnCeilingMode_.setTooltip ("Sample peak vs true-peak ceiling enforcement.");
     btnStereoMode_.setTooltip ("Click to toggle whether the wideband link operates in L/R stereo or M/S.");
     sldStereoLink_.setTooltip ("Link amount for the active stereo mode: 100% fully linked, 0% independent.");
-    sldBandColor_.setTooltip ("Multiband Color: 0% glued/warm, 50% balanced, 100% open/bright.");
+    sldBandColor_.setTooltip ("Multiband control being redesigned for 3-band — tune via DEV Band Link for now.");
+    lblBandColor_.setEnabled (false);
+    sldBandColor_.setEnabled (false);
+    lblBandColor_.setColour (juce::Label::textColourId, palette::textMuted.withAlpha (0.45f));
+    sldBandColor_.setColour (juce::Slider::rotarySliderFillColourId, palette::accent.withAlpha (0.25f));
+    sldBandColor_.setColour (juce::Slider::thumbColourId, palette::textMuted.withAlpha (0.35f));
     // TEMP: Character is visually inert while the DEV Attack knob owns attack time.
     lblCharacter_.setEnabled (false);
     segCharacter_.setEnabled (false);

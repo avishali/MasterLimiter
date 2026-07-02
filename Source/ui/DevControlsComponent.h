@@ -57,6 +57,14 @@ private:
     juce::Slider sldXoverTransition_;
     juce::Label lblXoverAtten_ {};
     juce::Slider sldXoverAtten_;
+    juce::Label lblXoverHiCutoff_ {};
+    juce::Slider sldXoverHiCutoff_;
+    juce::Label lblXoverHiTransition_ {};
+    juce::Slider sldXoverHiTransition_;
+    juce::Label lblXoverHiAtten_ {};
+    juce::Slider sldXoverHiAtten_;
+    juce::Label lblBandLink_ {};
+    juce::Slider sldBandLink_;
 
     juce::GroupComponent groupReleaseEngine_ { "ReleaseEngineGroup", "RELEASE - Engine" };
     juce::Label lblReleaseEngine_ {};
@@ -77,6 +85,8 @@ private:
     juce::GroupComponent groupBandScaling_ { "BandScalingGroup", "RELEASE - Band scaling" };
     juce::Label lblLowScale_ {};
     juce::Slider sldLowScale_;
+    juce::Label lblMidScale_ {};
+    juce::Slider sldMidScale_;
     juce::Label lblHighScale_ {};
     juce::Slider sldHighScale_;
 
@@ -102,12 +112,17 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverCutoff_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverTransition_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverAtten_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverHiCutoff_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverHiTransition_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverHiAtten_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attReleaseEngine_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLaRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attLaPoles_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSigmaAttack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSigmaDecay_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLowScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMidScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attHighScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandStereoLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMsSafetyClamp_;

@@ -127,6 +127,9 @@ public:
         maxFinalCeilingDb_.store (0.0f, std::memory_order_relaxed);
     }
 
+    void setBandSolo (int band, bool on) noexcept { bandSolo_[(size_t) band].store (on, std::memory_order_relaxed); }
+    bool getBandSolo (int band) const noexcept { return bandSolo_[(size_t) band].load (std::memory_order_relaxed); }
+
     float getInputPeakLDb() const noexcept { return inputPeakLDb_.load (std::memory_order_relaxed); }
     float getInputPeakRDb() const noexcept { return inputPeakRDb_.load (std::memory_order_relaxed); }
     float getInputRmsLDb() const noexcept { return inputRmsLDb_.load (std::memory_order_relaxed); }
@@ -183,7 +186,8 @@ private:
     float updateDryCompensationGainDb (float liveDryLufs);
     void applyCompensationGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float compGainDb) const;
     void processCore (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool forceBypass);
-    mdsp_dsp::LinearPhaseCrossover::Spec readCrossoverSpecFromParams() const;
+    mdsp_dsp::LinearPhaseCrossover::Spec readLoMidCrossoverSpecFromParams() const;
+    mdsp_dsp::LinearPhaseCrossover::Spec readMidHiCrossoverSpecFromParams() const;
     void prepareCrossoverBanks (double osSampleRate);
     void rebuildCrossoverKernels();
     bool tryLockCrossoverBank() noexcept { return ! crossoverBankLock_.test_and_set (std::memory_order_acquire); }
@@ -205,11 +209,16 @@ private:
     static constexpr float kDevXoverCutoffDefault = 120.0f;
     static constexpr float kDevXoverTransitionDefault = 120.0f;
     static constexpr float kDevXoverAttenDefault = 60.0f;
+    static constexpr float kDevXoverHiCutoffDefault = 2500.0f;
+    static constexpr float kDevXoverHiTransitionDefault = 600.0f;
+    static constexpr float kDevXoverHiAttenDefault = 60.0f;
     static constexpr float kDevXoverTransitionMin = 60.0f;
     static constexpr float kDevXoverAttenMax = 72.0f;
+    static constexpr float kDevXoverHiTransitionMin = 200.0f;
     static constexpr float kLookaheadMs = 5.0f;
     static constexpr float kMaxLookaheadMs = 6.0f;
     static constexpr float kLowBandAutoReleaseScale = 3.0f;
+    static constexpr float kMidBandAutoReleaseScale = 1.0f;
     static constexpr float kHighBandAutoReleaseScale = 1.0f;
     static constexpr float kAutoSigmaAttackMs = 5.0f;
     static constexpr float kAutoSigmaDecayScale = 1.0f;
@@ -220,8 +229,12 @@ private:
     mdsp_dsp::PeakDetector peakDetector_;
     mdsp_dsp::LimiterEnvelope envelope_;
     mdsp_dsp::LimiterEnvelope envelope_R_;
-    mdsp_dsp::LinearPhaseCrossover detectCrossover_[2];
-    mdsp_dsp::LinearPhaseCrossover applyCrossover_[2];
+    mdsp_dsp::LinearPhaseCrossover detectCrossover_[2];   // stage 1: Lo/Mid split
+    mdsp_dsp::LinearPhaseCrossover applyCrossover_[2];   // stage 1: Lo/Mid split
+    mdsp_dsp::LinearPhaseCrossover detectXoMidHi_[2];    // stage 2: Mid/Hi split
+    mdsp_dsp::LinearPhaseCrossover applyXoMidHi_[2];    // stage 2: Mid/Hi split
+    mdsp_dsp::LookaheadDelay<float> detectLowAlign_;      // align low band by M2
+    mdsp_dsp::LookaheadDelay<float> applyLowAlign_;      // align low band by M2
     std::atomic<int>  activeCrossoverBank_ { 0 };
     std::atomic<bool> crossoverSwapReady_ { false };
     int               crossoverPendingBank_ = 1;
@@ -240,8 +253,10 @@ private:
     static constexpr int kHeavyDebounceMs = 120;
     static constexpr int kHeavyPollMs     = 30;
     mdsp_dsp::LimiterEnvelope envelopeLow_;
+    mdsp_dsp::LimiterEnvelope envelopeMid_;
     mdsp_dsp::LimiterEnvelope envelopeHigh_;
     mdsp_dsp::LimiterEnvelope envelopeLowR_;
+    mdsp_dsp::LimiterEnvelope envelopeMidR_;
     mdsp_dsp::LimiterEnvelope envelopeHighR_;
     mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
     mdsp_dsp::HalfbandPolyphaseOS clipperOversampler_;   // 1-stage (2×), runs inside the 4× domain
@@ -263,11 +278,20 @@ private:
     juce::AudioBuffer<float> gainHighBuf_;
     juce::AudioBuffer<float> gainHighLBuf_;
     juce::AudioBuffer<float> gainHighRBuf_;
+    juce::AudioBuffer<float> peakMidBuf_;
+    juce::AudioBuffer<float> peakMidLBuf_;
+    juce::AudioBuffer<float> peakMidRBuf_;
+    juce::AudioBuffer<float> gainMidBuf_;
+    juce::AudioBuffer<float> gainMidLBuf_;
+    juce::AudioBuffer<float> gainMidRBuf_;
     juce::AudioBuffer<float> bandLowBuf_;
+    juce::AudioBuffer<float> bandMidBuf_;
     juce::AudioBuffer<float> bandHighBuf_;
     juce::AudioBuffer<float> gLowOutBuf_;
+    juce::AudioBuffer<float> gMidOutBuf_;
     juce::AudioBuffer<float> gHighOutBuf_;
     juce::AudioBuffer<float> gLowOutRBuf_;
+    juce::AudioBuffer<float> gMidOutRBuf_;
     juce::AudioBuffer<float> gHighOutRBuf_;
     juce::AudioBuffer<float> bandLimitedBuf_;
     mdsp_dsp::FinalCeilingLimiter finalCeiling_;
@@ -323,6 +347,10 @@ private:
     std::atomic<float>* devXoverCutoffHz_ = nullptr;
     std::atomic<float>* devXoverTransitionHz_ = nullptr;
     std::atomic<float>* devXoverAttenDb_ = nullptr;
+    std::atomic<float>* devXoverHiCutoffHz_ = nullptr;
+    std::atomic<float>* devXoverHiTransitionHz_ = nullptr;
+    std::atomic<float>* devXoverHiAttenDb_ = nullptr;
+    std::atomic<float>* devMidBandReleaseScale_ = nullptr;
     std::atomic<float>* devBandStereoLinkPct_ = nullptr;
     std::atomic<float>* devMsSafetyClamp_ = nullptr;
     std::atomic<float>* devFinalCeiling_ = nullptr;
@@ -331,6 +359,7 @@ private:
 
     int  baseLatencySamples_ = 0;
     int  crossoverOsLatencySamples_ = 0;
+    int  crossoverOsLatencyStage2Samples_ = 0;
     int  crossoverOsLatencyHostSamples_ = 0;
     int  limiterOsLatencySamples_ = 0;
     int  clipperOsLatencySamples4x_ = 0;   // padded total latency in 4×-rate samples
@@ -426,6 +455,8 @@ private:
     float msOutL_ = 0.0f;
     float msOutR_ = 0.0f;
     float meterRmsMsCoeff_ = 1.0f;
+
+    std::atomic<bool> bandSolo_[3] { false, false, false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterLimiterAudioProcessor)
 };

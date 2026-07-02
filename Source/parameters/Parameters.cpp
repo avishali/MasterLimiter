@@ -302,6 +302,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         AudioParameterFloatAttributes().withLabel ("dB")));
 
     layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_xover_hi_cutoff_hz, 1),
+        "DEV Xover Hi Cutoff",
+        NormalisableRange<float> (800.0f, 8000.0f, 1.0f, 0.35f),
+        2500.0f,
+        AudioParameterFloatAttributes().withLabel ("Hz")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_xover_hi_transition_hz, 1),
+        "DEV Xover Hi Transition",
+        NormalisableRange<float> (200.0f, 2000.0f, 1.0f, 0.5f),
+        600.0f,
+        AudioParameterFloatAttributes().withLabel ("Hz")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_xover_hi_atten_db, 1),
+        "DEV Xover Hi Atten",
+        NormalisableRange<float> (48.0f, 72.0f, 1.0f),
+        60.0f,
+        AudioParameterFloatAttributes().withLabel ("dB")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_mid_band_release_scale, 1),
+        "DEV Mid Release Scale",
+        NormalisableRange<float> (0.5f, 8.0f, 0.01f),
+        1.0f,
+        AudioParameterFloatAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_band_stereo_link_pct, 1),
         "DEV Band Stereo Link",
         NormalisableRange<float> (0.0f, 100.0f, 1.0f),

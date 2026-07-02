@@ -32,9 +32,13 @@ public:
 
 private:
     static juce::String formatDbBare (float grDb);
+    void updateSoloButtonStates() noexcept;
 
     mdsp_ui::UiContext& ui_;
     MasterLimiterAudioProcessor& processor_;
+
+    juce::TextButton soloButtons_[kNumBands];
+    juce::Rectangle<int> soloBounds_;
 
     float displayGrBandChanDb_[kNumBands][kNumChannels] {};
     std::array<std::array<std::unique_ptr<mdsp_ui::meters::MeterBallistics>, kNumChannels>, kNumBands> ball_;

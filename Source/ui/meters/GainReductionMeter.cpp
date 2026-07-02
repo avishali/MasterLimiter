@@ -96,6 +96,16 @@ GainReductionMeter::GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAud
             ball_[(size_t) b][(size_t) ch] = std::make_unique<mdsp_ui::meters::MeterBallistics>();
             peakHold_[(size_t) b][(size_t) ch] = std::make_unique<mdsp_ui::meters::PeakHoldModel>();
         }
+
+        soloButtons_[b].setButtonText (kBandLabels[b]);
+        soloButtons_[b].setClickingTogglesState (true);
+        soloButtons_[b].setTooltip ("Solo listen this band (limited output). Multiple solos sum.");
+        soloButtons_[b].onClick = [this, b]
+        {
+            processor_.setBandSolo (b, soloButtons_[b].getToggleState());
+            updateSoloButtonStates();
+        };
+        addAndMakeVisible (soloButtons_[b]);
     }
 
     setOpaque (false);
@@ -103,6 +113,17 @@ GainReductionMeter::GainReductionMeter (mdsp_ui::UiContext& ui, MasterLimiterAud
 }
 
 GainReductionMeter::~GainReductionMeter() = default;
+
+void GainReductionMeter::updateSoloButtonStates() noexcept
+{
+    for (int b = 0; b < kNumBands; ++b)
+    {
+        const bool on = processor_.getBandSolo (b);
+        soloButtons_[b].setToggleState (on, juce::dontSendNotification);
+        soloButtons_[b].setColour (juce::TextButton::buttonOnColourId,
+                                   ui_.theme().accent.withAlpha (on ? 0.85f : 0.35f));
+    }
+}
 
 void GainReductionMeter::sync (float dtSec)
 {
@@ -164,10 +185,25 @@ void GainReductionMeter::resized()
 {
     auto bounds = getLocalBounds();
     readoutBounds_ = bounds.removeFromBottom (18);
+    soloBounds_ = bounds.removeFromBottom (22);
     meterBounds_ = bounds.reduced (4, 4);
 
     auto plotOuter = meterBounds_.reduced (7, 7);
     scaleGutterArea_ = plotOuter.removeFromRight (kGrScaleGutterW);
+
+    if (! soloBounds_.isEmpty())
+    {
+        const int bandGap = 4;
+        const int totalBandGaps = bandGap * (kNumBands - 1);
+        const int bandW = juce::jmax (1, (soloBounds_.getWidth() - totalBandGaps) / kNumBands);
+        auto soloArea = soloBounds_.reduced (7, 2);
+        for (int b = 0; b < kNumBands; ++b)
+        {
+            if (b > 0)
+                soloArea.removeFromLeft (bandGap);
+            soloButtons_[b].setBounds (soloArea.removeFromLeft (bandW));
+        }
+    }
 }
 
 void GainReductionMeter::mouseDown (const juce::MouseEvent& e)
@@ -204,37 +240,28 @@ void GainReductionMeter::paint (juce::Graphics& g)
     const int bandW = juce::jmax (1, (barArea.getWidth() - totalBandGaps) / kNumBands);
     juce::Rectangle<int> grPlotArea;
 
-    auto drawSubBar = [&] (juce::Rectangle<int> bar, float grDb, float peakGrDb, bool reserved)
+    auto drawSubBar = [&] (juce::Rectangle<int> bar, float grDb, float peakGrDb)
     {
         const auto slot = bar.toFloat();
         g.setColour (theme.panel.withAlpha (0.82f));
         g.fillRoundedRectangle (slot, m.rSmall);
 
-        if (! reserved)
+        const auto inner = slot.reduced (1.0f);
+        const auto fill = makeTopDownFill (inner, grDb);
+        if (fill.getHeight() > 0.0f)
         {
-            const auto inner = slot.reduced (1.0f);
-            const auto fill = makeTopDownFill (inner, grDb);
-            if (fill.getHeight() > 0.0f)
-            {
-                g.setColour (theme.warning.withAlpha (0.84f));
-                g.fillRect (fill);
-                g.setColour (theme.warning.brighter (0.22f).withAlpha (0.8f));
-                g.drawLine (fill.getX(), fill.getBottom(), fill.getRight(), fill.getBottom(), m.strokeThin);
-            }
-
-            const auto peakSlot = inner;
-            if (peakGrDb > 0.0f && peakSlot.getHeight() > 1.0f)
-            {
-                const float y = grDbToY (peakGrDb, peakSlot.getY(), peakSlot.getBottom());
-                g.setColour (theme.warning.brighter (0.35f).withAlpha (0.78f));
-                g.drawLine (peakSlot.getX() + 1.0f, y, peakSlot.getRight() - 1.0f, y, m.strokeThin);
-            }
+            g.setColour (theme.warning.withAlpha (0.84f));
+            g.fillRect (fill);
+            g.setColour (theme.warning.brighter (0.22f).withAlpha (0.8f));
+            g.drawLine (fill.getX(), fill.getBottom(), fill.getRight(), fill.getBottom(), m.strokeThin);
         }
-        else
+
+        const auto peakSlot = inner;
+        if (peakGrDb > 0.0f && peakSlot.getHeight() > 1.0f)
         {
-            g.setColour (theme.textMuted.withAlpha (0.45f));
-            g.setFont (type.labelFont().withHeight (10.0f));
-            g.drawText ("-", slot, juce::Justification::centred, false);
+            const float y = grDbToY (peakGrDb, peakSlot.getY(), peakSlot.getBottom());
+            g.setColour (theme.warning.brighter (0.35f).withAlpha (0.78f));
+            g.drawLine (peakSlot.getX() + 1.0f, y, peakSlot.getRight() - 1.0f, y, m.strokeThin);
         }
 
         g.setColour (theme.grid.withAlpha (0.72f));
@@ -247,11 +274,19 @@ void GainReductionMeter::paint (juce::Graphics& g)
             barArea.removeFromLeft (bandGap);
         auto band = barArea.removeFromLeft (bandW);
 
-        g.setColour (theme.textMuted.withAlpha (0.85f));
-        g.setFont (type.labelFont().withHeight (9.0f));
+        const bool soloOn = processor_.getBandSolo (b);
+        if (soloOn)
+        {
+            g.setColour (theme.accent.withAlpha (0.95f));
+            g.setFont (type.labelFont().withHeight (9.0f).boldened());
+        }
+        else
+        {
+            g.setColour (theme.textMuted.withAlpha (0.85f));
+            g.setFont (type.labelFont().withHeight (9.0f));
+        }
         g.drawText (kBandLabels[b], band.removeFromTop (10), juce::Justification::centred, false);
 
-        const bool reserved = (b == 1);
         const int subGap = 2;
         const int subW = juce::jmax (1, (band.getWidth() - subGap) / kNumChannels);
         auto leftSub = band.removeFromLeft (subW);
@@ -259,14 +294,13 @@ void GainReductionMeter::paint (juce::Graphics& g)
         band.removeFromLeft (subGap);
         auto rightSub = band;
 
-        drawSubBar (leftSub, displayGrBandChanDb_[b][0], peakHold_[(size_t) b][0]->getHeldDb(), reserved);
-        drawSubBar (rightSub, displayGrBandChanDb_[b][1], peakHold_[(size_t) b][1]->getHeldDb(), reserved);
+        drawSubBar (leftSub, displayGrBandChanDb_[b][0], peakHold_[(size_t) b][0]->getHeldDb());
+        drawSubBar (rightSub, displayGrBandChanDb_[b][1], peakHold_[(size_t) b][1]->getHeldDb());
 
-        if (! reserved)
-            grPlotArea = grPlotArea.isEmpty() ? leftSub.getUnion (rightSub)
-                                              : grPlotArea.getUnion (leftSub.getUnion (rightSub));
+        grPlotArea = grPlotArea.isEmpty() ? leftSub.getUnion (rightSub)
+                                          : grPlotArea.getUnion (leftSub.getUnion (rightSub));
 
-        if (! reserved && band.getHeight() > 12)
+        if (band.getHeight() > 12)
         {
             g.setColour (theme.grid.withAlpha (0.55f));
             g.drawVerticalLine ((int) std::round (dividerX), (float) leftSub.getY() + 2.0f, (float) leftSub.getBottom() - 2.0f);
