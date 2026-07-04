@@ -36,7 +36,12 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 
 **Stage-1's concrete spec (from the real mix, crest 15.4 dB):** reduce crest **~3–4 dB** on peaks (→ ~11–12), holding true-peak, at Real-grade distortion.
 
-**Cheap shortcut to #1 — Hybrid attack (test FIRST):** the code already has both a pre-ramp *and* an RC smoother but never combines them. A 3rd attack mode = pre-ramp (Ramp) → smoothed follower (Real) may deliver transient-catching **and** low distortion **in the existing single multiband stage**, possibly deferring the full two-stage build. `SLICE_HYBRID_ATTACK` **implemented 2026-07-04** (SDK `AttackMode::Hybrid` + plugin DEV selector). Offline rig results pending full audition; if Hybrid wins on program material, **#1 may be unnecessary for 0.4.**
+**Hybrid attack — TESTED, NOT the shortcut (2026-07-04):** `AttackMode::Hybrid` (pre-ramp + RC follower) shipped and was swept on the rig. Result: it **does** catch transients (fast RC ≤0.2 ms + pre-ramp ≥4 ms → crest ~13, holds ceiling, like Ramp) — Cursor's "behaves like Real" was just the default 3 ms RC. **But at the catching setting its 50 Hz THD is −44 dB ≈ Ramp's −42 (dirty), nowhere near Real's −51.** There is no setting that catches *and* stays clean. Hybrid is a useful continuous Ramp↔Real **morph knob**, kept for DEV/A-B, but does **not** defer the rebuild.
+
+**⚠️ The measured law this exposed:** *any wideband attack fast enough to catch a transient (~1–6 ms) distorts the low end,* because that's within a 50 Hz cycle (20 ms). Ramp / Real-fast / Hybrid all hit the same wall. **The escape is decoupling, not a better attack curve:**
+- **Frequency decoupling → per-band attack** (fast highs / slow lows). Extends the existing multiband; fast HF gain is far less audible than fast LF gain. **Promoted from footnote to the next cheap experiment.**
+- **Time decoupling → Stage-1 transient-gated catcher** (avishali's design) — acts only during transients, leaves sustained bass alone.
+- **Hard physical limit:** a *low-frequency* transient (kick) can't be caught fast without distorting — "fast" vs 50 Hz is within-cycle. That residual is where a touch of clipper/FinalCeiling legitimately earns its place (short LF transient = well-masked). Neither per-band attack nor two-stage fully solves LF transients.
 
 **avishali's concrete multi-stage design (the real #1, if Hybrid isn't enough):**
 - **Stage 1 — fast catcher:** wideband, lookahead pre-ramp, *move the whole transient down, don't clip the tip.* Optional: transient-accurate detection (gate/isolate the low-level bed so it triggers on transients, not sustain).
