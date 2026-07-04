@@ -95,6 +95,7 @@ Input = peak stream, output = gain coefficient stream (≤1). No audio delay her
 - **Attack — two modes** (DEV Attack Mode toggle, §6):
   - **Ramp** (default, current behavior): a **half-cosine ramp** (`attackTable_`, `0.5·(1−cos(π·k/n))`) applied across the lookahead window so gain eases down *into* each peak. Driven by **`dev_attack_ms`**, clamped per envelope to `1..active lookahead samples` so it can never exceed the LA Band/LA Wide window. Transparent smoothness control.
   - **Real** (new): attack is a genuine **2-pole time-constant** on gain coming down, **decoupled from lookahead** (`attackSamples_ = 1`; no cosine pre-ramp in `ext_`). Driven by **`dev_real_attack_ms`**. A fast TC reaches the lookahead target before the peak (clean); a slow TC does not → the transient **punches through** → `FinalCeiling` catches the tip.
+  - **Hybrid** (experiment, opt-in): **lookahead pre-ramp** (same derivation as Ramp, driven by **`dev_attack_ms`**) feeds the **RC-smoothed follower** (same as Real, driven by **`dev_real_attack_ms`**). Intended to catch transients like Ramp with sustained distortion nearer Real. Default off (mode index stays Real).
   - With the DEV override removed/disabled, Ramp-mode attack length returns to **Character**:
   - **Clean** ≈ 3 ms · **Tight** ≈ 1 ms · **Aggressive** ≈ 0.3 ms.
 - **Release — two selectable engines** (chosen by the DEV Release Engine toggle, §6):
@@ -168,7 +169,7 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 
 | Window section | Controls |
 |---|---|
-| ATTACK | `dev_attack_mode`, `dev_attack_ms` (Ramp), `dev_real_attack_ms` (Real) |
+| ATTACK | `dev_attack_mode`, `dev_attack_ms` (Ramp/Hybrid), `dev_real_attack_ms` (Real/Hybrid) |
 | LOOKAHEAD | `dev_lookahead_band_ms`, `dev_lookahead_wide_ms` |
 | CROSSOVER (linear-phase) | Lo/Mid: `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db`; Mid/Hi: `dev_xover_hi_cutoff_hz`, `dev_xover_hi_transition_hz`, `dev_xover_hi_atten_db` |
 | BAND · Multiband link | `band_color` (UI **Band Split**) |
@@ -193,7 +194,7 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | UI **Adapt Hold ×**. Legacy-engine only; greyed when Engine = Lookahead. |
 | **LA Band** | `dev_lookahead_band_ms` | 0…6 ms, 0.01 ms step | 5 | Per-band audio delay + low/high envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
 | **LA Wide** | `dev_lookahead_wide_ms` | 0…6 ms, 0.01 ms step | 5 | Wideband audio delay + wide envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
-| **Attack Mode** | `dev_attack_mode` | Ramp / Real | **Ramp** | Chooses §4.3 attack behavior | Ramp = current cosine-in-lookahead. Real = decoupled time-constant. |
+| **Attack Mode** | `dev_attack_mode` | Ramp / Real / Hybrid | **Real** | Chooses §4.3 attack behavior | Ramp = cosine-in-lookahead + snap. Real = decoupled TC (`attackSamples_=1`). Hybrid = pre-ramp + smoothed follower (both Attack + Real Atk knobs). |
 | **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | Ramp-mode envelope attack ramps | Overrides Character; capped by each active lookahead window. |
 | **Real Attack** | `dev_real_attack_ms` | 0.05…100 ms (skewed fast) | 5 | Real-mode 2-pole attack TC | Decoupled from lookahead; slow = transient punch-through. |
 | **Xover Lo/Mid Cutoff** | `dev_xover_cutoff_hz` | 40…250 Hz | 120 | Stage-1 split frequency | Audition; duck-swap kernel rebuild. |

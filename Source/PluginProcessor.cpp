@@ -1342,6 +1342,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         const float realAttackMs = devRealAttackMs_ != nullptr ? devRealAttackMs_->load (std::memory_order_relaxed)
                                                                : 5.0f;
         const auto attackMode = attackModeIdx == 1 ? mdsp_dsp::LimiterEnvelope::AttackMode::Real
+                              : attackModeIdx == 2 ? mdsp_dsp::LimiterEnvelope::AttackMode::Hybrid
                                                    : mdsp_dsp::LimiterEnvelope::AttackMode::Ramp;
         const int laReleaseEngineIdx = devReleaseEngine_ != nullptr ? (int) devReleaseEngine_->load (std::memory_order_relaxed)
                                                                     : 0;

@@ -2,6 +2,30 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-04 — Hybrid attack mode experiment (SLICE_HYBRID_ATTACK)
+
+**Status:** ✅ SDK + plugin build + AU pass; rig measures + audition pending (avishali/Asaf).
+
+**Deliverables**
+- SDK: `LimiterEnvelope::AttackMode::Hybrid` (append-only enum; Ramp/Real code paths untouched — Hybrid routes via existing `!= Ramp` follower + non-Real pre-ramp derivation).
+- Plugin: `dev_attack_mode` choice Ramp/Real/Hybrid (default Real); processor mapping; DEV combo + dual-knob greying (Attack enabled Ramp+Hybrid, Real Atk enabled Real+Hybrid).
+
+**Gate**
+- [x] SDK + plugin build clean; AU validates; latency unchanged (same pre-ramp within lookahead budget).
+- [x] Ramp/Real structurally bit-identical (only enum append + additive plugin mapping for index 2).
+- [x] Offline rig (100 Hz bass +18 dB, ceiling −1, FC off, LA band=2 / wide=5 ms):
+
+  | Mode | out SP | out TP | crest | THD (100 Hz) |
+  |---|---:|---:|---:|---:|
+  | Ramp | −1.0 | +0.1 | 3.0 | −46.3 dB |
+  | Real | −1.0 | +0.1 | 3.0 | −62.7 dB |
+  | **Hybrid** | **−1.0** | **+0.1** | **3.0** | **−65.3 dB** |
+
+  Transient synthetic mix (same settings): only **Ramp** holds ceiling (−1.0 SP); Real/Hybrid still overs (~+11 dB) — pre-ramp + RC smooth does not yet match Ramp transient catch on this rig.
+- [ ] avishali/Asaf audition on real program material (rig used synthetic signals; defaults LA=0 still make Hybrid≡Real).
+
+---
+
 ## 2026-07-04 — M/S per-band (opt-in) (SLICE_MS_PERBAND)
 
 **Status:** ✅ Build + AU pass; null/toggle-off + audition pending (avishali/Asaf).

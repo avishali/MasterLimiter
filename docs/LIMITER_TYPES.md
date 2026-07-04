@@ -36,7 +36,7 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 
 **Stage-1's concrete spec (from the real mix, crest 15.4 dB):** reduce crest **~3–4 dB** on peaks (→ ~11–12), holding true-peak, at Real-grade distortion.
 
-**Cheap shortcut to #1 — Hybrid attack (test FIRST):** the code already has both a pre-ramp *and* an RC smoother but never combines them. A 3rd attack mode = pre-ramp (Ramp) → smoothed follower (Real) may deliver transient-catching **and** low distortion **in the existing single multiband stage**, possibly deferring the full two-stage build. `SLICE_HYBRID_ATTACK` tests it. **If it wins, #1 may be unnecessary for 0.4.**
+**Cheap shortcut to #1 — Hybrid attack (test FIRST):** the code already has both a pre-ramp *and* an RC smoother but never combines them. A 3rd attack mode = pre-ramp (Ramp) → smoothed follower (Real) may deliver transient-catching **and** low distortion **in the existing single multiband stage**, possibly deferring the full two-stage build. `SLICE_HYBRID_ATTACK` **implemented 2026-07-04** (SDK `AttackMode::Hybrid` + plugin DEV selector). Offline rig results pending full audition; if Hybrid wins on program material, **#1 may be unnecessary for 0.4.**
 
 **avishali's concrete multi-stage design (the real #1, if Hybrid isn't enough):**
 - **Stage 1 — fast catcher:** wideband, lookahead pre-ramp, *move the whole transient down, don't clip the tip.* Optional: transient-accurate detection (gate/isolate the low-level bed so it triggers on transients, not sustain).

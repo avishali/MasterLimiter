@@ -70,7 +70,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupCombo (cmbAttackMode_);
     cmbAttackMode_.addItem ("Ramp", 1);
     cmbAttackMode_.addItem ("Real", 2);
-    cmbAttackMode_.setTooltip ("Ramp = cosine pre-peak ramp (current). Real = decoupled attack time-constant.");
+    cmbAttackMode_.addItem ("Hybrid", 3);
+    cmbAttackMode_.setTooltip ("Ramp = cosine pre-peak ramp (current). Real = decoupled attack time-constant. Hybrid = pre-ramp catches transients, smoothed follower for low distortion.");
 
     setupLabel (lblAttack_, "Attack");
     setupSlider (sldAttack_, 2, " ms");
@@ -452,11 +453,12 @@ void DevControlsComponent::updateManualReleaseEnabled (bool enabled)
 
 void DevControlsComponent::updateAttackModeControls (int attackModeIdx)
 {
-    const bool ramp = attackModeIdx == 0;
-    lblAttack_.setEnabled (ramp);
-    sldAttack_.setEnabled (ramp);
-    lblRealAttack_.setEnabled (! ramp);
-    sldRealAttack_.setEnabled (! ramp);
+    const bool enableAttack = attackModeIdx != 1;
+    const bool enableRealAttack = attackModeIdx != 0;
+    lblAttack_.setEnabled (enableAttack);
+    sldAttack_.setEnabled (enableAttack);
+    lblRealAttack_.setEnabled (enableRealAttack);
+    sldRealAttack_.setEnabled (enableRealAttack);
 }
 
 juce::String DevControlsComponent::formatClampReadout (float currentDb, float maxDb)

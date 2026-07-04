@@ -1,6 +1,6 @@
 # SLICE — Hybrid attack mode (lookahead pre-ramp + smoothed follower) — EXPERIMENT
 
-**Status:** ready for Cursor · **Architect:** Claude · **Verify:** Claude (measures on real mix) · **Audition/decide:** avishali/Asaf
+**Status:** closed 2026-07-04 · **Architect:** Claude · **Verify:** Claude (measures on real mix) · **Audition/decide:** avishali/Asaf
 **Repos:** SDK `melechdsp-hq` (LimiterEnvelope only) + plugin `MasterLimiter`. New DEV attack mode — **opt-in, additive, Ramp/Real behavior unchanged.**
 **Goal:** test the hypothesis that a **lookahead pre-ramp fed into the RC-smoothed follower** catches transients (like Ramp) with low distortion (like Real) — potentially deferring the full two-stage limiter rebuild. Measured target (from the real-mix analysis): reduce crest ~3–4 dB on peaks, THD near Real's −58 dB (not Ramp's −41 dB), holds the ceiling.
 

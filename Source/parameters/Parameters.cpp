@@ -241,7 +241,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (dev_attack_mode, 1),
         "DEV Attack Mode",
-        StringArray { "Ramp", "Real" },
+        StringArray { "Ramp", "Real", "Hybrid" },
         1,
         AudioParameterChoiceAttributes()));
 
