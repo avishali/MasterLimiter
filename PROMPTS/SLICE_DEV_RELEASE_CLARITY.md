@@ -1,6 +1,6 @@
 # SLICE — DEV release controls: clearer labels/tooltips, High/Wide split, engine-aware greying
 
-**Status:** ready for Cursor · **Architect:** Claude · **Verify:** Claude · **Audition/decide:** avishali
+**Status:** closed 2026-07-04 · **Architect:** Claude · **Verify:** Claude · **Audition/decide:** avishali
 **Repos:** plugin `MasterLimiter` only. No SDK. DEV controls + one new DEV param + a tiny processor decouple. No audio-path/latency change; no frozen-ID change.
 **Why:** the DEV release controls are hard to read (what the `×` trims, which controls belong to which engine). Make them legible so avishali/Asaf tune the right knobs.
 

@@ -205,7 +205,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_high_band_release_scale, 1),
-        "DEV High/Wide Release Scale",
+        "DEV High Release Scale",
+        NormalisableRange<float> (0.5f, 8.0f, 0.01f),
+        1.0f,
+        AudioParameterFloatAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_wide_release_scale, 1),
+        "DEV Wide Release Scale",
         NormalisableRange<float> (0.5f, 8.0f, 0.01f),
         1.0f,
         AudioParameterFloatAttributes()));

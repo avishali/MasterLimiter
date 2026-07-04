@@ -114,42 +114,46 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldBandLink_, 0, " %");
     sldBandLink_.setTooltip ("Multiband link — 0 = glued/linked, 100 = independent 3-band. Shipping control TBD.");
 
-    setupLabel (lblReleaseEngine_, "Engine");
+    setupLabel (lblReleaseEngine_, "Auto Engine");
     setupCombo (cmbReleaseEngine_);
     cmbReleaseEngine_.addItem ("Adaptive", 1);
     cmbReleaseEngine_.addItem ("Lookahead", 2);
-    cmbReleaseEngine_.setTooltip ("Switches Auto release between Adaptive Sigma and Lookahead follower.");
+    cmbReleaseEngine_.setTooltip ("Auto-release algorithm. Lookahead = recovers only in real gaps seen in the lookahead window (smooth, program-dependent, current best). Adaptive = legacy sigma tracker (A/B only).");
 
-    setupLabel (lblLaRelease_, "Time");
+    setupLabel (lblLaRelease_, "Release (ms)");
     setupSlider (sldLaRelease_, 1, " ms");
-    sldLaRelease_.setTooltip ("Lookahead follower release time in milliseconds.");
+    sldLaRelease_.setTooltip ("Lookahead engine: recovery time (how fast gain lets go in a gap). Per-band \u00d7 trims multiply this.");
 
-    setupLabel (lblLaPoles_, "Poles");
+    setupLabel (lblLaPoles_, "Smoothness");
     setupCombo (cmbLaPoles_);
     cmbLaPoles_.addItem ("2", 1);
     cmbLaPoles_.addItem ("3", 2);
     cmbLaPoles_.addItem ("4", 3);
-    cmbLaPoles_.setTooltip ("Lookahead follower smoothing poles.");
+    cmbLaPoles_.setTooltip ("Lookahead engine: recovery-curve order (2\u20134). More = rounder S-curve, same speed.");
 
-    setupLabel (lblSigmaAttack_, "Sigma Atk");
+    setupLabel (lblSigmaAttack_, "Adapt Onset (ms)");
     setupSlider (sldSigmaAttack_, 1, " ms");
-    sldSigmaAttack_.setTooltip ("Adaptive Sigma tracker attack time.");
+    sldSigmaAttack_.setTooltip ("Adaptive (legacy): how fast it decides limiting is sustained \u2192 switches to slow release. Lower = reacts sooner.");
 
-    setupLabel (lblSigmaDecay_, "Sigma Decay");
+    setupLabel (lblSigmaDecay_, "Adapt Hold \u00d7");
     setupSlider (sldSigmaDecay_, 2, {});
-    sldSigmaDecay_.setTooltip ("Adaptive Sigma decay multiplier.");
+    sldSigmaDecay_.setTooltip ("Adaptive (legacy): how long it stays in slow-release after limiting stops.");
 
-    setupLabel (lblLowScale_, "Low x");
+    setupLabel (lblLowScale_, "Low \u00d7");
     setupSlider (sldLowScale_, 2, {});
-    sldLowScale_.setTooltip ("Low-band auto-release timing multiplier.");
+    sldLowScale_.setTooltip ("Low-band release = this \u00d7 the base release. >1 slower (bass, less pump), <1 faster. Affects Auto + Manual.");
 
-    setupLabel (lblMidScale_, "Mid x");
+    setupLabel (lblMidScale_, "Mid \u00d7");
     setupSlider (sldMidScale_, 2, {});
-    sldMidScale_.setTooltip ("Mid-band auto-release timing multiplier.");
+    sldMidScale_.setTooltip ("Mid-band release trim (\u00d7 the base release).");
 
-    setupLabel (lblHighScale_, "High/Wide x");
+    setupLabel (lblHighScale_, "High \u00d7");
     setupSlider (sldHighScale_, 2, {});
-    sldHighScale_.setTooltip ("High-band and wideband auto-release timing multiplier.");
+    sldHighScale_.setTooltip ("High-band release trim (\u00d7 the base release).");
+
+    setupLabel (lblWideScale_, "Wide \u00d7");
+    setupSlider (sldWideScale_, 2, {});
+    sldWideScale_.setTooltip ("Wideband final-stage release trim (\u00d7 the base release).");
 
     setupLabel (lblBandStereoLink_, "Band Link");
     setupSlider (sldBandStereoLink_, 0, " %");
@@ -167,16 +171,16 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     lblFinalCeilingReadout_.setFont (ui_.type().labelFont().withHeight (11.0f));
     lblFinalCeilingReadout_.setColour (juce::Label::textColourId, palette::textMuted);
 
-    setupLabel (lblSustainRatio_, "Sustain Ratio");
+    setupLabel (lblSustainRatio_, "Manual Sustain");
     setupSlider (sldSustainRatio_, 2, {});
-    sldSustainRatio_.setTooltip ("Manual-release sustain split. Active only when Release Auto is Off.");
+    sldSustainRatio_.setTooltip ("Manual release only (Auto OFF): fast+slow split. Higher = more sustain held.");
 
     for (auto* label : { &lblAttackMode_, &lblAttack_, &lblRealAttack_, &lblLookaheadBand_, &lblLookaheadWide_,
                          &lblXoverCutoff_, &lblXoverTransition_, &lblXoverAtten_,
                          &lblXoverHiCutoff_, &lblXoverHiTransition_, &lblXoverHiAtten_, &lblBandLink_,
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_, &lblMidScale_,
-                         &lblHighScale_, &lblBandStereoLink_, &lblMsClampReadout_,
+                         &lblHighScale_, &lblWideScale_, &lblBandStereoLink_, &lblMsClampReadout_,
                          &lblFinalCeilingReadout_, &lblSustainRatio_ })
     {
         content_.addAndMakeVisible (*label);
@@ -217,6 +221,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attLowScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_low_band_release_scale), sldLowScale_);
     attMidScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mid_band_release_scale), sldMidScale_);
     attHighScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_high_band_release_scale), sldHighScale_);
+    attWideScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_wide_release_scale), sldWideScale_);
     attBandStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_band_stereo_link_pct), sldBandStereoLink_);
     attMsSafetyClamp_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_ms_safety_clamp), btnMsSafetyClamp_);
     attFinalCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_final_ceiling), btnFinalCeiling_);
@@ -245,6 +250,12 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
             nullptr);
         attAttackModeListener_->sendInitialUpdate();
     }
+
+    cmbReleaseEngine_.onChange = [this]
+    {
+        updateReleaseEngineEnablement();
+    };
+    updateReleaseEngineEnablement();
 }
 
 void DevControlsComponent::paint (juce::Graphics& g)
@@ -272,8 +283,8 @@ void DevControlsComponent::resized()
                               &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
                               &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                               &sldLaRelease_,
-                              &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldMidScale_, &sldHighScale_,
-                              &sldBandStereoLink_, &sldSustainRatio_ })
+                          &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldMidScale_, &sldHighScale_,
+                          &sldWideScale_, &sldBandStereoLink_, &sldSustainRatio_ })
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
 
@@ -338,12 +349,14 @@ void DevControlsComponent::resized()
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblSigmaDecay_, sldSigmaDecay_);
 
-    inner = placeGroup (groupBandScaling_, 136);
+    inner = placeGroup (groupBandScaling_, 172);
     placeSliderRow (inner.removeFromTop (rowH), lblLowScale_, sldLowScale_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblMidScale_, sldMidScale_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblHighScale_, sldHighScale_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblWideScale_, sldWideScale_);
 
     inner = placeGroup (groupBandStereo_, 72);
     placeSliderRow (inner.removeFromTop (rowH), lblBandStereoLink_, sldBandStereoLink_);
@@ -434,8 +447,32 @@ juce::String DevControlsComponent::formatClampReadout (float currentDb, float ma
     return juce::String (juce::jmax (0.0f, currentDb), 1) + " / " + juce::String (juce::jmax (0.0f, maxDb), 1) + " dB";
 }
 
+void DevControlsComponent::updateReleaseEngineEnablement()
+{
+    const int engineIdx = [&]
+    {
+        if (auto* raw = apvts_.getRawParameterValue (pid (param::dev_release_engine)))
+            return (int) raw->load (std::memory_order_relaxed);
+
+        return cmbReleaseEngine_.getSelectedItemIndex();
+    }();
+    const bool lookahead = engineIdx == 1;
+
+    lblLaRelease_.setEnabled (lookahead);
+    sldLaRelease_.setEnabled (lookahead);
+    lblLaPoles_.setEnabled (lookahead);
+    cmbLaPoles_.setEnabled (lookahead);
+
+    lblSigmaAttack_.setEnabled (! lookahead);
+    sldSigmaAttack_.setEnabled (! lookahead);
+    lblSigmaDecay_.setEnabled (! lookahead);
+    sldSigmaDecay_.setEnabled (! lookahead);
+}
+
 void DevControlsComponent::syncReadouts()
 {
+    updateReleaseEngineEnablement();
+
     lblMsClampReadout_.setText (formatClampReadout (processor_.getCurrentMsClampDb(), processor_.getMaxMsClampDb()),
                                 juce::dontSendNotification);
     lblFinalCeilingReadout_.setText (formatClampReadout (processor_.getCurrentFinalCeilingDb(), processor_.getMaxFinalCeilingDb()),

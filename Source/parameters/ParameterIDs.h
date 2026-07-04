@@ -32,6 +32,7 @@ inline constexpr std::string_view character { "character" };
 inline constexpr std::string_view clipper_active { "clipper_active" };
 inline constexpr std::string_view dev_low_band_release_scale { "dev_low_band_release_scale" };
 inline constexpr std::string_view dev_high_band_release_scale { "dev_high_band_release_scale" };
+inline constexpr std::string_view dev_wide_release_scale { "dev_wide_release_scale" };
 inline constexpr std::string_view dev_sigma_attack_ms { "dev_sigma_attack_ms" };
 inline constexpr std::string_view dev_sigma_decay_scale { "dev_sigma_decay_scale" };
 inline constexpr std::string_view dev_attack_ms { "dev_attack_ms" };

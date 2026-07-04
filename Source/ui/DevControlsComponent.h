@@ -26,6 +26,7 @@ private:
     void setupCombo (juce::ComboBox& combo);
     void updateManualReleaseEnabled (bool enabled);
     void updateAttackModeControls (int attackModeIdx);
+    void updateReleaseEngineEnablement();
     static juce::String formatClampReadout (float currentDb, float maxDb);
 
     MasterLimiterAudioProcessor& processor_;
@@ -70,25 +71,27 @@ private:
     juce::Label lblReleaseEngine_ {};
     juce::ComboBox cmbReleaseEngine_ { "DEV Release Engine" };
 
-    juce::GroupComponent groupLookaheadRelease_ { "LookaheadReleaseGroup", "RELEASE - Lookahead engine" };
+    juce::GroupComponent groupLookaheadRelease_ { "LookaheadReleaseGroup", "RELEASE \u00b7 Auto (Lookahead)" };
     juce::Label lblLaRelease_ {};
     juce::Slider sldLaRelease_;
     juce::Label lblLaPoles_ {};
     juce::ComboBox cmbLaPoles_ { "DEV LA Poles" };
 
-    juce::GroupComponent groupAdaptiveRelease_ { "AdaptiveReleaseGroup", "RELEASE - Adaptive engine" };
+    juce::GroupComponent groupAdaptiveRelease_ { "AdaptiveReleaseGroup", "RELEASE \u00b7 Auto (Adaptive \u00b7 legacy)" };
     juce::Label lblSigmaAttack_ {};
     juce::Slider sldSigmaAttack_;
     juce::Label lblSigmaDecay_ {};
     juce::Slider sldSigmaDecay_;
 
-    juce::GroupComponent groupBandScaling_ { "BandScalingGroup", "RELEASE - Band scaling" };
+    juce::GroupComponent groupBandScaling_ { "BandScalingGroup", "RELEASE \u00b7 per-band trim (\u00d7 base)" };
     juce::Label lblLowScale_ {};
     juce::Slider sldLowScale_;
     juce::Label lblMidScale_ {};
     juce::Slider sldMidScale_;
     juce::Label lblHighScale_ {};
     juce::Slider sldHighScale_;
+    juce::Label lblWideScale_ {};
+    juce::Slider sldWideScale_;
 
     juce::GroupComponent groupBandStereo_ { "BandStereoGroup", "BAND - Stereo link" };
     juce::Label lblBandStereoLink_ {};
@@ -124,6 +127,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLowScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMidScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attHighScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attWideScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandStereoLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMsSafetyClamp_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attFinalCeiling_;

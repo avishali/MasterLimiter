@@ -2,6 +2,23 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-04 — DEV release controls clarity (SLICE_DEV_RELEASE_CLARITY)
+
+**Status:** ✅ Build + AU pass + installed; audition pending (avishali).
+
+**Deliverables**
+- Relabeled DEV release controls with clearer row labels and tooltips (Auto Engine, Release (ms), Smoothness, Adapt Onset/Hold, Low/Mid/High/Wide ×, Manual Sustain).
+- Section headers: **RELEASE · Auto (Lookahead)**, **RELEASE · Auto (Adaptive · legacy)**, **RELEASE · per-band trim (× base)**.
+- Split high/wide release trim: new `dev_wide_release_scale` (default 1.0) drives wideband envelopes; `dev_high_band_release_scale` drives high band only — defaults reproduce prior combined behavior.
+- Engine-aware greying: Lookahead enables Release/Smoothness and greys Adapt controls; Adaptive reverses. Synced on combo change and 30 Hz DEV readout timer.
+
+**Gate**
+- [x] Plugin build clean; AU validates; user install fresh.
+- [x] Default voicing unchanged at Low 1.52 / Mid 1 / High 1 / Wide 1 (wide decouple at default 1×).
+- [ ] avishali audition: controls legible; High × vs Wide × independent; engine greying holds on preset/automation.
+
+---
+
 ## 2026-07-02 — 3-band multiband DSP (Slice B / SLICE_3BAND_DSP)
 
 **Status:** ✅ Build + AU pass; offline null + independence + audition pending (avishali).

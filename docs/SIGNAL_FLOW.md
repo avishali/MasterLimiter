@@ -172,21 +172,22 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | LOOKAHEAD | `dev_lookahead_band_ms`, `dev_lookahead_wide_ms` |
 | CROSSOVER (linear-phase) | Lo/Mid: `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db`; Mid/Hi: `dev_xover_hi_cutoff_hz`, `dev_xover_hi_transition_hz`, `dev_xover_hi_atten_db`; **Band Link** (`band_color`) |
 | RELEASE · Engine | `dev_release_engine` |
-| RELEASE · Lookahead engine | `dev_la_release_ms`, `dev_la_release_poles` |
-| RELEASE · Adaptive engine | `dev_sigma_attack_ms`, `dev_sigma_decay_scale` |
-| RELEASE · Band scaling | `dev_low_band_release_scale`, `dev_mid_band_release_scale`, `dev_high_band_release_scale` |
+| RELEASE · Auto (Lookahead) | `dev_la_release_ms`, `dev_la_release_poles` |
+| RELEASE · Auto (Adaptive · legacy) | `dev_sigma_attack_ms`, `dev_sigma_decay_scale` |
+| RELEASE · per-band trim (× base) | `dev_low_band_release_scale`, `dev_mid_band_release_scale`, `dev_high_band_release_scale`, `dev_wide_release_scale` |
 | RELEASE · Manual | `release_sustain_ratio` |
 
 | DEV control | ID | Range | Default | Drives | Notes |
 |---|---|---|---|---|---|
-| **Release Engine** | `dev_release_engine` | Adaptive / Lookahead | **Adaptive** | Chooses §4.3 engine | A/B switch. **Lookahead is the current winner.** |
-| **LA Release** | `dev_la_release_ms` | 5…400 ms (skewed low) | 80 | LookaheadFollower recovery time | The knob to sweep. Expected sweet spot well under 80 ms. |
-| **LA Poles** | `dev_la_release_poles` | 2 / 3 / 4 | 3 | Cascade order = recovery smoothness | Normalized so it changes smoothness, not speed. |
-| **Low Release Scale** | `dev_low_band_release_scale` | 0.5…8.0× | 3.0 | Low-band release multiplier | Low band releases slower (default 3×). Applies to *both* engines. |
-| **Mid Release Scale** | `dev_mid_band_release_scale` | 0.5…8.0× | 1.0 | Mid-band release multiplier | 3-band slice (ADR-0012). |
-| **High/Wide Release Scale** | `dev_high_band_release_scale` | 0.5…8.0× | 1.0 | High/wideband release multiplier | Nominal 1×. |
-| **Sigma Attack** | `dev_sigma_attack_ms` | 1…50 ms | 5 | AdaptiveSigma: how fast `sigma` rises | Legacy-engine only. |
-| **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | Legacy-engine only. |
+| **Release Engine** | `dev_release_engine` | Adaptive / Lookahead | **Lookahead** | Chooses §4.3 engine | A/B switch. **Lookahead is the current winner.** UI greys engine-specific controls. |
+| **LA Release** | `dev_la_release_ms` | 5…400 ms (skewed low) | 8 | LookaheadFollower recovery time | The knob to sweep. Per-band × trims multiply this. Enabled when Engine = Lookahead. |
+| **LA Poles** | `dev_la_release_poles` | 2 / 3 / 4 | 3 | Cascade order = recovery smoothness | UI label **Smoothness**. Normalized so it changes smoothness, not speed. |
+| **Low Release Scale** | `dev_low_band_release_scale` | 0.5…8.0× | 1.52 | Low-band release multiplier | UI **Low ×**. Applies to *both* engines. |
+| **Mid Release Scale** | `dev_mid_band_release_scale` | 0.5…8.0× | 1.0 | Mid-band release multiplier | UI **Mid ×**. 3-band slice (ADR-0012). |
+| **High Release Scale** | `dev_high_band_release_scale` | 0.5…8.0× | 1.0 | High-band release multiplier | UI **High ×** (high band only; was combined High/Wide). |
+| **Wide Release Scale** | `dev_wide_release_scale` | 0.5…8.0× | 1.0 | Wideband final-stage release multiplier | UI **Wide ×**. Default 1× preserves prior combined High/Wide=1 behavior. |
+| **Sigma Attack** | `dev_sigma_attack_ms` | 1…50 ms | 17.4 | AdaptiveSigma: how fast `sigma` rises | UI **Adapt Onset (ms)**. Legacy-engine only; greyed when Engine = Lookahead. |
+| **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | UI **Adapt Hold ×**. Legacy-engine only; greyed when Engine = Lookahead. |
 | **LA Band** | `dev_lookahead_band_ms` | 0…6 ms, 0.01 ms step | 5 | Per-band audio delay + low/high envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
 | **LA Wide** | `dev_lookahead_wide_ms` | 0…6 ms, 0.01 ms step | 5 | Wideband audio delay + wide envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
 | **Attack Mode** | `dev_attack_mode` | Ramp / Real | **Ramp** | Chooses §4.3 attack behavior | Ramp = current cosine-in-lookahead. Real = decoupled time-constant. |
@@ -199,7 +200,7 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Xover Mid/Hi Transition** | `dev_xover_hi_transition_hz` | 200…2000 Hz | 600 | Stage-2 transition width | |
 | **Xover Mid/Hi Atten** | `dev_xover_hi_atten_db` | 48…72 dB | 60 | Stage-2 stop-band attenuation | |
 | **Band Link (Color)** | `band_color` | 0…100% | 0 | Multiband link amount | Relocated from shipping Color knob to DEV dock; frozen ID. |
-| **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | Active only when Release Auto is Off. |
+| **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | UI **Manual Sustain**. Active only when Release Auto is Off. |
 
 **Plan:** once Attack, LA Band/Wide, LA Release ms, and Poles are chosen by ear, Claude bakes them as constants or promotes any keeper to a real user parameter, then deletes the temporary DEV params for 0.4.
 

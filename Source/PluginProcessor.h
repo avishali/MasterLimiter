@@ -334,6 +334,7 @@ private:
     std::atomic<float>* gainMatchAuto_ = nullptr;
     std::atomic<float>* devLowBandReleaseScale_ = nullptr;
     std::atomic<float>* devHighBandReleaseScale_ = nullptr;
+    std::atomic<float>* devWideReleaseScale_ = nullptr;
     std::atomic<float>* devSigmaAttackMs_ = nullptr;
     std::atomic<float>* devSigmaDecayScale_ = nullptr;
     std::atomic<float>* devAttackMs_ = nullptr;
