@@ -1,6 +1,6 @@
 # MasterLimiter — Limiter Types Roadmap
 
-**Status:** 🧭 ROADMAP / design notes — **not building yet.** Finish the current release/attack/lookahead **voicing** first (DEV knobs), then start here.
+**Status:** 🧭 ROADMAP — **near-term plan is now concrete & measured** (see the 2026-07-04 section below). Alpha shipped; next: the Hybrid-attack experiment as a cheap test of the Dual (#1) idea. The longer-term Spectral/Content sections remain design notes.
 **Author:** Claude (architect) from avishali's ideas · **Companion:** `docs/SIGNAL_FLOW.md` (current single-type engine).
 **North star:** *maximum loudness without distortion.* The thing that actually caps loudness is **intermodulation distortion (IMD)** — every idea below is a different way to lower it.
 
@@ -22,6 +22,36 @@ They differ only in *how* they split:
 **Architectural consequence (the switch seam):** a **Style selector** chooses the *decomposition front-end*; everything downstream is **shared back-end** — per-part `LimiterEnvelope` → recombine → output Ceiling → FinalCeiling brickwall → metering/history. So these are **not separate plugins**; they're interchangeable front-ends on one engine. (Detailed seam design deferred until after voicing — see "Deferred".)
 
 Today's plugin is already a **hybrid** of Dual + Multiband (2-band split + a transient/sustain split + wideband safety), which is why it already beats wideband on IMD in the shootout.
+
+---
+
+## 2026-07-04 — Measured findings → concrete near-term plan
+
+An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works hard" became a full characterization of the attack/transient behavior. All below is **measured** (offline rig + avishali DAW-confirmed on a real live-show mix).
+
+**Core finding — one attack curve can't be both transparent and transient-catching:**
+- **Real attack** forces `attackSamples_ = 1` (SDK `LimiterEnvelope.cpp:279`) → *no* lookahead pre-ramp → pure RC follower → transparent on sustained (THD −58 dB) but **cannot catch transients at any lookahead or oversampling** (real mix: **+4 to +8.6 dB** peak overs; crest untouched). This is structural, not resolution — the attack simply never pre-empts.
+- **Ramp attack** → lookahead pre-ramp + hard snap → catches transients (holds ceiling; crest 15.4→11.3 on the mix; ~+1 dB louder) but distorts sustained (THD −41 dB).
+- **Lookahead shipped at 0 ms** (placeholder) → fixed to Band 2 / Wide 5 ms so Real holds the ceiling on *sustained* material, latency-free; TruePeak FinalCeiling made default (`SLICE_LOOKAHEAD_CEILING_FIX`).
+
+**Stage-1's concrete spec (from the real mix, crest 15.4 dB):** reduce crest **~3–4 dB** on peaks (→ ~11–12), holding true-peak, at Real-grade distortion.
+
+**Cheap shortcut to #1 — Hybrid attack (test FIRST):** the code already has both a pre-ramp *and* an RC smoother but never combines them. A 3rd attack mode = pre-ramp (Ramp) → smoothed follower (Real) may deliver transient-catching **and** low distortion **in the existing single multiband stage**, possibly deferring the full two-stage build. `SLICE_HYBRID_ATTACK` tests it. **If it wins, #1 may be unnecessary for 0.4.**
+
+**avishali's concrete multi-stage design (the real #1, if Hybrid isn't enough):**
+- **Stage 1 — fast catcher:** wideband, lookahead pre-ramp, *move the whole transient down, don't clip the tip.* Optional: transient-accurate detection (gate/isolate the low-level bed so it triggers on transients, not sustain).
+- **Stage 2 — slow multiband leveler:** the **existing** 3-band + Real (slow/transparent) + per-band low-end release. Only levels the body — transients already tamed → no distortion. *Mostly already built.*
+- **Clipper — pre/post** selectable (character).
+- **Final ceiling — TruePeak safety only** (catches ~nothing once 1+2 work).
+
+**"Learn" / auto-target** (folds into #2's brain, offline-first): scan a file — or a DAW-timeline playback pass — build the full loudness/crest/spectral/transient picture, then solve input gain + thresholds for smooth limiting at a **target LUFS**. Offline-file version is near-term-achievable; timeline capture + the online adaptive brain are v1.0+.
+
+**Phasing:**
+- **0.4 (quick):** lookahead+TP ceiling fix · **Hybrid attack experiment** · clipper pre/post · per-band GR readouts.
+- **0.4 → v1.0 (medium):** full Stage-1 fast catcher feeding the existing multiband as Stage 2 — *only if Hybrid is insufficient.*
+- **v1.0 (big, plan separately):** Learn/auto-target + content-aware brain (#2).
+
+**Cautions:** two serial lookahead stages add latency (budget it — not the free single-stage pad trick); the fast catcher must grab only the *overshoot*, not squash punch (voicing-critical); gain-staging between stages is a deliberate decision.
 
 ---
 
