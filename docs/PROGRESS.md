@@ -2,6 +2,20 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-04 — DEV Band Split visibility (SLICE_DEV_BANDLINK_VISIBLE)
+
+**Status:** ✅ Build + AU pass + installed; audition pending (avishali).
+
+**Deliverables**
+- Renamed duplicate **Band Link** labels: `band_color` → **Band Split**, `dev_band_stereo_link_pct` → **Band Stereo** (distinct tooltips).
+- Moved **Band Split** out of the Crossover group (7th row was clipped at 0 height) into its own **BAND · Multiband link** group between per-band trim and **BAND · Stereo link**.
+
+**Gate**
+- [x] Plugin build clean; AU validates; user install fresh.
+- [ ] avishali: Band Split visible and draggable; GR bars separate at 100 vs collapse at 0; no clipped groups below.
+
+---
+
 ## 2026-07-04 — DEV release controls clarity (SLICE_DEV_RELEASE_CLARITY)
 
 **Status:** ✅ Build + AU pass + installed; audition pending (avishali).

@@ -56,6 +56,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &groupLookaheadRelease_,
                          &groupAdaptiveRelease_,
                          &groupBandScaling_,
+                         &groupMultiband_,
                          &groupBandStereo_,
                          &groupPeakControl_,
                          &groupManualRelease_ })
@@ -110,9 +111,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldXoverHiAtten_, 0, " dB");
     sldXoverHiAtten_.setTooltip ("Stage-2 stop-band attenuation.");
 
-    setupLabel (lblBandLink_, "Band Link");
+    setupLabel (lblBandLink_, "Band Split");
     setupSlider (sldBandLink_, 0, " %");
-    sldBandLink_.setTooltip ("Multiband link — 0 = glued/linked, 100 = independent 3-band. Shipping control TBD.");
+    sldBandLink_.setTooltip ("Multiband band-to-band link. 0 = bands glued (single shared GR), 100 = fully independent 3-band. (Main Color knob is greyed; this is the live control.)");
 
     setupLabel (lblReleaseEngine_, "Auto Engine");
     setupCombo (cmbReleaseEngine_);
@@ -155,9 +156,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldWideScale_, 2, {});
     sldWideScale_.setTooltip ("Wideband final-stage release trim (\u00d7 the base release).");
 
-    setupLabel (lblBandStereoLink_, "Band Link");
+    setupLabel (lblBandStereoLink_, "Band Stereo");
     setupSlider (sldBandStereoLink_, 0, " %");
-    sldBandStereoLink_.setTooltip ("Per-band L/R unlink (Stereo mode) - 100 = linked (current), 0 = fully independent per band.");
+    sldBandStereoLink_.setTooltip ("Per-band L/R stereo link. 0 = independent L/R per band, 100 = mono-linked GR per band.");
 
     btnMsSafetyClamp_.setClickingTogglesState (true);
     btnMsSafetyClamp_.setTooltip ("M/S decoded-L/R safety clamp. Off = skip clamp (FinalCeiling still ceiling-safe).");
@@ -333,8 +334,6 @@ void DevControlsComponent::resized()
     placeSliderRow (inner.removeFromTop (rowH), lblXoverHiTransition_, sldXoverHiTransition_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblXoverHiAtten_, sldXoverHiAtten_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblBandLink_, sldBandLink_);
 
     inner = placeGroup (groupReleaseEngine_, 72);
     placeComboRow (inner.removeFromTop (rowH), lblReleaseEngine_, cmbReleaseEngine_);
@@ -357,6 +356,9 @@ void DevControlsComponent::resized()
     placeSliderRow (inner.removeFromTop (rowH), lblHighScale_, sldHighScale_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblWideScale_, sldWideScale_);
+
+    inner = placeGroup (groupMultiband_, 72);
+    placeSliderRow (inner.removeFromTop (rowH), lblBandLink_, sldBandLink_);
 
     inner = placeGroup (groupBandStereo_, 72);
     placeSliderRow (inner.removeFromTop (rowH), lblBandStereoLink_, sldBandStereoLink_);

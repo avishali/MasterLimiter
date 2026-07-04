@@ -54,7 +54,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 **2.11 — Band Link / Color blend.** Per sample, `bandLinkSmoothed_` = `mapBandColorToLink(color)` = `1 − color/100`:
   - **Link 0% / Color 0% → fully linked** (`bl = 1`): all bands take `min(gainLow, gainMid, gainHigh)` → transparent wideband limiter (linear-phase reconstruction intact).
   - **Link 100% / Color 100% → independent** (`bl = 0`): each band keeps its own gain → multiband character.
-  The blend is applied to gains and audio reconstruction. Shipping **Color** knob is disabled (frozen param); tune via DEV **Band Link** slider. Per-band stereo unlink runs Color blend **per channel** before apply.
+  The blend is applied to gains and audio reconstruction. Shipping **Color** knob is disabled (frozen param); tune via DEV **Band Split** slider. Per-band stereo unlink runs Color blend **per channel** before apply.
 
 **2.12 — Lookahead delay + band gain application.** Audio is delayed by `lookahead_` (`dev_lookahead_band_ms`). Apply tree: `applyCrossover_` → `applyXoMidHi_` → `applyLowAlign_` (M2). Reconstruction: `linkedGain × (aLow+aMid+aHigh) + (1−bl) × per-band weighted sum` → `bandLimitedBuf_`. Optional **band solo** listen masks (UI atomics, not saved) audition one or more limited bands without affecting GR taps.
 
@@ -170,7 +170,9 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 |---|---|
 | ATTACK | `dev_attack_mode`, `dev_attack_ms` (Ramp), `dev_real_attack_ms` (Real) |
 | LOOKAHEAD | `dev_lookahead_band_ms`, `dev_lookahead_wide_ms` |
-| CROSSOVER (linear-phase) | Lo/Mid: `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db`; Mid/Hi: `dev_xover_hi_cutoff_hz`, `dev_xover_hi_transition_hz`, `dev_xover_hi_atten_db`; **Band Link** (`band_color`) |
+| CROSSOVER (linear-phase) | Lo/Mid: `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db`; Mid/Hi: `dev_xover_hi_cutoff_hz`, `dev_xover_hi_transition_hz`, `dev_xover_hi_atten_db` |
+| BAND · Multiband link | `band_color` (UI **Band Split**) |
+| BAND · Stereo link | `dev_band_stereo_link_pct` (UI **Band Stereo**) |
 | RELEASE · Engine | `dev_release_engine` |
 | RELEASE · Auto (Lookahead) | `dev_la_release_ms`, `dev_la_release_poles` |
 | RELEASE · Auto (Adaptive · legacy) | `dev_sigma_attack_ms`, `dev_sigma_decay_scale` |
@@ -199,7 +201,8 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Xover Mid/Hi Cutoff** | `dev_xover_hi_cutoff_hz` | 800…8000 Hz | 2500 | Stage-2 split frequency | 3-band tree (ADR-0012). |
 | **Xover Mid/Hi Transition** | `dev_xover_hi_transition_hz` | 200…2000 Hz | 600 | Stage-2 transition width | |
 | **Xover Mid/Hi Atten** | `dev_xover_hi_atten_db` | 48…72 dB | 60 | Stage-2 stop-band attenuation | |
-| **Band Link (Color)** | `band_color` | 0…100% | 0 | Multiband link amount | Relocated from shipping Color knob to DEV dock; frozen ID. |
+| **Band Split (Color)** | `band_color` | 0…100% | 0 | Multiband band-to-band link | UI **Band Split**. 0 = glued/shared GR, 100 = independent 3-band. Live control while shipping Color knob is greyed. |
+| **Band Stereo** | `dev_band_stereo_link_pct` | 0…100% | 100 | Per-band L/R stereo link | UI **Band Stereo**. 0 = independent L/R per band, 100 = mono-linked GR per band (Stereo mode only). |
 | **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | UI **Manual Sustain**. Active only when Release Auto is Off. |
 
 **Plan:** once Attack, LA Band/Wide, LA Release ms, and Poles are chosen by ear, Claude bakes them as constants or promotes any keeper to a real user parameter, then deletes the temporary DEV params for 0.4.
@@ -229,6 +232,6 @@ The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R s
 ## 8. Known discrepancies & backlog (so the doc stays honest)
 1. **Multiband true-peak leak:** at Color 100 + TruePeak, output TP can leak to ~−0.4 (over ceiling). Root cause = 4× OS headroom. Grouped with harmonic aliasing in the "OS-quality" slice (raise OS to 8×+ and/or proper ISP control).
 2. **Color intermediate (0<x<100):** ~~low end dips from phase cancellation~~ **Fixed (F-2b):** linear-phase crossover + `xDelayed` linked term; verify on offline rig. Residual risk = CPU at 4× OS (escalate to F-2c if needed).
-3. **Shipping Color knob:** greyed/disabled on main panel (frozen `band_color` preserved for presets). Tune multiband link via DEV **Band Link** until a purpose-built 3-band control ships.
+3. **Shipping Color knob:** greyed/disabled on main panel (frozen `band_color` preserved for presets). Tune multiband link via DEV **Band Split** until a purpose-built 3-band control ships.
 4. **DEV params** are shipping in the beta build — must be removed for 0.4.
 5. **Metering history depth** — history graph storage is fixed at 65536 frames for the 30 s max view; extend only if a future UI window needs more.

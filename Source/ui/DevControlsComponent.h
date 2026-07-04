@@ -93,7 +93,9 @@ private:
     juce::Label lblWideScale_ {};
     juce::Slider sldWideScale_;
 
-    juce::GroupComponent groupBandStereo_ { "BandStereoGroup", "BAND - Stereo link" };
+    juce::GroupComponent groupMultiband_ { "MultibandGroup", "BAND \u00b7 Multiband link" };
+
+    juce::GroupComponent groupBandStereo_ { "BandStereoGroup", "BAND \u00b7 Stereo link" };
     juce::Label lblBandStereoLink_ {};
     juce::Slider sldBandStereoLink_;
 
