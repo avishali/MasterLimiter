@@ -10,10 +10,17 @@
 - HQ: `shared/mdsp_dsp/include/mdsp_dsp/dynamics/LimiterEnvelope.h` only
 - Plugin: `Parameters.cpp`, `PluginProcessor.cpp`, `DevControlsComponent.cpp`, docs
 
-## Acceptance (pending rig + audition)
-1. Build + auval PASS; latency unchanged.
+## Acceptance
+1. Build + auval PASS; latency unchanged (same `baseLatencySamples_` formula; Hybrid uses existing pre-ramp within lookahead budget).
 2. Ramp/Real paths untouched (additive enum + index-2 mapping only).
 3. Hybrid enables both Attack + Real Atk knobs.
 4. All `attackMode_ == Ramp` sites verified; only `== Real` is attackSamples special-case.
-5. Offline rig table: Hybrid crest/THD/ceiling vs Ramp/Real.
-6. Program-material A/B audition.
+5. **Rig (synthetic, LA band=2 / wide=5 ms, +18 dB, ceiling −1, FC off):**
+   - **100 Hz bass:** all three hold ceiling; Hybrid THD **−65.3 dB** (best) vs Real −62.7 vs Ramp −46.3.
+   - **Transient mix:** only Ramp holds ceiling (−1.0 SP); Real/Hybrid overs ~+11 dB — hypothesis **not met** on transients in this rig.
+   - **Defaults (LA=0):** Hybrid ≡ Real (no ceiling hold on bass without lookahead).
+6. Program-material A/B audition — **pending** (avishali/Asaf).
+
+## Commits (not pushed)
+- HQ: `1df0fcd` — `feat(dynamics): add AttackMode::Hybrid to LimiterEnvelope enum`
+- Plugin: `31b6abc` — `feat(dev): add Hybrid attack mode (pre-ramp + RC follower)`
