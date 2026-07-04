@@ -98,6 +98,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter ("plugin_bypass") != nullptr);
     jassert (apvts.getParameter ("clipper_drive_db") != nullptr);
     jassert (apvts.getParameter ("clipper_mode") != nullptr);
+    jassert (apvts.getParameter (param::clipper_position.data()) != nullptr);
     jassert (apvts.getParameter ("clipper_active") != nullptr);
     jassert (apvts.getParameter ("ceiling_db") != nullptr);
     jassert (apvts.getParameter ("io_input_l_db") != nullptr);
@@ -305,10 +306,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     stereoMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("stereo_mode"));
     characterChoice_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("character"));
     clipperMode_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("clipper_mode"));
+    clipperPosition_ = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (param::clipper_position.data()));
     jassert (ceilingMode_ != nullptr);
     jassert (stereoMode_ != nullptr);
     jassert (characterChoice_ != nullptr);
     jassert (clipperMode_ != nullptr);
+    jassert (clipperPosition_ != nullptr);
 
     cacheGainCeilingLinkParameters();
 
@@ -1104,7 +1107,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
         || ceilingMode_ == nullptr || stereoMode_ == nullptr || characterChoice_ == nullptr || limiterActive_ == nullptr
-        || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperActive_ == nullptr || clipperDriveDb_ == nullptr || clipperMode_ == nullptr
+        || pluginBypass_ == nullptr || gainCeilingLink_ == nullptr || clipperActive_ == nullptr || clipperDriveDb_ == nullptr || clipperMode_ == nullptr || clipperPosition_ == nullptr
         || releaseAuto_ == nullptr || autoReleaseMode_ == nullptr
         || devLowBandReleaseScale_ == nullptr || devHighBandReleaseScale_ == nullptr || devWideReleaseScale_ == nullptr
         || devSigmaAttackMs_ == nullptr || devSigmaDecayScale_ == nullptr
@@ -1234,80 +1237,88 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         auto osBlock = limiterOversampler_.processSamplesUp (block);
         const int osN = (int) osBlock.getNumSamples();
 
-        const bool clipperActive = clipperActive_ != nullptr && clipperActive_->get();
+        const bool clipperPre = clipperPosition_->getIndex() == 0;
 
-        auto clipBlock = clipperOversampler_.processSamplesUp (osBlock);
-        const int clipN = static_cast<int> (clipBlock.getNumSamples());
-
-        if (clipperActive)
+        const auto runClipperStage = [&] (juce::dsp::AudioBlock<float>& block)
         {
-            clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
-            const int clipperModeIdx = clipperMode_->getIndex();
-            float maxAttenuationDb = 0.0f;
-            float clipperDriveGain = clipperDriveSmoothed_.getCurrentValue();
+            const bool clipperActive = clipperActive_ != nullptr && clipperActive_->get();
 
-            for (int i = 0; i < clipN; ++i)
+            auto clipBlock = clipperOversampler_.processSamplesUp (block);
+            const int clipN = static_cast<int> (clipBlock.getNumSamples());
+
+            if (clipperActive)
             {
-                if ((i & 1) == 0)
-                    clipperDriveGain = clipperDriveSmoothed_.getNextValue();
+                clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
+                const int clipperModeIdx = clipperMode_->getIndex();
+                float maxAttenuationDb = 0.0f;
+                float clipperDriveGain = clipperDriveSmoothed_.getCurrentValue();
 
-                const int hostIdx = juce::jmin (n - 1, i * n / clipN);
-                for (int ch = 0; ch < nch; ++ch)
+                for (int i = 0; i < clipN; ++i)
                 {
-                    auto* d = clipBlock.getChannelPointer ((size_t) ch);
-                    const float x = d[i] * clipperDriveGain;
-                    const float ax = std::abs (x);
-                    float y = x;
+                    if ((i & 1) == 0)
+                        clipperDriveGain = clipperDriveSmoothed_.getNextValue();
 
-                    if (clipperModeIdx == 0)
+                    const int hostIdx = juce::jmin (n - 1, i * n / clipN);
+                    for (int ch = 0; ch < nch; ++ch)
                     {
-                        if (ax > 1.0f)
-                            y = std::copysign (1.0f, x);
-                    }
-                    else
-                    {
-                        constexpr float kSoftKnee = 0.891f;
-                        if (ax > kSoftKnee)
+                        auto* d = clipBlock.getChannelPointer ((size_t) ch);
+                        const float x = d[i] * clipperDriveGain;
+                        const float ax = std::abs (x);
+                        float y = x;
+
+                        if (clipperModeIdx == 0)
                         {
-                            const float over = (ax - kSoftKnee) / (1.0f - kSoftKnee);
-                            y = std::copysign (kSoftKnee + (1.0f - kSoftKnee) * std::tanh (over), x);
+                            if (ax > 1.0f)
+                                y = std::copysign (1.0f, x);
                         }
+                        else
+                        {
+                            constexpr float kSoftKnee = 0.891f;
+                            if (ax > kSoftKnee)
+                            {
+                                const float over = (ax - kSoftKnee) / (1.0f - kSoftKnee);
+                                y = std::copysign (kSoftKnee + (1.0f - kSoftKnee) * std::tanh (over), x);
+                            }
+                        }
+
+                        if (ax > 1.0e-6f)
+                        {
+                            const float ay = std::abs (y);
+                            const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
+                            if (attDb < maxAttenuationDb)
+                                maxAttenuationDb = attDb;
+                            if (attDb < 0.0f)
+                                clipEnvBuf_[(size_t) hostIdx] = std::max (clipEnvBuf_[(size_t) hostIdx], -attDb);
+                        }
+
+                        if (clipperDriveGain > 0.0f)
+                            y /= clipperDriveGain;
+
+                        d[i] = y;
                     }
-
-                    if (ax > 1.0e-6f)
-                    {
-                        const float ay = std::abs (y);
-                        const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
-                        if (attDb < maxAttenuationDb)
-                            maxAttenuationDb = attDb;
-                        if (attDb < 0.0f)
-                            clipEnvBuf_[(size_t) hostIdx] = std::max (clipEnvBuf_[(size_t) hostIdx], -attDb);
-                    }
-
-                    if (clipperDriveGain > 0.0f)
-                        y /= clipperDriveGain;
-
-                    d[i] = y;
                 }
+
+                const float clipReadDb = -maxAttenuationDb;
+                currentClipDb_.store (clipReadDb, std::memory_order_relaxed);
+                if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
+                    maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
+            }
+            else
+            {
+                currentClipDb_.store (0.0f, std::memory_order_relaxed);
             }
 
-            const float clipReadDb = -maxAttenuationDb;
-            currentClipDb_.store (clipReadDb, std::memory_order_relaxed);
-            if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
-                maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
-        }
-        else
-        {
-            currentClipDb_.store (0.0f, std::memory_order_relaxed);
-        }
+            clipperOversampler_.processSamplesDown (block);
 
-        clipperOversampler_.processSamplesDown (osBlock);
+            if (clipperOsAlignPad4x_ > 0)
+            {
+                juce::dsp::ProcessContextReplacing<float> clipAlignCtx (block);
+                clipperOsAlignDelay_.process (clipAlignCtx);
+            }
+        };
 
-        if (clipperOsAlignPad4x_ > 0)
-        {
-            juce::dsp::ProcessContextReplacing<float> clipAlignCtx (osBlock);
-            clipperOsAlignDelay_.process (clipAlignCtx);
-        }
+        if (clipperPre)
+            runClipperStage (osBlock);
 
         inputGainSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
         for (int i = 0; i < osN; ++i)
@@ -1955,6 +1966,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                                            currentGrRDb_.load (std::memory_order_relaxed));
         if (frameMaxGr > maxGrSinceResetDb_.load (std::memory_order_relaxed))
             maxGrSinceResetDb_.store (frameMaxGr, std::memory_order_relaxed);
+
+        if (! clipperPre)
+            runClipperStage (osBlock);
 
         const int padSamples = (osMaxLookahead - laBandActive) + (osMaxLookahead - laWideActive);
         lookaheadPad_.setDelaySamples (padSamples);

@@ -40,10 +40,10 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.6 — Upsample 4×.** `processSamplesUp` → `osBlock` at 4× rate, `osN` samples.
 
-**2.7 — Clipper (optional, pre-limiter).** Gated by **Clipper Active**. Per sample: multiply by **drive** (`clipper_drive_db`, applied as a *boost into* the clipper), then:
+**2.7 — Clipper (optional).** Position: **`clipper_position`** — **Pre** (default, before limiter) or **Post** (after wideband limiter + ceiling, before lookahead pad + downsample). Gated by **Clipper Active**. The clipper's 2× OS round-trip runs **once per block** at the active site (even when inactive) so latency is constant across position and active toggle. Per sample: multiply by **drive** (`clipper_drive_db`, applied as a *boost into* the clipper), then:
   - **Hard** (`mode 0`): `y = sign(x)` when `|x| > 1`.
   - **Soft** (`mode 1`): tanh soft-knee above **0.891** (≈ −1 dBFS): `y = sign(x)·(0.891 + 0.109·tanh(over))`. Smooth saturation, asymptotic to ±1.
-  Then divide back out by the drive (un-drive) so the clipper adds harmonics/density without net level change. The peak attenuation it caused is metered as **Clip dB**.
+  Then divide back out by the drive (un-drive) so the clipper adds harmonics/density without net level change. The peak attenuation it caused is metered as **Clip dB**. **Post** position relies on **TruePeak FinalCeiling** (default) to catch inter-sample peaks from the clipper.
 
 **2.8 — Input gain.** `input_gain_db` (0–24 dB), smoothed, multiplied in. **This is the knob that drives gain reduction** (the limiter threshold is fixed at 1.0 — see §3).
 
@@ -139,8 +139,9 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 | M/S Link | `ms_link_pct` | 0…100% | 100 | M/S gain linking. |
 | Color | `band_color` | 0…100% | 0 | 0 = linked/transparent, 100 = independent/multiband. |
 | Character | `character` | Clean/Tight/Aggressive | Clean | Temporarily greyed out/inert while DEV Attack overrides attack speed (§4.3). |
-| Clipper | `clipper_drive_db` | −12…0 dB | 0 | Pre-limiter clip drive. |
+| Clipper | `clipper_drive_db` | −12…0 dB | 0 | Clip drive (boost into clipper). |
 | Clipper Mode | `clipper_mode` | Hard/Soft | Hard | Clip shape. |
+| Clipper Position | `clipper_position` | Pre/Post | Pre | Pre = before limiter; Post = after wideband+ceiling. |
 | Clipper Active | `clipper_active` | bool | on | Clipper power. |
 | Limiter Active | `limiter_active` | bool | on | Whole limiter block power. |
 | Bypass | `plugin_bypass` | bool | off | Click-free dry/wet bypass. |
@@ -225,7 +226,7 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 | Input peak / RMS / true-peak L/R | `inputPeakLDb_`, `inputRmsLDb_`, `inputTruePeakLDb_`, `maxInputPeak{L,R}Db_`, `maxInputTruePeak{L,R}Db_`, … | 2.3 |
 | Gain reduction (total / L / R / max) | `currentGrDb_`, `currentGrLDb_`, `currentGrRDb_`, `maxGrSinceResetDb_` | 2.14 |
 | Per-band gain reduction (Low / Mid / High × L/R) | `currentGrLow{L,R}Db_`, `currentGrMid{L,R}Db_`, `currentGrHigh{L,R}Db_`, `maxGr*` holds | 2.14 (post-Band-Link `gLowOut` / `gMidOut` / `gHighOut` × wideband gain; history traces use band max of L/R) |
-| Clip reduction | `currentClipDb_`, `maxClipSinceResetDb_` | 2.7 |
+| Clip reduction | `currentClipDb_`, `maxClipSinceResetDb_` | 2.7 (active clipper site) |
 | M/S safety clamp (DEV) | `currentMsClampDb_`, `maxMsClampDb_` | 2.14 (M/S only; gated by `dev_ms_safety_clamp`) |
 | Final ceiling reduction (DEV) | `currentFinalCeilingDb_`, `maxFinalCeilingDb_` | 2.16 (gated by `dev_final_ceiling`) |
 | Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, `maxOutputPeak{L,R}Db_`, `maxOutputTruePeak{L,R}Db_`, … | 2.18 |

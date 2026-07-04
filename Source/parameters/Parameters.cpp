@@ -50,6 +50,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         0,
         AudioParameterChoiceAttributes()));
 
+    layout.add (std::make_unique<AudioParameterChoice> (
+        pid (clipper_position, 1),
+        "Clipper Position",
+        StringArray { "Pre", "Post" },
+        0,
+        AudioParameterChoiceAttributes()));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (ceiling_db, 1),
         "Ceiling",

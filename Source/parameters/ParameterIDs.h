@@ -10,6 +10,7 @@ inline constexpr std::string_view limiter_active { "limiter_active" };
 inline constexpr std::string_view plugin_bypass { "plugin_bypass" };
 inline constexpr std::string_view clipper_drive_db { "clipper_drive_db" };
 inline constexpr std::string_view clipper_mode { "clipper_mode" };
+inline constexpr std::string_view clipper_position { "clipper_position" };
 inline constexpr std::string_view ceiling_db { "ceiling_db" };
 inline constexpr std::string_view gain_ceiling_link { "gain_ceiling_link" };
 inline constexpr std::string_view gain_match_auto { "gain_match_auto" };

@@ -2,6 +2,24 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-05 — Clipper Pre/Post position (SLICE_CLIPPER_PREPOST)
+
+**Status:** ✅ Build + AU pass; rig measured; audition pending (avishali/Asaf).
+
+**Deliverables (plugin-only — no SDK)**
+- New frozen param `clipper_position` { Pre, Post }, default Pre (null).
+- Refactored clipper block into `runClipperStage(osBlock)`; called once per block at Pre or Post.
+- Post site: after wideband+ceiling writes, before `lookaheadPad_` + downsample; FinalCeiling catches Post ISP.
+
+**Gate**
+- [x] Build clean, AU validates.
+- [x] Pre default: refactor preserves call site and logic (deterministic re-render null).
+- [x] Latency identical Pre vs Post (`reported_latency_samples` match).
+- [x] Offline rig: Post clip reduces crest vs no-clip; TP ≤ ceiling with FC on (TruePeak).
+- [ ] avishali audition: Pre vs Post character on program material.
+
+---
+
 ## 2026-07-05 — Per-band GR numeric readouts (SLICE_PERBAND_GR_READOUTS)
 
 **Status:** ✅ Build + AU pass; audition pending (avishali/Asaf).
