@@ -1,6 +1,6 @@
 # MasterLimiter — Limiter Types Roadmap
 
-**Status:** 🧭 ROADMAP — **near-term plan is now concrete & measured** (see the 2026-07-04 section below). Alpha shipped; next: the Hybrid-attack experiment as a cheap test of the Dual (#1) idea. The longer-term Spectral/Content sections remain design notes.
+**Status:** 🧭 ROADMAP — **reframed 2026-07-05 by the Ozone IRC 1 benchmark** (see that section): the gap to beat is *release intelligence + transient handling*, NOT band count. Single-stage attack tweaks (Hybrid, per-band attack) proved the wideband wall and are done. Next = measure the Ozone gap numerically, then adaptive release + transient handling; Spectral (#3) is the long game.
 **Author:** Claude (architect) from avishali's ideas · **Companion:** `docs/SIGNAL_FLOW.md` (current single-type engine).
 **North star:** *maximum loudness without distortion.* The thing that actually caps loudness is **intermodulation distortion (IMD)** — every idea below is a different way to lower it.
 
@@ -58,6 +58,31 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 - **v1.0 (big, plan separately):** Learn/auto-target + content-aware brain (#2).
 
 **Cautions:** two serial lookahead stages add latency (budget it — not the free single-stage pad trick); the fast catcher must grab only the *overshoot*, not squash punch (voicing-critical); gain-staging between stages is a deliberate decision.
+
+---
+
+## 2026-07-05 — iZotope IRC competitive analysis + the benchmark that reframes the plan
+
+**Benchmark (avishali, apples-to-apples):** Ozone 11 **default IRC 1** ("fast & loud" character, ceiling −1, **+9.6 dB gain — same as our setup**) sounds **more open, clearer, more punch/detail** than us. IRC 1 is iZotope's **oldest, SINGLE-band** mode. **So their single-band beats our multiband at equal loudness → the gap is core limiting *quality* (release intelligence + transient handling + our wideband dulling), NOT band count or spectral.** Don't chase #3/spectral to close *this* gap.
+
+**IRC modes → our roadmap:**
+| iZotope | What it does | Ours |
+|---|---|---|
+| IRC 1 | fast release on transients / slow on bass — program-dependent | frequency/time-dependent release (ours is FIXED per-band scales + fixed lookahead-follower, NOT adaptive) |
+| IRC 2 | *preserve* transients (keep them sharp under heavy limiting) | we don't — we pass (Real) or crunch (Ramp) |
+| IRC 3 | psychoacoustic model → push limiting speed to the threshold of *audible* distortion | #2 content-aware "distortion-aware brain" |
+| IRC 3/4 styles (Clipping/Crisp/Balanced/Pumping · Classic/Modern/Transient) | a knob constraining release behaviour | our dead **Transparent/Balanced/Reactive** control — revive it as this |
+| IRC 4 | **single-band SPECTRAL** — limits only the bands contributing to the peak, "when no limiting necessary the spectrum is unaltered" → *openness* | #3 Spectral |
+| **IRC 5 (Ozone 12)** | iZotope's FIRST **multiband** (4 bands, per-band attack AND release), built ON the IRC 3 brain + spectral peak-prioritization; "subtle tonal shift, balanced by sound design" | our multiband + per-band attack/release + the future brain — **validates the direction, but note band count was never their edge** |
+
+**Key architectural insight (matches our own "wideband is the wall" finding from the other side):** IRC 4/5's openness = **spectral surgery** — only duck the offending bands, leave the rest at full level. Our **wideband safety stage applies BROADBAND gain reduction — turns the whole mix down to catch one peak → dulls detail/openness.** Broadband GR is the enemy of "open." They prove it with a product; we proved it with THD.
+
+**REFRAMED PRIORITY (supersedes "Hybrid/per-band-attack next"):**
+1. **Close the IRC 1 gap first — it's release + transients, not bands:** (a) **program-dependent / adaptive release** (fast-transient / slow-bass, reacting to content — the IRC 1 core; ours is fixed); (b) real **transient handling** (the two-stage / fast catcher we keep circling — post-clipper is an interim); (c) reduce the **wideband broadband dulling**.
+2. **Then #3 Spectral (IRC 4 openness)** — the long game to match their *best*, removes the wideband wall entirely.
+3. Character-styles knob (revive Transparent/Balanced/Reactive) = cheap UX win borrowed from IRC 3/4 styles.
+
+**⏭ NEXT (measure the gap, don't guess):** render avishali's mix through **Ozone IRC 1 (fast&loud, −1, +9.6)** + our output on the same mix → rig A/B: crest/transient preservation, difference-spectrum (are we darker up top?), GR program-adaptivity (faster recovery in gaps?), IMD. Turn "sounds better" into a numeric target.
 
 ---
 
