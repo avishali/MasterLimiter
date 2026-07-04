@@ -78,6 +78,7 @@ slice or split a follow-up slice.
 | Dev | ✅ **Build/AU — I/O meter readouts polish** | — | labels + MAX hold + numeric ballistics + GR frame | TP/SP/MAX/RMS captions; processor-latched max sample-peak; slower SP/RMS readout decay; GR panel matches I/O. Audition pending. |
 | Meter | ✅ **Build/AU — M1 estimator unification** | — | one source per quantity + floor −120 | SP=bar peak; MAX line=number; RMS direct; no stale 1 s holds. Audition pending. |
 | Meter | ✅ **Build/AU — M2 GR mastering scale** | — | sqrt 0–12 dB + fillRect + total label | Low-end GR visible; ~180 ms release; per-band bars vs total readout labeled. Audition pending. |
+| Meter | ✅ **Build/AU — Per-band GR readouts** | — | band cur/max strip under bars | LO/MID/HI numeric readouts (band max L/R); same smoother as total; 18 px strip; meter-only. Audition pending. |
 | Meter | ✅ **Build/AU — M3 Integrated LUFS gating** | HQ `LoudnessAnalyzer` | (submodule bump) | BS.1770-4 §4 abs/rel gating on Integrated only; M/S unchanged. SDK tests pass; plugin build/AU clean. Audition pending. |
 | Meter | ✅ **Build/AU — M4 Clip readout clarity** | — | CLIP GR label + peak-hold readout | Clipper depth unambiguous; ~850 ms hold on current; max latch unchanged. Audition pending. |
 | Dev | 🔶 **Implemented — UI widen + relayout (post-A2)** | — | `PluginEditor` + `MainView` layout | Canvas 1100→1172; clipper knob 100×100; GR meter 198px wide; right cluster +72px. UI-only. Build/AU + audition pending. |

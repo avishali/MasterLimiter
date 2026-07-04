@@ -47,8 +47,13 @@ private:
     float readoutHeldGrDb_ { 0.0f };
     float readoutCurrentGrDb_ { 0.0f };
     int readoutHoldTicksLeft_ { 0 };
+    float bandReadoutHeld_[kNumBands] {};
+    float bandReadoutCurrentDb_[kNumBands] {};
+    int bandReadoutHoldTicks_[kNumBands] {};
+    float bandReadoutMaxDb_[kNumBands] {};
 
     juce::Rectangle<int> meterBounds_;
+    juce::Rectangle<int> bandReadoutBounds_;
     juce::Rectangle<int> readoutBounds_;
     juce::Rectangle<int> scaleGutterArea_;
 

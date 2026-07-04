@@ -151,6 +151,36 @@ void GainReductionMeter::sync (float dtSec)
     tickGrReadoutSmoother (readoutHeldGrDb_, readoutCurrentGrDb_, readoutHoldTicksLeft_, curGr, dtSec, holdTicks);
     displayMaxGrDb_ = std::isfinite (rawMax) ? std::abs (rawMax) : 0.0f;
 
+    const auto bandMaxAbs = [] (float lDb, float rDb) noexcept
+    {
+        const float l = std::isfinite (lDb) ? std::abs (lDb) : 0.0f;
+        const float r = std::isfinite (rDb) ? std::abs (rDb) : 0.0f;
+        return juce::jmax (l, r);
+    };
+
+    const float curBand[kNumBands] = {
+        bandMaxAbs (processor_.getCurrentGrLowLDb(), processor_.getCurrentGrLowRDb()),
+        bandMaxAbs (processor_.getCurrentGrMidLDb(), processor_.getCurrentGrMidRDb()),
+        bandMaxAbs (processor_.getCurrentGrHighLDb(), processor_.getCurrentGrHighRDb())
+    };
+
+    const float maxBandRaw[kNumBands][kNumChannels] = {
+        { processor_.getMaxGrLowLDb(), processor_.getMaxGrLowRDb() },
+        { processor_.getMaxGrMidLDb(), processor_.getMaxGrMidRDb() },
+        { processor_.getMaxGrHighLDb(), processor_.getMaxGrHighRDb() }
+    };
+
+    for (int b = 0; b < kNumBands; ++b)
+    {
+        tickGrReadoutSmoother (bandReadoutHeld_[b],
+                               bandReadoutCurrentDb_[b],
+                               bandReadoutHoldTicks_[b],
+                               curBand[b],
+                               dtSec,
+                               holdTicks);
+        bandReadoutMaxDb_[b] = bandMaxAbs (maxBandRaw[b][0], maxBandRaw[b][1]);
+    }
+
     repaint();
 }
 
@@ -170,6 +200,15 @@ void GainReductionMeter::resetPeakHolds() noexcept
     readoutHeldGrDb_ = 0.0f;
     readoutCurrentGrDb_ = 0.0f;
     readoutHoldTicksLeft_ = 0;
+
+    for (int b = 0; b < kNumBands; ++b)
+    {
+        bandReadoutHeld_[b] = 0.0f;
+        bandReadoutCurrentDb_[b] = 0.0f;
+        bandReadoutHoldTicks_[b] = 0;
+        bandReadoutMaxDb_[b] = 0.0f;
+    }
+
     processor_.resetMaxGr();
 }
 
@@ -186,6 +225,7 @@ void GainReductionMeter::resized()
     auto bounds = getLocalBounds();
     readoutBounds_ = bounds.removeFromBottom (18);
     soloBounds_ = bounds.removeFromBottom (22);
+    bandReadoutBounds_ = bounds.removeFromBottom (18);
     meterBounds_ = bounds.reduced (4, 4);
 
     auto plotOuter = meterBounds_.reduced (7, 7);
@@ -223,8 +263,11 @@ void GainReductionMeter::paint (juce::Graphics& g)
 
     auto fallbackBounds = getLocalBounds();
     const auto fallbackReadout = fallbackBounds.removeFromBottom (18);
+    fallbackBounds.removeFromBottom (22);
+    const auto fallbackBandReadout = fallbackBounds.removeFromBottom (18);
     const auto fallbackMeter = fallbackBounds.reduced (4, 4);
     const auto meterArea = meterBounds_.isEmpty() ? fallbackMeter : meterBounds_;
+    const auto bandReadoutArea = bandReadoutBounds_.isEmpty() ? fallbackBandReadout : bandReadoutBounds_;
     const auto readoutArea = readoutBounds_.isEmpty() ? fallbackReadout : readoutBounds_;
 
     g.setColour (theme.panel.withAlpha (0.9f));
@@ -348,6 +391,27 @@ void GainReductionMeter::paint (juce::Graphics& g)
         g.setColour (theme.textMuted.withAlpha (0.45f));
         g.drawText ("dB", juce::Rectangle<float> (scaleLeft, plotTop - 11.0f, scaleBounds.getWidth(), 10.0f),
                     juce::Justification::centredLeft, false);
+    }
+
+    if (! bandReadoutArea.isEmpty())
+    {
+        const int bandGap = 4;
+        const int totalBandGaps = bandGap * (kNumBands - 1);
+        const int bandW = juce::jmax (1, (bandReadoutArea.getWidth() - totalBandGaps) / kNumBands);
+        auto colArea = bandReadoutArea.reduced (7, 0);
+
+        g.setColour (theme.textMuted.withAlpha (0.85f));
+        g.setFont (type.labelFont().withHeight (10.0f));
+
+        for (int b = 0; b < kNumBands; ++b)
+        {
+            if (b > 0)
+                colArea.removeFromLeft (bandGap);
+
+            const auto col = colArea.removeFromLeft (bandW);
+            const auto bandText = formatDbBare (bandReadoutCurrentDb_[b]) + " / " + formatDbBare (bandReadoutMaxDb_[b]);
+            g.drawText (bandText, col, juce::Justification::centred, true);
+        }
     }
 
     const auto readoutText = formatDbBare (readoutCurrentGrDb_) + " / " + formatDbBare (displayMaxGrDb_);

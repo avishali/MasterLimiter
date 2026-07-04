@@ -2,6 +2,24 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-05 — Per-band GR numeric readouts (SLICE_PERBAND_GR_READOUTS)
+
+**Status:** ✅ Build + AU pass; audition pending (avishali/Asaf).
+
+**Deliverables (meter UI only — no DSP/param/SDK)**
+- `GainReductionMeter`: 18 px readout strip under bars, above solo row; LO/MID/HI columns aligned with band bars.
+- Each band shows `cur / max` where value = band max of L/R (matches history-trace convention).
+- Per-band current uses same `tickGrReadoutSmoother` as total readout; max latched from processor taps (cleared on reset-peaks click).
+- Component footprint unchanged (198×354).
+
+**Gate**
+- [x] Build clean, AU validates; no latency/DSP change.
+- [x] Per-band numbers column-aligned; total readout unchanged.
+- [x] Reset peaks clears per-band smoother state + processor max holds (existing path).
+- [ ] avishali audition: legibility and voicing usefulness at ~55 px column width.
+
+---
+
 ## 2026-07-05 — Lookahead ceiling-hold defaults (SLICE_LOOKAHEAD_CEILING_FIX)
 
 **Status:** ✅ Build + AU pass; rig confirms ceiling hold; audition pending (avishali/Asaf).
