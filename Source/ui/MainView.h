@@ -100,6 +100,7 @@ private:
     void updateCeilingModeButton (int ceilingIdx);
     void updateStereoModeControls();
     void updateClipperModeButton (int clipperIdx);
+    void updateClipperPositionButton (int idx);
     void updateClipperActiveState();
     void updateCharacterModeControl (int characterIdx);
     void updateAutoReleaseModeControl (int modeIdx);
@@ -167,6 +168,7 @@ private:
     juce::Label lblClipperDrive_ { {}, "Clipper" };
     juce::ToggleButton btnClipperActive_ { "Clipper" };
     juce::ToggleButton btnClipperMode_ { "Hard" };
+    juce::ToggleButton btnClipperPosition_ { "Pre" };
     ValueSlider sldClipperDrive_;
     juce::Label lblClipperReadout_ { {}, "Clip 0.0 / 0.0" };
 
@@ -237,6 +239,7 @@ private:
     bool lastClipperActive_ { true };
     bool lastReleaseAuto_ { false };
     int lastClipperModeIdx_ { -1 };
+    int lastClipperPositionIdx_ { 0 };
     int lastCharacterModeIdx_ { -1 };
     int lastAutoReleaseModeIdx_ { -1 };
     bool ignoreNextEditorClickAway_ { false };
@@ -258,6 +261,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attClipperDrive_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attClipperActive_;
     std::unique_ptr<juce::ParameterAttachment> attClipperMode_;
+    std::unique_ptr<juce::ParameterAttachment> attClipperPosition_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainCeilingLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRelease_;

@@ -141,7 +141,7 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 | Character | `character` | Clean/Tight/Aggressive | Clean | Temporarily greyed out/inert while DEV Attack overrides attack speed (§4.3). |
 | Clipper | `clipper_drive_db` | −12…0 dB | 0 | Clip drive (boost into clipper). |
 | Clipper Mode | `clipper_mode` | Hard/Soft | Hard | Clip shape. |
-| Clipper Position | `clipper_position` | Pre/Post | Pre | Pre = before limiter; Post = after wideband+ceiling. |
+| Clipper Position | `clipper_position` | Pre/Post | Pre | Pre = before limiter; Post = after wideband+ceiling. UI: Pre/Post segment beside Hard/Soft. |
 | Clipper Active | `clipper_active` | bool | on | Clipper power. |
 | Limiter Active | `limiter_active` | bool | on | Whole limiter block power. |
 | Bypass | `plugin_bypass` | bool | off | Click-free dry/wet bypass. |

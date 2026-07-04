@@ -527,6 +527,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (btnClipperActive_);
     btnClipperMode_.setClickingTogglesState (false);
     addAndMakeVisible (btnClipperMode_);
+    btnClipperPosition_.setClickingTogglesState (false);
+    addAndMakeVisible (btnClipperPosition_);
     addAndMakeVisible (sldCeiling_);
     addAndMakeVisible (sldRelease_);
     btnReleaseAuto_.setClickingTogglesState (true);
@@ -553,6 +555,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnLimiterActive_.setName ("LimiterPower");
     btnClipperActive_.setName ("LimiterPower");
     btnClipperMode_.setName ("ClipperModeSegment");
+    btnClipperPosition_.setName ("ClipperPositionSegment");
     btnCeilingMode_.setName ("CeilingModeSegment");
     btnStereoMode_.setName ("StereoModeSegment");
     btnGainMatchAutoTrack_.setClickingTogglesState (true);
@@ -606,6 +609,16 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
                                                                        },
                                                                        nullptr);
         attClipperMode_->sendInitialUpdate();
+    }
+    if (auto* clipperPositionParam = apvts_.getParameter (pid (param::clipper_position)))
+    {
+        attClipperPosition_ = std::make_unique<juce::ParameterAttachment> (*clipperPositionParam,
+                                                                             [this] (float value)
+                                                                             {
+                                                                                 updateClipperPositionButton ((int) std::lround (value));
+                                                                             },
+                                                                             nullptr);
+        attClipperPosition_->sendInitialUpdate();
     }
     attCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ceiling_db), sldCeiling_);
     attGainCeilingLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_ceiling_link), btnGainCeilingLink_);
@@ -732,6 +745,11 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
         if (attClipperMode_ != nullptr)
             attClipperMode_->setValueAsCompleteGesture (lastClipperModeIdx_ == 0 ? 1.0f : 0.0f);
     };
+    btnClipperPosition_.onClick = [this]
+    {
+        if (attClipperPosition_ != nullptr)
+            attClipperPosition_->setValueAsCompleteGesture (lastClipperPositionIdx_ == 0 ? 1.0f : 0.0f);
+    };
 
     sldIoInputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
     sldIoInputTrimR_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimR_, sldIoInputTrimL_, btnIoInputLink_); };
@@ -808,6 +826,8 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnClipperActive_.setTooltip ("Toggle the clipper stage on/off.");
     sldClipperDrive_.setTooltip ("Sets the clipper threshold from -12 to 0 dB.");
     btnClipperMode_.setTooltip ("Toggles the clipper curve between Hard and Soft.");
+    btnClipperPosition_.setTooltip ("Clipper position: Pre = before the limiter (input shaping); "
+                                    "Post = after the limiter (transient catcher; TruePeak ceiling catches its inter-sample peaks).");
     lblClipperReadout_.setTooltip ("Clipper gain-reduction depth in dB (current / max since reset). "
                                    "Not an output-over indicator — output is limited by the ceiling stage. "
                                    "Click to reset max.");
@@ -1266,6 +1286,15 @@ void MainView::updateClipperModeButton (int clipperIdx)
     repaint (btnClipperMode_.getBounds().expanded (4, 4));
 }
 
+void MainView::updateClipperPositionButton (int idx)
+{
+    const bool post = idx >= 1;
+    lastClipperPositionIdx_ = post ? 1 : 0;
+    btnClipperPosition_.setButtonText (post ? "Post" : "Pre");
+    btnClipperPosition_.setToggleState (post, juce::dontSendNotification);
+    repaint (btnClipperPosition_.getBounds().expanded (4, 4));
+}
+
 void MainView::updateClipperActiveState()
 {
     const bool active = btnClipperActive_.getToggleState();
@@ -1274,10 +1303,12 @@ void MainView::updateClipperActiveState()
     lblClipperDrive_.setEnabled (active);
     sldClipperDrive_.setEnabled (active);
     btnClipperMode_.setEnabled (active);
+    btnClipperPosition_.setEnabled (active);
 
     repaint (lblClipperDrive_.getBounds()
                  .getUnion (sldClipperDrive_.getBounds())
                  .getUnion (btnClipperMode_.getBounds())
+                 .getUnion (btnClipperPosition_.getBounds())
                  .getUnion (btnClipperActive_.getBounds())
                  .expanded (8, 8));
 }
@@ -1623,7 +1654,8 @@ void MainView::resized()
     lblClipperDrive_.setBounds (505, 116, 100, 18);
     btnClipperActive_.setBounds (450, 134, 34, 34);
     sldClipperDrive_.setBounds (505, 134, 100, 100);
-    btnClipperMode_.setBounds (505, 244, 100, 22);
+    btnClipperMode_.setBounds (505, 244, 50, 22);
+    btnClipperPosition_.setBounds (555, 244, 50, 22);
     lblClipperReadout_.setBounds (505, 270, 100, 18);
     lblBandColor_.setBounds (526, 314, knobW, 18);
     sldBandColor_.setBounds (526, 332, knobW, knobH);
@@ -1697,6 +1729,7 @@ void MainView::resized()
     btnHistory_.toFront (false);
     btnBypass_.toFront (false);
     btnClipperMode_.toFront (false);
+    btnClipperPosition_.toFront (false);
     segCharacter_.toFront (false);
     segAutoReleaseMode_.toFront (false);
     compGainBar_.toFront (false);

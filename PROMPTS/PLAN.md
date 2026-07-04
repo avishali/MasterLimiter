@@ -80,6 +80,7 @@ slice or split a follow-up slice.
 | Meter | ✅ **Build/AU — M2 GR mastering scale** | — | sqrt 0–12 dB + fillRect + total label | Low-end GR visible; ~180 ms release; per-band bars vs total readout labeled. Audition pending. |
 | Meter | ✅ **Build/AU — Per-band GR readouts** | — | band cur/max strip under bars | LO/MID/HI numeric readouts (band max L/R); same smoother as total; 18 px strip; meter-only. Audition pending. |
 | Dev | ✅ **Build/AU — Clipper Pre/Post position** | — | `clipper_position` + relocatable stage | Pre default = null; Post after wideband+ceiling; latency constant; FC TP catches Post ISP. Rig verified; audition pending. |
+| UI | ✅ **Build/AU — Clipper Pre/Post segment** | — | `btnClipperPosition_` in clipper cluster | Mirrors Hard/Soft; ParameterAttachment; 50+50 px row. Audition pending. |
 | Meter | ✅ **Build/AU — M3 Integrated LUFS gating** | HQ `LoudnessAnalyzer` | (submodule bump) | BS.1770-4 §4 abs/rel gating on Integrated only; M/S unchanged. SDK tests pass; plugin build/AU clean. Audition pending. |
 | Meter | ✅ **Build/AU — M4 Clip readout clarity** | — | CLIP GR label + peak-hold readout | Clipper depth unambiguous; ~850 ms hold on current; max latch unchanged. Audition pending. |
 | Dev | 🔶 **Implemented — UI widen + relayout (post-A2)** | — | `PluginEditor` + `MainView` layout | Canvas 1100→1172; clipper knob 100×100; GR meter 198px wide; right cluster +72px. UI-only. Build/AU + audition pending. |

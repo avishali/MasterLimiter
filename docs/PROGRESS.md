@@ -2,6 +2,22 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-05 — Clipper Pre/Post UI control (SLICE_CLIPPER_POSITION_UI)
+
+**Status:** ✅ Build + AU pass; installed from `build`; audition pending (avishali).
+
+**Deliverables (UI-only)**
+- `btnClipperPosition_` Pre/Post segment in clipper cluster (mirrors Hard/Soft pattern).
+- `ParameterAttachment` to `clipper_position`; toggles via click; tracks automation/presets.
+
+**Gate**
+- [x] Build clean, AU validates; user install from `build` artefact.
+- [x] Installed VST3 exposes `clipper_position` (pedalboard attribute).
+- [x] Hard/Soft split to 50 px + Pre/Post 50 px on same row; other clipper controls unchanged.
+- [ ] avishali audition: live Pre↔Post character.
+
+---
+
 ## 2026-07-05 — Clipper Pre/Post position (SLICE_CLIPPER_PREPOST)
 
 **Status:** ✅ Build + AU pass; rig measured; audition pending (avishali/Asaf).
