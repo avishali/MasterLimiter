@@ -300,6 +300,16 @@ void GainReductionMeter::paint (juce::Graphics& g)
         grPlotArea = grPlotArea.isEmpty() ? leftSub.getUnion (rightSub)
                                           : grPlotArea.getUnion (leftSub.getUnion (rightSub));
 
+        if (leftSub.getHeight() > 14)
+        {
+            const char* ch0 = processor_.getBandMsActive() ? "M" : "L";
+            const char* ch1 = processor_.getBandMsActive() ? "S" : "R";
+            g.setColour (theme.textMuted.withAlpha (0.55f));
+            g.setFont (type.labelFont().withHeight (7.0f));
+            g.drawText (ch0, leftSub.removeFromBottom (8), juce::Justification::centred, false);
+            g.drawText (ch1, rightSub.removeFromBottom (8), juce::Justification::centred, false);
+        }
+
         if (band.getHeight() > 12)
         {
             g.setColour (theme.grid.withAlpha (0.55f));

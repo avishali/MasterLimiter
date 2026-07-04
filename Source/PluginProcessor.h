@@ -96,6 +96,7 @@ public:
     float getCurrentGrMidRDb() const noexcept { return currentGrMidRDb_.load (std::memory_order_relaxed); }
     float getCurrentGrHighLDb() const noexcept { return currentGrHighLDb_.load (std::memory_order_relaxed); }
     float getCurrentGrHighRDb() const noexcept { return currentGrHighRDb_.load (std::memory_order_relaxed); }
+    bool getBandMsActive() const noexcept { return bandMsActive_.load (std::memory_order_relaxed); }
     float getCurrentClipDb() const noexcept { return currentClipDb_.load (std::memory_order_relaxed); }
     float getMaxGrSinceResetDb() const noexcept { return maxGrSinceResetDb_.load (std::memory_order_relaxed); }
     float getMaxGrLowLDb() const noexcept { return maxGrLowLDb_.load (std::memory_order_relaxed); }
@@ -353,6 +354,8 @@ private:
     std::atomic<float>* devXoverHiAttenDb_ = nullptr;
     std::atomic<float>* devMidBandReleaseScale_ = nullptr;
     std::atomic<float>* devBandStereoLinkPct_ = nullptr;
+    std::atomic<float>* devBandMs_ = nullptr;
+    std::atomic<float>* devBandMsLinkPct_ = nullptr;
     std::atomic<float>* devMsSafetyClamp_ = nullptr;
     std::atomic<float>* devFinalCeiling_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
@@ -380,6 +383,7 @@ private:
     std::atomic<float> currentGrMidRDb_ { 0.0f };
     std::atomic<float> currentGrHighLDb_ { 0.0f };
     std::atomic<float> currentGrHighRDb_ { 0.0f };
+    std::atomic<bool> bandMsActive_ { false };
     std::atomic<float> currentClipDb_ { 0.0f };
     std::atomic<float> maxGrSinceResetDb_ { 0.0f };
     std::atomic<float> maxGrLowLDb_ { 0.0f };

@@ -99,6 +99,11 @@ private:
     juce::Label lblBandStereoLink_ {};
     juce::Slider sldBandStereoLink_;
 
+    juce::GroupComponent groupBandMs_ { "BandMsGroup", "BAND \u00b7 M/S per-band" };
+    juce::ToggleButton btnBandMs_ { "Band M/S" };
+    juce::Label lblBandMsLink_ {};
+    juce::Slider sldBandMsLink_;
+
     juce::GroupComponent groupPeakControl_ { "PeakControlGroup", "PEAK CONTROL (DEV)" };
     juce::ToggleButton btnMsSafetyClamp_ { "M/S Safety Clamp" };
     juce::Label lblMsClampReadout_ {};
@@ -131,6 +136,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attHighScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attWideScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandStereoLink_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attBandMs_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandMsLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMsSafetyClamp_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attFinalCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;

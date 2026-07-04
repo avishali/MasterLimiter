@@ -137,6 +137,8 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_xover_hi_atten_db.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_mid_band_release_scale.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_band_stereo_link_pct.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_band_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_band_ms_link_pct.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_ms_safety_clamp.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_final_ceiling.data()) != nullptr);
 
@@ -340,6 +342,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devXoverHiAttenDb_ = apvts.getRawParameterValue (param::dev_xover_hi_atten_db.data());
     devMidBandReleaseScale_ = apvts.getRawParameterValue (param::dev_mid_band_release_scale.data());
     devBandStereoLinkPct_ = apvts.getRawParameterValue (param::dev_band_stereo_link_pct.data());
+    devBandMs_ = apvts.getRawParameterValue (param::dev_band_ms.data());
+    devBandMsLinkPct_ = apvts.getRawParameterValue (param::dev_band_ms_link_pct.data());
     devMsSafetyClamp_ = apvts.getRawParameterValue (param::dev_ms_safety_clamp.data());
     devFinalCeiling_ = apvts.getRawParameterValue (param::dev_final_ceiling.data());
     jassert (limiterActive_ != nullptr);
@@ -370,6 +374,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devXoverHiTransitionHz_ != nullptr);
     jassert (devXoverHiAttenDb_ != nullptr);
     jassert (devMidBandReleaseScale_ != nullptr);
+    jassert (devBandStereoLinkPct_ != nullptr);
+    jassert (devBandMs_ != nullptr);
+    jassert (devBandMsLinkPct_ != nullptr);
     bandLinkSmoothed_.reset (osSampleRate, 0.02);
     bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 0.0f));
 
@@ -1083,6 +1090,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 {
     juce::ScopedNoDenormals noDenormals;
     juce::ignoreUnused (midi);
+    bandMsActive_.store (false, std::memory_order_relaxed);
 
     if (inputGainDbParam_ == nullptr || ceilingDbParam_ == nullptr
         || apvts.getParameter ("release_ms") == nullptr || releaseSustainRatio_ == nullptr
@@ -1398,6 +1406,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
         const bool useMsMode = stereoMode_->getIndex() == 1 && nch > 1;
         const bool bandUnlink = (! useMsMode) && (nch > 1);
+        const bool bandMs = useMsMode && (nch > 1)
+                            && devBandMs_ != nullptr && devBandMs_->load (std::memory_order_relaxed) > 0.5f;
+        const bool bandTwoChan = bandUnlink || bandMs;
+        bandMsActive_.store (bandMs, std::memory_order_relaxed);
 
         auto* peakLow = peakLowBuf_.getWritePointer (0);
         auto* peakMid = peakMidBuf_.getWritePointer (0);
@@ -1423,7 +1435,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
         for (int i = 0; i < osN; ++i)
         {
-            if (! bandUnlink)
+            if (! bandTwoChan)
             {
                 float lowMax = 0.0f;
                 float midMax = 0.0f;
@@ -1458,14 +1470,20 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             }
             else
             {
+                const float inL = osBlock.getChannelPointer (0)[i];
+                const float inR = nch > 1 ? osBlock.getChannelPointer (1)[i] : 0.0f;
+                const float in0 = bandMs ? 0.5f * (inL + inR) : inL;
+                const float in1 = bandMs ? 0.5f * (inL - inR) : inR;
+
                 for (int ch = 0; ch < nch; ++ch)
                 {
+                    const float xIn = (ch == 0) ? in0 : in1;
                     float low1 = 0.0f;
                     float high1 = 0.0f;
                     float xDel1 = 0.0f;
                     detectCrossover_[xoBank].processSample (
                         ch,
-                        osBlock.getChannelPointer ((size_t) ch)[i],
+                        xIn,
                         low1,
                         high1,
                         xDel1);
@@ -1489,9 +1507,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             }
         }
 
-        const float bandLinkPct = devBandStereoLinkPct_ != nullptr
-            ? devBandStereoLinkPct_->load (std::memory_order_relaxed)
-            : 100.0f;
+        const float bandLinkPct = bandMs
+            ? (devBandMsLinkPct_ != nullptr ? devBandMsLinkPct_->load (std::memory_order_relaxed) : 100.0f)
+            : (devBandStereoLinkPct_ != nullptr ? devBandStereoLinkPct_->load (std::memory_order_relaxed) : 100.0f);
         const float bandLink = juce::jlimit (0.0f, 1.0f, bandLinkPct * 0.01f);
         const bool bandFast = bandLink >= 0.9995f;
 
@@ -1505,7 +1523,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         auto* gainHighL = gainHighLBuf_.getWritePointer (0);
         auto* gainHighR = gainHighRBuf_.getWritePointer (0);
 
-        if (! bandUnlink)
+        if (! bandTwoChan)
         {
             envelopeLow_.process (peakLow, gainLow, osN);
             envelopeMid_.process (peakMid, gainMid, osN);
@@ -1601,7 +1619,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             const float bl = bandLinkSmoothed_.getNextValue();
             const float oneMinusBandLink = 1.0f - bl;
 
-            if (! bandUnlink)
+            if (! bandTwoChan)
             {
                 const float gLinked = std::min (gainLow[i], std::min (gainMid[i], gainHigh[i]));
                 const float linkedGain = bl * gLinked;
@@ -1653,35 +1671,53 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
                 auto* dL = osBlock.getChannelPointer (0);
                 const float delayedL = lookahead_.pushPop (0, dL[i]);
+                float delayedR = 0.0f;
+                if (nch > 1)
+                    delayedR = lookahead_.pushPop (1, osBlock.getChannelPointer (1)[i]);
+
+                const float in0 = bandMs ? 0.5f * (delayedL + delayedR) : delayedL;
+                const float in1 = bandMs ? 0.5f * (delayedL - delayedR) : delayedR;
+
                 float aLow1L = 0.0f;
                 float aHigh1L = 0.0f;
                 float aDel1L = 0.0f;
-                applyCrossover_[xoBank].processSample (0, delayedL, aLow1L, aHigh1L, aDel1L);
+                applyCrossover_[xoBank].processSample (0, in0, aLow1L, aHigh1L, aDel1L);
                 float aMidL = 0.0f;
                 float aHighL = 0.0f;
                 float aDel2L = 0.0f;
                 applyXoMidHi_[xoBank].processSample (0, aHigh1L, aMidL, aHighL, aDel2L);
                 juce::ignoreUnused (aDel1L, aDel2L);
                 const float aLowL = applyLowAlign_.pushPop (0, aLow1L);
-                bandLimitedBuf_.getWritePointer (0)[i] = duck * (linkedGainL * (mLow * aLowL + mMid * aMidL + mHigh * aHighL)
+                const float limited0 = duck * (linkedGainL * (mLow * aLowL + mMid * aMidL + mHigh * aHighL)
                     + oneMinusBandLink * (mLow * aLowL * gainLowLVal + mMid * aMidL * gainMidLVal + mHigh * aHighL * gainHighLVal));
 
+                float limited1 = limited0;
                 if (nch > 1)
                 {
-                    auto* dR = osBlock.getChannelPointer (1);
-                    const float delayedR = lookahead_.pushPop (1, dR[i]);
                     float aLow1R = 0.0f;
                     float aHigh1R = 0.0f;
                     float aDel1R = 0.0f;
-                    applyCrossover_[xoBank].processSample (1, delayedR, aLow1R, aHigh1R, aDel1R);
+                    applyCrossover_[xoBank].processSample (1, in1, aLow1R, aHigh1R, aDel1R);
                     float aMidR = 0.0f;
                     float aHighR = 0.0f;
                     float aDel2R = 0.0f;
                     applyXoMidHi_[xoBank].processSample (1, aHigh1R, aMidR, aHighR, aDel2R);
                     juce::ignoreUnused (aDel1R, aDel2R);
                     const float aLowR = applyLowAlign_.pushPop (1, aLow1R);
-                    bandLimitedBuf_.getWritePointer (1)[i] = duck * (linkedGainR * (mLow * aLowR + mMid * aMidR + mHigh * aHighR)
+                    limited1 = duck * (linkedGainR * (mLow * aLowR + mMid * aMidR + mHigh * aHighR)
                         + oneMinusBandLink * (mLow * aLowR * gainLowRVal + mMid * aMidR * gainMidRVal + mHigh * aHighR * gainHighRVal));
+                }
+
+                if (bandMs && nch > 1)
+                {
+                    bandLimitedBuf_.getWritePointer (0)[i] = limited0 + limited1;
+                    bandLimitedBuf_.getWritePointer (1)[i] = limited0 - limited1;
+                }
+                else
+                {
+                    bandLimitedBuf_.getWritePointer (0)[i] = limited0;
+                    if (nch > 1)
+                        bandLimitedBuf_.getWritePointer (1)[i] = limited1;
                 }
             }
         }
@@ -1802,14 +1838,24 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             for (int i = 0; i < osN; ++i)
             {
                 const float gDeepBand = std::min (gLowOut[i], std::min (gMidOut[i], gHighOut[i]));
-                // Per-band bars = band x wideband (mid gain as the representative
-                // wide reduction in M/S; side + msSafetyGain omitted here).
-                minLowL = std::min (minLowL, gLowOut[i] * gainWideL[i]);
-                minLowR = minLowL;
-                minMidL = std::min (minMidL, gMidOut[i] * gainWideL[i]);
-                minMidR = minMidL;
-                minHighL = std::min (minHighL, gHighOut[i] * gainWideL[i]);
-                minHighR = minHighL;
+                if (bandMs)
+                {
+                    minLowL = std::min (minLowL, gLowOut[i] * gainWideL[i]);
+                    minLowR = std::min (minLowR, gLowOutR[i] * gainWideR[i]);
+                    minMidL = std::min (minMidL, gMidOut[i] * gainWideL[i]);
+                    minMidR = std::min (minMidR, gMidOutR[i] * gainWideR[i]);
+                    minHighL = std::min (minHighL, gHighOut[i] * gainWideL[i]);
+                    minHighR = std::min (minHighR, gHighOutR[i] * gainWideR[i]);
+                }
+                else
+                {
+                    minLowL = std::min (minLowL, gLowOut[i] * gainWideL[i]);
+                    minLowR = minLowL;
+                    minMidL = std::min (minMidL, gMidOut[i] * gainWideL[i]);
+                    minMidR = minMidL;
+                    minHighL = std::min (minHighL, gHighOut[i] * gainWideL[i]);
+                    minHighR = minHighL;
+                }
 
                 const float delayedL = lookaheadWide_.pushPop (0, bandLimitedL[i]);
                 const float delayedR = lookaheadWide_.pushPop (1, bandLimitedR[i]);

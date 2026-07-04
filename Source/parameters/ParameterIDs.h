@@ -51,6 +51,8 @@ inline constexpr std::string_view dev_xover_hi_transition_hz { "dev_xover_hi_tra
 inline constexpr std::string_view dev_xover_hi_atten_db { "dev_xover_hi_atten_db" };
 inline constexpr std::string_view dev_mid_band_release_scale { "dev_mid_band_release_scale" };
 inline constexpr std::string_view dev_band_stereo_link_pct { "dev_band_stereo_link_pct" };
+inline constexpr std::string_view dev_band_ms { "dev_band_ms" };
+inline constexpr std::string_view dev_band_ms_link_pct { "dev_band_ms_link_pct" };
 inline constexpr std::string_view dev_ms_safety_clamp { "dev_ms_safety_clamp" };
 inline constexpr std::string_view dev_final_ceiling { "dev_final_ceiling" };
 

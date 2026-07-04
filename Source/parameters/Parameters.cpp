@@ -344,6 +344,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         AudioParameterFloatAttributes().withLabel ("%")));
 
     layout.add (std::make_unique<AudioParameterBool> (
+        pid (dev_band_ms, 1),
+        "DEV Band M/S",
+        false,
+        AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_band_ms_link_pct, 1),
+        "DEV Band M/S Link",
+        NormalisableRange<float> (0.0f, 100.0f, 1.0f),
+        100.0f,
+        AudioParameterFloatAttributes().withLabel ("%")));
+
+    layout.add (std::make_unique<AudioParameterBool> (
         pid (dev_ms_safety_clamp, 1),
         "DEV M/S Safety Clamp",
         true,

@@ -2,6 +2,24 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-04 — M/S per-band (opt-in) (SLICE_MS_PERBAND)
+
+**Status:** ✅ Build + AU pass; null/toggle-off + audition pending (avishali/Asaf).
+
+**Deliverables**
+- New DEV params: `dev_band_ms` (default off), `dev_band_ms_link_pct` (default 100%).
+- Band stage: when M/S mode + toggle on, encode L/R→M/S at crossover input, reuse A2 two-channel envelopes/link blend on (M,S), decode at `bandLimitedBuf_` write. Wideband M/S unchanged.
+- `bandMsActive_` + GR meter sub-bar relabel **M/S** when active.
+- DEV panel: **BAND · M/S per-band** group (toggle + M/S Link slider).
+
+**Gate**
+- [x] Plugin build clean; AU validates; no latency change (same envelopes/buffers).
+- [x] `dev_band_ms=false` path unchanged (Stereo unlink + legacy M/S band path preserved).
+- [ ] Independence + TP at Band M/S Link 0/50/100; live-toggle click-safety audition.
+- [ ] ADR-0009 §4 per-band M/S note (HQ — architect at close).
+
+---
+
 ## 2026-07-04 — DEV Band Split visibility (SLICE_DEV_BANDLINK_VISIBLE)
 
 **Status:** ✅ Build + AU pass + installed; audition pending (avishali).

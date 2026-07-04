@@ -47,16 +47,16 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.8 — Input gain.** `input_gain_db` (0–24 dB), smoothed, multiplied in. **This is the knob that drives gain reduction** (the limiter threshold is fixed at 1.0 — see §3).
 
-**2.9 — 3-band crossover tree for detection.** Stage 1: `detectCrossover_` (Lo/Mid at `dev_xover_*`). Stage 2: `detectXoMidHi_` splits the stage-1 high branch into **mid/high**. `detectLowAlign_` delays the low branch by **M2** so low/mid/high are co-timed at **M1+M2**. Peaks are stereo-linked (`max(|L|,|R|)`) at 100% band stereo link or in M/S mode; otherwise per-channel peaks feed separate envelopes (§2.10). Detect and apply crossovers both add the same group delay; they cancel against detection lookahead — do **not** subtract M in the band audio delay.
+**2.9 — 3-band crossover tree for detection.** Stage 1: `detectCrossover_` (Lo/Mid at `dev_xover_*`). Stage 2: `detectXoMidHi_` splits the stage-1 high branch into **mid/high**. `detectLowAlign_` delays the low branch by **M2** so low/mid/high are co-timed at **M1+M2**. Peaks are stereo-linked (`max(|L|,|R|)`) at 100% band stereo link, in M/S mode with **`dev_band_ms` off**, or mono; otherwise per-channel peaks feed separate envelopes — either L/R (Stereo + `dev_band_stereo_link_pct` &lt; 100%) or Mid/Side (M/S + `dev_band_ms` on). When band M/S is active, L/R is encoded to M/S at the crossover input (linear-phase crossover commutes with encode). Detect and apply crossovers both add the same group delay; they cancel against detection lookahead — do **not** subtract M in the band audio delay.
 
-**2.10 — Per-band limiter envelopes.** `envelopeLow_` / `envelopeMid_` / `envelopeHigh_` (plus `*R_` variants when per-band stereo unlink is active) turn band peak streams into gain coefficients. Mid release scale = `dev_mid_band_release_scale` (default 1.0). In Stereo mode, `dev_band_stereo_link_pct` blends per-channel band gains toward `min(L,R)`; at 100% a single linked envelope runs per band. In **M/S mode** the band stage remains fully linked. These are *gain computers only* — they don't touch audio yet. (Details: §4.3.)
+**2.10 — Per-band limiter envelopes.** `envelopeLow_` / `envelopeMid_` / `envelopeHigh_` (plus `*R_` variants when the two-channel band path is active) turn band peak streams into gain coefficients. Mid release scale = `dev_mid_band_release_scale` (default 1.0). **Stereo mode:** `dev_band_stereo_link_pct` blends per-channel L/R band gains toward `min(L,R)`; at 100% a single linked envelope runs per band. **M/S mode (default):** bands stay L/R-linked (`max(|L|,|R|)`). **M/S mode + `dev_band_ms` on:** bands encode to Mid/Side, limit with `dev_band_ms_link_pct` (100% = `max(|M|,|S|)` per band; 0% = independent M/S envelopes). Wideband M/S is unchanged. These are *gain computers only* — they don't touch audio yet. (Details: §4.3.)
 
 **2.11 — Band Link / Color blend.** Per sample, `bandLinkSmoothed_` = `mapBandColorToLink(color)` = `1 − color/100`:
   - **Link 0% / Color 0% → fully linked** (`bl = 1`): all bands take `min(gainLow, gainMid, gainHigh)` → transparent wideband limiter (linear-phase reconstruction intact).
   - **Link 100% / Color 100% → independent** (`bl = 0`): each band keeps its own gain → multiband character.
   The blend is applied to gains and audio reconstruction. Shipping **Color** knob is disabled (frozen param); tune via DEV **Band Split** slider. Per-band stereo unlink runs Color blend **per channel** before apply.
 
-**2.12 — Lookahead delay + band gain application.** Audio is delayed by `lookahead_` (`dev_lookahead_band_ms`). Apply tree: `applyCrossover_` → `applyXoMidHi_` → `applyLowAlign_` (M2). Reconstruction: `linkedGain × (aLow+aMid+aHigh) + (1−bl) × per-band weighted sum` → `bandLimitedBuf_`. Optional **band solo** listen masks (UI atomics, not saved) audition one or more limited bands without affecting GR taps.
+**2.12 — Lookahead delay + band gain application.** Audio is delayed by `lookahead_` (`dev_lookahead_band_ms`). Apply tree: `applyCrossover_` → `applyXoMidHi_` → `applyLowAlign_` (M2). When the two-channel band path is active, reconstruction runs per channel (L/R or encoded M/S); band M/S decodes limited M/S back to L/R at the `bandLimitedBuf_` write. Otherwise: `linkedGain × (aLow+aMid+aHigh) + (1−bl) × per-band weighted sum` → `bandLimitedBuf_`. Optional **band solo** listen masks (UI atomics, not saved) audition one or more limited bands without affecting GR taps.
 
 **2.13 — Wideband limiter.** The band-limited signal is peak-detected again (or M/S-encoded if **Stereo Mode = M/S**) and run through `envelope_` (and `envelope_R_` when stereo unlinked). **Stereo Link / M/S Link** (%) blends L/R gain toward `min(L,R)`; at ≥99.95% it takes a single-envelope fast path. This is the safety stage that catches anything the per-band stage let through.
 
@@ -173,6 +173,7 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | CROSSOVER (linear-phase) | Lo/Mid: `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db`; Mid/Hi: `dev_xover_hi_cutoff_hz`, `dev_xover_hi_transition_hz`, `dev_xover_hi_atten_db` |
 | BAND · Multiband link | `band_color` (UI **Band Split**) |
 | BAND · Stereo link | `dev_band_stereo_link_pct` (UI **Band Stereo**) |
+| BAND · M/S per-band | `dev_band_ms`, `dev_band_ms_link_pct` |
 | RELEASE · Engine | `dev_release_engine` |
 | RELEASE · Auto (Lookahead) | `dev_la_release_ms`, `dev_la_release_poles` |
 | RELEASE · Auto (Adaptive · legacy) | `dev_sigma_attack_ms`, `dev_sigma_decay_scale` |
@@ -202,7 +203,9 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Xover Mid/Hi Transition** | `dev_xover_hi_transition_hz` | 200…2000 Hz | 600 | Stage-2 transition width | |
 | **Xover Mid/Hi Atten** | `dev_xover_hi_atten_db` | 48…72 dB | 60 | Stage-2 stop-band attenuation | |
 | **Band Split (Color)** | `band_color` | 0…100% | 0 | Multiband band-to-band link | UI **Band Split**. 0 = glued/shared GR, 100 = independent 3-band. Live control while shipping Color knob is greyed. |
-| **Band Stereo** | `dev_band_stereo_link_pct` | 0…100% | 100 | Per-band L/R stereo link | UI **Band Stereo**. 0 = independent L/R per band, 100 = mono-linked GR per band (Stereo mode only). |
+| **Band Stereo** | `dev_band_stereo_link_pct` | 0…100% | 100 | Per-band L/R stereo link | UI **Band Stereo**. Stereo mode only. 0 = independent L/R per band, 100 = mono-linked GR per band. |
+| **Band M/S** | `dev_band_ms` | Off / On | **Off** | Opt-in per-band M/S limiting | M/S mode only. Off = bit-identical to prior band path. On = encode→limit M/S→decode per band. |
+| **Band M/S Link** | `dev_band_ms_link_pct` | 0…100% | 100 | Per-band Mid/Side link | Active when Band M/S on. 0 = independent M/S per band, 100 = linked `max(|M|,|S|)` per band. |
 | **Sustain Ratio** | `release_sustain_ratio` | 1…10 | 4 | Manual-release sustain split | UI **Manual Sustain**. Active only when Release Auto is Off. |
 
 **Plan:** once Attack, LA Band/Wide, LA Release ms, and Poles are chosen by ear, Claude bakes them as constants or promotes any keeper to a real user parameter, then deletes the temporary DEV params for 0.4.
@@ -223,7 +226,7 @@ Most metering is **instantaneous scalar atomics** written by the audio thread an
 | Output peak / RMS / true-peak L/R | `outputPeakLDb_`, `outputRmsLDb_`, `outputTruePeakLDb_`, `maxOutputPeak{L,R}Db_`, `maxOutputTruePeak{L,R}Db_`, … | 2.18 |
 | Loudness / comp gain | `LoudnessAnalyzer` snapshots, `compGainDb` | 2.4 / 2.17 |
 
-The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R sub-bars** per band. **Solo** toggle buttons under each band audition limited band output (transient UI atomics, not saved). Scale: **0–12 dB** with **sqrt low-end expansion (0–3 dB owns the bottom half of the bar); ticks at −0.5/−1/−2/−3/−6/−12 dB. Bottom readout is **total** GR (deepest band × wideband, current / max since reset); bars show per-band values. Ballistics: 1 ms attack, ~180 ms release. `dev_band_stereo_link_pct` (DEV, default 100%) controls per-band stereo unlink in Stereo mode only.
+The **GR meter** displays per-band reduction (LO / MID / HI groups) with **L/R sub-bars** (or **M/S** when `dev_band_ms` is active in M/S mode) per band. **Solo** toggle buttons under each band audition limited band output (transient UI atomics, not saved). Scale: **0–12 dB** with **sqrt low-end expansion (0–3 dB owns the bottom half of the bar); ticks at −0.5/−1/−2/−3/−6/−12 dB. Bottom readout is **total** GR (deepest band × wideband, current / max since reset); bars show per-band values. Ballistics: 1 ms attack, ~180 ms release. `dev_band_stereo_link_pct` (Stereo mode) and `dev_band_ms_link_pct` (M/S + Band M/S on) control per-band channel unlink independently.
 
 **I/O meter readouts** (each channel): four labeled rows — **TP** (latched max true-peak), **SP** (current sample-peak, shared with bar via `DisplayLevelSmoother` at 60 dB/s release), **MAX** (latched max sample-peak, same value drives bar max line + number), **RMS** (300 ms power average from DSP tap, no second UI hold; bar uses `displaySmooth.rmsDb`). Floor unified at `kMeterFloorDb = −120`. Reset peaks clears TP/MAX holds via `resetInputTruePeakHolds()` / `resetOutputTruePeakHolds()`.
 

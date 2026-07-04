@@ -58,6 +58,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &groupBandScaling_,
                          &groupMultiband_,
                          &groupBandStereo_,
+                         &groupBandMs_,
                          &groupPeakControl_,
                          &groupManualRelease_ })
     {
@@ -160,6 +161,13 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldBandStereoLink_, 0, " %");
     sldBandStereoLink_.setTooltip ("Per-band L/R stereo link. 0 = independent L/R per band, 100 = mono-linked GR per band.");
 
+    btnBandMs_.setClickingTogglesState (true);
+    btnBandMs_.setTooltip ("M/S mode only: encode each band to Mid/Side, limit independently, decode back. Wideband M/S stage unchanged.");
+
+    setupLabel (lblBandMsLink_, "M/S Link");
+    setupSlider (sldBandMsLink_, 0, " %");
+    sldBandMsLink_.setTooltip ("Per-band Mid/Side link when Band M/S is on. 0 = independent M/S per band, 100 = linked max(|M|,|S|) per band.");
+
     btnMsSafetyClamp_.setClickingTogglesState (true);
     btnMsSafetyClamp_.setTooltip ("M/S decoded-L/R safety clamp. Off = skip clamp (FinalCeiling still ceiling-safe).");
     lblMsClampReadout_.setJustificationType (juce::Justification::centredRight);
@@ -181,7 +189,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &lblXoverHiCutoff_, &lblXoverHiTransition_, &lblXoverHiAtten_, &lblBandLink_,
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_, &lblMidScale_,
-                         &lblHighScale_, &lblWideScale_, &lblBandStereoLink_, &lblMsClampReadout_,
+                         &lblHighScale_, &lblWideScale_, &lblBandStereoLink_, &lblBandMsLink_,
+                         &lblMsClampReadout_,
                          &lblFinalCeilingReadout_, &lblSustainRatio_ })
     {
         content_.addAndMakeVisible (*label);
@@ -191,7 +200,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                           &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
                           &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                           &sldLaRelease_, &sldSigmaAttack_, &sldSigmaDecay_,
-                          &sldLowScale_, &sldMidScale_, &sldHighScale_, &sldBandStereoLink_, &sldSustainRatio_ })
+                          &sldLowScale_, &sldMidScale_, &sldHighScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldSustainRatio_ })
     {
         content_.addAndMakeVisible (*slider);
     }
@@ -201,6 +210,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     content_.addAndMakeVisible (cmbLaPoles_);
     content_.addAndMakeVisible (btnMsSafetyClamp_);
     content_.addAndMakeVisible (btnFinalCeiling_);
+    content_.addAndMakeVisible (btnBandMs_);
 
     attAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_attack_ms), sldAttack_);
     attAttackMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_attack_mode), cmbAttackMode_);
@@ -224,6 +234,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attHighScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_high_band_release_scale), sldHighScale_);
     attWideScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_wide_release_scale), sldWideScale_);
     attBandStereoLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_band_stereo_link_pct), sldBandStereoLink_);
+    attBandMs_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_band_ms), btnBandMs_);
+    attBandMsLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_band_ms_link_pct), sldBandMsLink_);
     attMsSafetyClamp_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_ms_safety_clamp), btnMsSafetyClamp_);
     attFinalCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_final_ceiling), btnFinalCeiling_);
     attSustainRatio_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldSustainRatio_);
@@ -285,7 +297,7 @@ void DevControlsComponent::resized()
                               &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                               &sldLaRelease_,
                           &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldMidScale_, &sldHighScale_,
-                          &sldWideScale_, &sldBandStereoLink_, &sldSustainRatio_ })
+                          &sldWideScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldSustainRatio_ })
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
 
@@ -362,6 +374,14 @@ void DevControlsComponent::resized()
 
     inner = placeGroup (groupBandStereo_, 72);
     placeSliderRow (inner.removeFromTop (rowH), lblBandStereoLink_, sldBandStereoLink_);
+
+    inner = placeGroup (groupBandMs_, 104);
+    {
+        auto row = inner.removeFromTop (rowH);
+        btnBandMs_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
+    }
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblBandMsLink_, sldBandMsLink_);
 
     inner = placeGroup (groupPeakControl_, 104);
     {
