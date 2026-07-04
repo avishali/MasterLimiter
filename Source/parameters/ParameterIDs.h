@@ -50,6 +50,9 @@ inline constexpr std::string_view dev_xover_hi_cutoff_hz { "dev_xover_hi_cutoff_
 inline constexpr std::string_view dev_xover_hi_transition_hz { "dev_xover_hi_transition_hz" };
 inline constexpr std::string_view dev_xover_hi_atten_db { "dev_xover_hi_atten_db" };
 inline constexpr std::string_view dev_mid_band_release_scale { "dev_mid_band_release_scale" };
+inline constexpr std::string_view dev_low_band_attack_scale { "dev_low_band_attack_scale" };
+inline constexpr std::string_view dev_mid_band_attack_scale { "dev_mid_band_attack_scale" };
+inline constexpr std::string_view dev_high_band_attack_scale { "dev_high_band_attack_scale" };
 inline constexpr std::string_view dev_band_stereo_link_pct { "dev_band_stereo_link_pct" };
 inline constexpr std::string_view dev_band_ms { "dev_band_ms" };
 inline constexpr std::string_view dev_band_ms_link_pct { "dev_band_ms_link_pct" };

@@ -50,6 +50,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     addAndMakeVisible (viewport_);
 
     for (auto* group : { &groupAttack_,
+                         &groupAttackScaling_,
                          &groupLookahead_,
                          &groupCrossover_,
                          &groupReleaseEngine_,
@@ -80,6 +81,18 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupLabel (lblRealAttack_, "Real Atk");
     setupSlider (sldRealAttack_, 2, " ms");
     sldRealAttack_.setTooltip ("Decoupled attack time-constant; slow = transients punch through to the ceiling (punch).");
+
+    setupLabel (lblLowAttackScale_, "Low Atk \u00d7");
+    setupSlider (sldLowAttackScale_, 2, {});
+    sldLowAttackScale_.setTooltip ("Per-band attack-time scale. >1 slower (cleaner, esp. bass), <1 faster (catches transients). Try Low ~3\u20134, High ~0.3\u20130.5 to catch HF transients while keeping bass clean.");
+
+    setupLabel (lblMidAttackScale_, "Mid Atk \u00d7");
+    setupSlider (sldMidAttackScale_, 2, {});
+    sldMidAttackScale_.setTooltip ("Mid-band attack-time scale (\u00d7 base Attack / Real Atk).");
+
+    setupLabel (lblHighAttackScale_, "High Atk \u00d7");
+    setupSlider (sldHighAttackScale_, 2, {});
+    sldHighAttackScale_.setTooltip ("High-band attack-time scale (\u00d7 base Attack / Real Atk). <1 catches HF transients faster.");
 
     setupLabel (lblLookaheadBand_, "Band");
     setupSlider (sldLookaheadBand_, 2, " ms");
@@ -185,7 +198,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldSustainRatio_, 2, {});
     sldSustainRatio_.setTooltip ("Manual release only (Auto OFF): fast+slow split. Higher = more sustain held.");
 
-    for (auto* label : { &lblAttackMode_, &lblAttack_, &lblRealAttack_, &lblLookaheadBand_, &lblLookaheadWide_,
+    for (auto* label : { &lblAttackMode_, &lblAttack_, &lblRealAttack_, &lblLowAttackScale_, &lblMidAttackScale_, &lblHighAttackScale_,
+                         &lblLookaheadBand_, &lblLookaheadWide_,
                          &lblXoverCutoff_, &lblXoverTransition_, &lblXoverAtten_,
                          &lblXoverHiCutoff_, &lblXoverHiTransition_, &lblXoverHiAtten_, &lblBandLink_,
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
@@ -197,7 +211,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
         content_.addAndMakeVisible (*label);
     }
 
-    for (auto* slider : { &sldAttack_, &sldRealAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
+    for (auto* slider : { &sldAttack_, &sldRealAttack_, &sldLowAttackScale_, &sldMidAttackScale_, &sldHighAttackScale_,
+                          &sldLookaheadBand_, &sldLookaheadWide_,
                           &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
                           &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                           &sldLaRelease_, &sldSigmaAttack_, &sldSigmaDecay_,
@@ -216,6 +231,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_attack_ms), sldAttack_);
     attAttackMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_attack_mode), cmbAttackMode_);
     attRealAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_real_attack_ms), sldRealAttack_);
+    attLowAttackScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_low_band_attack_scale), sldLowAttackScale_);
+    attMidAttackScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mid_band_attack_scale), sldMidAttackScale_);
+    attHighAttackScale_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_high_band_attack_scale), sldHighAttackScale_);
     attLookaheadBand_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_band_ms), sldLookaheadBand_);
     attLookaheadWide_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_lookahead_wide_ms), sldLookaheadWide_);
     attXoverCutoff_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_xover_cutoff_hz), sldXoverCutoff_);
@@ -293,7 +311,8 @@ void DevControlsComponent::resized()
 
     if (contentW < 360)
     {
-        for (auto* slider : { &sldAttack_, &sldLookaheadBand_, &sldLookaheadWide_,
+        for (auto* slider : { &sldAttack_, &sldLowAttackScale_, &sldMidAttackScale_, &sldHighAttackScale_,
+                              &sldLookaheadBand_, &sldLookaheadWide_,
                               &sldXoverCutoff_, &sldXoverTransition_, &sldXoverAtten_,
                               &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                               &sldLaRelease_,
@@ -329,6 +348,13 @@ void DevControlsComponent::resized()
     placeSliderRow (inner.removeFromTop (rowH), lblAttack_, sldAttack_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblRealAttack_, sldRealAttack_);
+
+    inner = placeGroup (groupAttackScaling_, 136);
+    placeSliderRow (inner.removeFromTop (rowH), lblLowAttackScale_, sldLowAttackScale_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblMidAttackScale_, sldMidAttackScale_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblHighAttackScale_, sldHighAttackScale_);
 
     inner = placeGroup (groupLookahead_, 104);
     placeSliderRow (inner.removeFromTop (rowH), lblLookaheadBand_, sldLookaheadBand_);

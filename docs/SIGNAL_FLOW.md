@@ -170,6 +170,7 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | Window section | Controls |
 |---|---|
 | ATTACK | `dev_attack_mode`, `dev_attack_ms` (Ramp/Hybrid), `dev_real_attack_ms` (Real/Hybrid) |
+| ATTACK · per-band trim (× base) | `dev_low_band_attack_scale`, `dev_mid_band_attack_scale`, `dev_high_band_attack_scale` |
 | LOOKAHEAD | `dev_lookahead_band_ms`, `dev_lookahead_wide_ms` |
 | CROSSOVER (linear-phase) | Lo/Mid: `dev_xover_cutoff_hz`, `dev_xover_transition_hz`, `dev_xover_atten_db`; Mid/Hi: `dev_xover_hi_cutoff_hz`, `dev_xover_hi_transition_hz`, `dev_xover_hi_atten_db` |
 | BAND · Multiband link | `band_color` (UI **Band Split**) |
@@ -197,6 +198,9 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Attack Mode** | `dev_attack_mode` | Ramp / Real / Hybrid | **Real** | Chooses §4.3 attack behavior | Ramp = cosine-in-lookahead + snap. Real = decoupled TC (`attackSamples_=1`). Hybrid = pre-ramp + smoothed follower (both Attack + Real Atk knobs). |
 | **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | Ramp-mode envelope attack ramps | Overrides Character; capped by each active lookahead window. |
 | **Real Attack** | `dev_real_attack_ms` | 0.05…100 ms (skewed fast) | 5 | Real-mode 2-pole attack TC | Decoupled from lookahead; slow = transient punch-through. |
+| **Low Attack Scale** | `dev_low_band_attack_scale` | 0.25…4.0× | 1.0 | Low-band attack-time multiplier | UI **Low Atk ×**. Scales Attack + Real Atk on low band only. Default 1× = bit-identical. |
+| **Mid Attack Scale** | `dev_mid_band_attack_scale` | 0.25…4.0× | 1.0 | Mid-band attack-time multiplier | UI **Mid Atk ×**. |
+| **High Attack Scale** | `dev_high_band_attack_scale` | 0.25…4.0× | 1.0 | High-band attack-time multiplier | UI **High Atk ×**. Wideband stays 1×. |
 | **Xover Lo/Mid Cutoff** | `dev_xover_cutoff_hz` | 40…250 Hz | 120 | Stage-1 split frequency | Audition; duck-swap kernel rebuild. |
 | **Xover Lo/Mid Transition** | `dev_xover_transition_hz` | 60…240 Hz | 120 | Stage-1 transition width | Wider = gentler split / shorter active kernel (padded to Nmax). |
 | **Xover Lo/Mid Atten** | `dev_xover_atten_db` | 48…72 dB | 60 | Stage-1 stop-band attenuation | Lower = shorter kernel; latency fixed at worst-case Nmax. |

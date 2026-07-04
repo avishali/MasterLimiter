@@ -337,6 +337,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         AudioParameterFloatAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_low_band_attack_scale, 1),
+        "DEV Low Attack Scale",
+        NormalisableRange<float> (0.25f, 4.0f, 0.01f),
+        1.0f,
+        AudioParameterFloatAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_mid_band_attack_scale, 1),
+        "DEV Mid Attack Scale",
+        NormalisableRange<float> (0.25f, 4.0f, 0.01f),
+        1.0f,
+        AudioParameterFloatAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_high_band_attack_scale, 1),
+        "DEV High Attack Scale",
+        NormalisableRange<float> (0.25f, 4.0f, 0.01f),
+        1.0f,
+        AudioParameterFloatAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_band_stereo_link_pct, 1),
         "DEV Band Stereo Link",
         NormalisableRange<float> (0.0f, 100.0f, 1.0f),

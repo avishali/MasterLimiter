@@ -2,6 +2,33 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-05 — Per-band attack scale experiment (SLICE_PERBAND_ATTACK)
+
+**Status:** ✅ Build + AU pass; rig measured; audition pending (avishali/Asaf).
+
+**Deliverables**
+- New DEV params: `dev_low_band_attack_scale`, `dev_mid_band_attack_scale`, `dev_high_band_attack_scale` (0.25…4.0×, default 1.0).
+- `configureEnvelope` attackScale multiplies both `dev_attack_ms` and `dev_real_attack_ms` per band envelope; wideband stays 1.0×.
+- DEV UI: **ATTACK · per-band trim (× base)** — Low/Mid/High Atk × sliders.
+
+**Gate**
+- [x] Build clean, AU validates, latency unchanged (scalar param reads only).
+- [x] Null: all scales default 1.0 → attackScale=1.0 at every call site (bit-identical path).
+- [x] DEV sliders attached and formatted like release-scale trim.
+- [x] Offline rig (Ramp/Hybrid, LA band=2 / wide=5 ms, +18 dB, ceiling −1, FC off, bass 100 Hz + noise-burst mix):
+
+  | Config | 100 Hz THD | HF crest | out SP |
+  |---|---:|---:|---:|
+  | Ramp global atk=0.05 ms | −46.5 dB | 38.0 dB | −0.9 |
+  | Ramp per-band Low 4× / High 0.3× (base atk 2 ms) | **−47.3 dB** | 38.1 dB | −0.9 |
+  | Hybrid global Real Atk 0.05 ms | −48.0 dB | 38.1 dB | −0.9 |
+  | Hybrid per-band Low 4× / High 0.3× | −47.7 dB | 38.1 dB | −0.2 |
+
+  Hypothesis **weakly supported** on this synthetic rig: slow-low / fast-high improves bass THD ~0.8 dB vs global fast Ramp; HF crest unchanged (~38 dB). Pure 100 Hz sine stays ultra-clean regardless of scales (limiting barely engages on steady tone).
+- [ ] avishali/Asaf audition on program material.
+
+---
+
 ## 2026-07-04 — Hybrid attack mode experiment (SLICE_HYBRID_ATTACK)
 
 **Status:** ✅ SDK + plugin build + AU pass; rig measures + audition pending (avishali/Asaf).

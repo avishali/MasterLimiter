@@ -353,6 +353,9 @@ private:
     std::atomic<float>* devXoverHiTransitionHz_ = nullptr;
     std::atomic<float>* devXoverHiAttenDb_ = nullptr;
     std::atomic<float>* devMidBandReleaseScale_ = nullptr;
+    std::atomic<float>* devLowBandAttackScale_ = nullptr;
+    std::atomic<float>* devMidBandAttackScale_ = nullptr;
+    std::atomic<float>* devHighBandAttackScale_ = nullptr;
     std::atomic<float>* devBandStereoLinkPct_ = nullptr;
     std::atomic<float>* devBandMs_ = nullptr;
     std::atomic<float>* devBandMsLinkPct_ = nullptr;

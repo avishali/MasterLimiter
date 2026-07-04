@@ -45,6 +45,14 @@ private:
     juce::Label lblRealAttack_ {};
     juce::Slider sldRealAttack_;
 
+    juce::GroupComponent groupAttackScaling_ { "AttackScalingGroup", "ATTACK \u00b7 per-band trim (\u00d7 base)" };
+    juce::Label lblLowAttackScale_ {};
+    juce::Slider sldLowAttackScale_;
+    juce::Label lblMidAttackScale_ {};
+    juce::Slider sldMidAttackScale_;
+    juce::Label lblHighAttackScale_ {};
+    juce::Slider sldHighAttackScale_;
+
     juce::GroupComponent groupLookahead_ { "LookaheadGroup", "LOOKAHEAD" };
     juce::Label lblLookaheadBand_ {};
     juce::Slider sldLookaheadBand_;
@@ -117,6 +125,9 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attAttack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attAttackMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRealAttack_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLowAttackScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMidAttackScale_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attHighAttackScale_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookaheadBand_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLookaheadWide_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attXoverCutoff_;

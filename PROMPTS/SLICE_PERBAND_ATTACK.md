@@ -1,6 +1,6 @@
 # SLICE — Per-band attack (fast highs / slow lows) — EXPERIMENT
 
-**Status:** ready for Cursor · **Architect:** Claude · **Verify:** Claude (rig) · **Audition/decide:** avishali → Asaf → testers
+**Status:** closed 2026-07-05 · **Architect:** Claude · **Verify:** Claude (rig) · **Audition/decide:** avishali → Asaf → testers
 **Repos:** plugin `MasterLimiter` ONLY. No SDK change (`LimiterEnvelope` already holds attack state per instance). Mirrors the existing per-band **release-scale** pattern exactly.
 **Goal:** test the measured escape from the wideband attack tradeoff — *keep the low band's gain slow (clean bass) while the high band catches transients fast (the harsh HF crack)*. This decouples transient-catching from LF distortion, which no single wideband attack curve can (see `docs/LIMITER_TYPES.md` 2026-07-04 section: "any wideband attack fast enough to catch a transient distorts the low end").
 

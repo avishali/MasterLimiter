@@ -136,6 +136,9 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_xover_hi_transition_hz.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_xover_hi_atten_db.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_mid_band_release_scale.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_low_band_attack_scale.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mid_band_attack_scale.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_high_band_attack_scale.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_band_stereo_link_pct.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_band_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_band_ms_link_pct.data()) != nullptr);
@@ -341,6 +344,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devXoverHiTransitionHz_ = apvts.getRawParameterValue (param::dev_xover_hi_transition_hz.data());
     devXoverHiAttenDb_ = apvts.getRawParameterValue (param::dev_xover_hi_atten_db.data());
     devMidBandReleaseScale_ = apvts.getRawParameterValue (param::dev_mid_band_release_scale.data());
+    devLowBandAttackScale_ = apvts.getRawParameterValue (param::dev_low_band_attack_scale.data());
+    devMidBandAttackScale_ = apvts.getRawParameterValue (param::dev_mid_band_attack_scale.data());
+    devHighBandAttackScale_ = apvts.getRawParameterValue (param::dev_high_band_attack_scale.data());
     devBandStereoLinkPct_ = apvts.getRawParameterValue (param::dev_band_stereo_link_pct.data());
     devBandMs_ = apvts.getRawParameterValue (param::dev_band_ms.data());
     devBandMsLinkPct_ = apvts.getRawParameterValue (param::dev_band_ms_link_pct.data());
@@ -374,6 +380,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devXoverHiTransitionHz_ != nullptr);
     jassert (devXoverHiAttenDb_ != nullptr);
     jassert (devMidBandReleaseScale_ != nullptr);
+    jassert (devLowBandAttackScale_ != nullptr);
+    jassert (devMidBandAttackScale_ != nullptr);
+    jassert (devHighBandAttackScale_ != nullptr);
     jassert (devBandStereoLinkPct_ != nullptr);
     jassert (devBandMs_ != nullptr);
     jassert (devBandMsLinkPct_ != nullptr);
@@ -1331,6 +1340,15 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                                                                           : kHighBandAutoReleaseScale;
         const float wideReleaseScale = devWideReleaseScale_ != nullptr ? devWideReleaseScale_->load (std::memory_order_relaxed)
                                                                       : kHighBandAutoReleaseScale;
+        const float lowAttackScale = juce::jlimit (0.25f, 4.0f,
+                                                   devLowBandAttackScale_ != nullptr ? devLowBandAttackScale_->load (std::memory_order_relaxed)
+                                                                                     : 1.0f);
+        const float midAttackScale = juce::jlimit (0.25f, 4.0f,
+                                                   devMidBandAttackScale_ != nullptr ? devMidBandAttackScale_->load (std::memory_order_relaxed)
+                                                                                     : 1.0f);
+        const float highAttackScale = juce::jlimit (0.25f, 4.0f,
+                                                    devHighBandAttackScale_ != nullptr ? devHighBandAttackScale_->load (std::memory_order_relaxed)
+                                                                                        : 1.0f);
         const float sigmaAttackMs = devSigmaAttackMs_ != nullptr ? devSigmaAttackMs_->load (std::memory_order_relaxed)
                                                                  : kAutoSigmaAttackMs;
         const float sigmaDecayScale = devSigmaDecayScale_ != nullptr ? devSigmaDecayScale_->load (std::memory_order_relaxed)
@@ -1376,7 +1394,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         envelope_.setActiveLookaheadSamples (laWideActive);
         envelope_R_.setActiveLookaheadSamples (laWideActive);
 
-        auto configureEnvelope = [&] (mdsp_dsp::LimiterEnvelope& envelope, float envThresholdLin, float autoReleaseScale)
+        auto configureEnvelope = [&] (mdsp_dsp::LimiterEnvelope& envelope, float envThresholdLin, float autoReleaseScale, float attackScale)
         {
             envelope.setThresholdLinear (envThresholdLin);
             envelope.setAutoReleaseScale (autoReleaseScale);
@@ -1388,22 +1406,22 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             envelope.setLookaheadReleaseMs (laReleaseMs * autoReleaseScale);
             envelope.setLookaheadReleasePoles (laReleasePoles);
             envelope.setAttackMode (attackMode);
-            envelope.setRealAttackMs (realAttackMs);
-            envelope.setAttackOverrideMs (devAttackMs);
+            envelope.setRealAttackMs (realAttackMs * attackScale);
+            envelope.setAttackOverrideMs (devAttackMs * attackScale);
             if (! autoRelease)
                 envelope.setReleaseMs (releaseMs);
             envelope.setReleaseSustainRatio (releaseSustainRatio);
             envelope.setMode (envelopeMode);
         };
 
-        configureEnvelope (envelope_, thresholdLin, wideReleaseScale);
-        configureEnvelope (envelope_R_, thresholdLin, wideReleaseScale);
-        configureEnvelope (envelopeLow_, bandThresholdLin, lowReleaseScale);
-        configureEnvelope (envelopeMid_, bandThresholdLin, midReleaseScale);
-        configureEnvelope (envelopeHigh_, bandThresholdLin, highReleaseScale);
-        configureEnvelope (envelopeLowR_, bandThresholdLin, lowReleaseScale);
-        configureEnvelope (envelopeMidR_, bandThresholdLin, midReleaseScale);
-        configureEnvelope (envelopeHighR_, bandThresholdLin, highReleaseScale);
+        configureEnvelope (envelope_, thresholdLin, wideReleaseScale, 1.0f);
+        configureEnvelope (envelope_R_, thresholdLin, wideReleaseScale, 1.0f);
+        configureEnvelope (envelopeLow_, bandThresholdLin, lowReleaseScale, lowAttackScale);
+        configureEnvelope (envelopeMid_, bandThresholdLin, midReleaseScale, midAttackScale);
+        configureEnvelope (envelopeHigh_, bandThresholdLin, highReleaseScale, highAttackScale);
+        configureEnvelope (envelopeLowR_, bandThresholdLin, lowReleaseScale, lowAttackScale);
+        configureEnvelope (envelopeMidR_, bandThresholdLin, midReleaseScale, midAttackScale);
+        configureEnvelope (envelopeHighR_, bandThresholdLin, highReleaseScale, highAttackScale);
 
         const bool useMsMode = stereoMode_->getIndex() == 1 && nch > 1;
         const bool bandUnlink = (! useMsMode) && (nch > 1);
