@@ -2,6 +2,30 @@
 
 Append-only. Each entry: date, slice, gate result, notes, artifact links.
 
+## 2026-07-05 — Lookahead ceiling-hold defaults (SLICE_LOOKAHEAD_CEILING_FIX)
+
+**Status:** ✅ Build + AU pass; rig confirms ceiling hold; audition pending (avishali/Asaf).
+
+**Deliverables (plugin-only — 3 default value changes in `Parameters.cpp`)**
+- `dev_lookahead_band_ms` default **0.0 → 2.0 ms**
+- `dev_lookahead_wide_ms` default **0.0 → 5.0 ms**
+- `ceiling_mode` default **SamplePeak → TruePeak** (index 0 → 1)
+
+**Gate**
+- [x] Build clean, AU validates; **reported latency unchanged** — formula still `2 × kMaxLookaheadMs` (6 ms) + OS/crossover/FinalCeiling; active 2/5 ms windows use wet-path pad slack only (structurally identical to HEAD).
+- [x] Fresh instance defaults: `dev_la_band=2.0`, `dev_la_wide=5.0`, `ceiling_mode=TruePeak` (pedalboard load, no preset).
+- [x] Offline rig (100 Hz bass +18 dB, ceiling −1, warm tail, Real attack default):
+
+  | LA Wide | FinalCeiling | out SP | out TP | THD (100 Hz) |
+  |---|---|---:|---:|---:|
+  | **0 ms (old default)** | off | +2.2 | +3.2 | −50.8 dB |
+  | **5 ms (new default, band 2)** | off | **−1.0** | **+0.1** | −139 dB (steady sine, light GR) |
+  | 5 ms | on (TruePeak) | −1.0 | **−1.0** | −153 dB |
+
+- [ ] avishali/Asaf audition: Real mode push without FC off overs; FC on transparent.
+
+---
+
 ## 2026-07-05 — Per-band attack scale experiment (SLICE_PERBAND_ATTACK)
 
 **Status:** ✅ Build + AU pass; rig measured; audition pending (avishali/Asaf).

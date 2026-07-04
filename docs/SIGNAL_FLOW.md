@@ -18,7 +18,7 @@ MasterLimiter is a **mastering maximizer**. Audio comes in, optionally gets soft
   - Flat to 20 kHz; `setUsingIntegerLatency(true)` so latency is a whole number of samples.
 - **Why 4×:** limiting is a nonlinear operation; doing it at 4× pushes the aliasing products far above the audible band so they can be filtered on the way down. (Known limit: at 4× some limiter harmonics still fold back — see §8.)
 - **Total plugin latency** = `2 × max lookahead` + oversampler latency + **crossover tree group delay (M1+M2)** + FinalCeiling (lookahead 64 + its detector). Crossover latency = stage-1 Lo/Mid (`M1`) + stage-2 Mid/Hi (`M2`), each rounded to a multiple of the OS factor (4) so host PDC divides exactly. Plugin latency increases by `M2` vs the 2-band build. The reported latency is fixed at the 6 ms maximum lookahead so DEV tuning does not force host PDC changes.
-- **Lookahead** has two DEV-tunable active windows, both defaulting to 5 ms: `dev_lookahead_band_ms` drives the per-band delay/envelope window, and `dev_lookahead_wide_ms` drives the wideband delay/envelope window. Both sweep 0.00…6.00 ms in 0.01 ms steps; 0.00 ms maps internally to the one-oversampled-sample minimum so the delay and envelope window stay aligned. The wet path is padded by the unused slack so total latency stays constant.
+- **Lookahead** has two DEV-tunable active windows, defaulting to **2 ms (band)** and **5 ms (wide)**: `dev_lookahead_band_ms` drives the per-band delay/envelope window, and `dev_lookahead_wide_ms` drives the wideband delay/envelope window. Both sweep 0.00…6.00 ms in 0.01 ms steps; 0.00 ms maps internally to the one-oversampled-sample minimum so the delay and envelope window stay aligned. The wet path is padded by the unused slack so total latency stays constant.
 
 ---
 
@@ -64,7 +64,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.15 — Downsample.** `processSamplesDown` returns to host rate.
 
-**2.16 — Final ceiling brickwall.** `finalCeiling_.process()` (gated by DEV `dev_final_ceiling`, default On) — a residual **true-peak (or sample-peak) limiter** that catches inter-sample peaks created by downsampling. Applied reduction is published to `currentFinalCeilingDb_/maxFinalCeilingDb_` via `getLastBlockMaxReductionDb()`. When Off, overs may exceed the ceiling (audition only). (Details: §4.4.)
+**2.16 — Final ceiling brickwall.** `finalCeiling_.process()` (gated by DEV `dev_final_ceiling`, default On) — a residual **true-peak (or sample-peak) limiter** that catches inter-sample peaks created by downsampling. **`ceiling_mode` defaults to TruePeak** so the ~0.1 dB inter-sample residual left after main-stage lookahead limiting is caught; SamplePeak remains selectable. Applied reduction is published to `currentFinalCeilingDb_/maxFinalCeilingDb_` via `getLastBlockMaxReductionDb()`. When Off, overs may exceed the ceiling (audition only). (Details: §4.4.)
 
 **2.17 — Loudness tracking, auto gain-match, bypass cross-fade.**
   - `loudnessTrack_` measures the processed output LUFS; `updateCompensationGainDb` derives a smoothed (~1 s) gain so output LUFS matches the learned reference (±12 dB clamp). Same applied to the dry path.
@@ -133,7 +133,7 @@ ITU/EBU-style LUFS: K-weighting (high-shelf @1681.97 Hz +4 dB, then high-pass @3
 | Release Sustain Ratio | `release_sustain_ratio` | 1…10 | 4 | Slow/fast split in Clean mode; exposed in the DEV window for manual-release audition. |
 | Release Auto | `release_auto` | Off/Auto | Off | Program-dependent release. |
 | Auto Release | `auto_release_mode` | Transparent/Balanced/Reactive | Transparent | Picks the timing table (§4.3). |
-| Ceiling Mode | `ceiling_mode` | SamplePeak/TruePeak | SamplePeak | Final brickwall mode. |
+| Ceiling Mode | `ceiling_mode` | SamplePeak/TruePeak | **TruePeak** | Final brickwall mode. |
 | Stereo Mode | `stereo_mode` | Stereo/M-S | Stereo | Wideband detection domain. |
 | Stereo Link | `stereo_link_pct` | 0…100% | 100 | L/R gain linking (Stereo). |
 | M/S Link | `ms_link_pct` | 0…100% | 100 | M/S gain linking. |
@@ -193,8 +193,8 @@ Live, RT-safe tuning knobs now live in an **embedded editor dock** opened by the
 | **Wide Release Scale** | `dev_wide_release_scale` | 0.5…8.0× | 1.0 | Wideband final-stage release multiplier | UI **Wide ×**. Default 1× preserves prior combined High/Wide=1 behavior. |
 | **Sigma Attack** | `dev_sigma_attack_ms` | 1…50 ms | 17.4 | AdaptiveSigma: how fast `sigma` rises | UI **Adapt Onset (ms)**. Legacy-engine only; greyed when Engine = Lookahead. |
 | **Sigma Decay Scale** | `dev_sigma_decay_scale` | 0.5…8.0× | 1.0 | AdaptiveSigma: how slow `sigma` decays | UI **Adapt Hold ×**. Legacy-engine only; greyed when Engine = Lookahead. |
-| **LA Band** | `dev_lookahead_band_ms` | 0…6 ms, 0.01 ms step | 5 | Per-band audio delay + low/high envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
-| **LA Wide** | `dev_lookahead_wide_ms` | 0…6 ms, 0.01 ms step | 5 | Wideband audio delay + wide envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
+| **LA Band** | `dev_lookahead_band_ms` | 0…6 ms, 0.01 ms step | **2** | Per-band audio delay + low/high envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
+| **LA Wide** | `dev_lookahead_wide_ms` | 0…6 ms, 0.01 ms step | **5** | Wideband audio delay + wide envelope window | 0.00 maps to one OS sample; latency stays fixed via wet-path padding. |
 | **Attack Mode** | `dev_attack_mode` | Ramp / Real / Hybrid | **Real** | Chooses §4.3 attack behavior | Ramp = cosine-in-lookahead + snap. Real = decoupled TC (`attackSamples_=1`). Hybrid = pre-ramp + smoothed follower (both Attack + Real Atk knobs). |
 | **Attack** | `dev_attack_ms` | 0.05…10 ms | 3 | Ramp-mode envelope attack ramps | Overrides Character; capped by each active lookahead window. |
 | **Real Attack** | `dev_real_attack_ms` | 0.05…100 ms (skewed fast) | 5 | Real-mode 2-pole attack TC | Decoupled from lookahead; slow = transient punch-through. |

@@ -1,6 +1,6 @@
 # SLICE — Fix ceiling-hold: non-zero lookahead defaults + TruePeak final ceiling
 
-**Status:** ready for Cursor · **Architect:** Claude · **Verify:** Claude · **Audition/decide:** avishali (Asaf on DEV build)
+**Status:** closed 2026-07-05 · **Architect:** Claude · **Verify:** Claude · **Audition/decide:** avishali (Asaf on DEV build)
 **Repos:** plugin `MasterLimiter` only. **Param-default + docs change — no DSP logic, no SDK, no new params, no latency change.**
 **Companion:** `docs/SIGNAL_FLOW.md` §2.9, §2.14.
 
