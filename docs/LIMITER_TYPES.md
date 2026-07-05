@@ -90,6 +90,11 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 
 **RELEASE SWEEP RESULT 2026-07-05 (rig, mix through our plugin at 9 release configs): existing controls CANNOT close it — STRUCTURAL.** Best config = **LA Release 8ms / poles 2** (RMS −11.43, 300ms range 6.9) — still ~2.8 dB flatter than Ozone (9.7) and 0.7 dB quieter. Faster release beats slower (rel8 > rel40/120/300 on BOTH loudness and breathing); fewer poles marginally better; Adaptive engine worse. **Mechanism:** our LookaheadFollower recovers "only in gaps" (sliding-window-min) → a dense mix has NO gaps → gain never recovers → macro-level stays pinned → flat. Ozone recovers BETWEEN hits even on dense material (the IRC trick) → breathes + pushes louder without pumping. **FIX = new release algorithm (intelligent/program-dependent recovery that breathes on dense material), SDK `LimiterEnvelope` — the single highest-leverage item for the Ozone gap. NOT a voicing bake.** Interim: ship rel8/poles2 as the best-available default.
 
+**FINALCEILING PUMPING CONFIRMED 2026-07-05 (avishali's hypothesis — MEASURED, commits pending):** the Ozone gap has TWO parts.
+- **Part 1 (~1 dB) — FinalCeiling pumps.** Real attack passes **+5.5 dB transient overs** on a real mix (Real can't catch transients) → FinalCeiling must slam them → its release pumps: turning FC on flattens 300ms range **8.2→6.7** AND costs **1.7 dB RMS** (−9.89→−11.60). **FIXABLE NOW with shipped tools:** a light **Post-clip (−3 dB)** catches transients instantly (no release) → FC relaxes → **RMS −10.23 (LOUDER than Ozone −10.69) + range 6.7→7.7.** Heavy clip (−6/−9) squashes. Ramp attack does similar (−10.24 / 7.8) but distorts bass. **Interim voicing: Real + Post-clip ~−3 dB.**
+- **Part 2 (~2 dB) — main release still can't breathe on dense material** (7.7 vs 9.7 even with post-clip). The LookaheadFollower "recover only in gaps" limit → the STRUCTURAL new-release-algorithm fix above.
+- **Second structural candidate: speed up FinalCeiling's release** (`FinalCeilingLimiter` in SDK) so it pumps less when it does catch — same "stop pinning the level down" problem, targeted at the final stage.
+
 ---
 
 ## Idea #1 — Dual limiter (fast catcher + slow leveler)  ·  *build first*
