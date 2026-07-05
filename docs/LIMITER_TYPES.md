@@ -95,6 +95,11 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 - **Part 2 (~2 dB) — main release still can't breathe on dense material** (7.7 vs 9.7 even with post-clip). The LookaheadFollower "recover only in gaps" limit → the STRUCTURAL new-release-algorithm fix above.
 - **Second structural candidate: speed up FinalCeiling's release** (`FinalCeilingLimiter` in SDK) so it pumps less when it does catch — same "stop pinning the level down" problem, targeted at the final stage.
 
+**⭐ PER-GENRE A/B vs OZONE — CONCLUSIVE 2026-07-05 (jazz MIX0003 + EDM MIX0001 through Ozone IRC1 vs ours, both loudness-matched to ~−10.4 RMS):**
+- **JAZZ:** transients IDENTICAL (crest 9.9 vs 9.6), tone NEUTRAL (diff-spectrum ±0.2dB) — **the ENTIRE gap = macro-dynamics: Ozone 300ms-range 4.7 vs OURS 2.1 (2.6 dB).**
+- **EDM:** same **2.6 dB breathing gap** (2.5 vs 5.1) PLUS **bass: Ozone keeps 60-160Hz (+0.7dB) and we're 1-1.75dB brighter/THINNER above — our multiband OVER-DUCKS dominant bass.**
+- **→ THE gap is MACRO-DYNAMIC BREATHING (release recovery), ~2.6 dB, CONSISTENT across genres AND across source-dynamics (very-dynamic first-mix 12.4 or less-dynamic 5.9/6.6 — Ozone always preserves ~2.5× more macro-range at equal loudness). NOT tone, NOT transients.** #1 BUILD = intelligent release that breathes on dense material. #2 (EDM-specific) = bass preservation (low-band/wideband over-ducks dominant bass). Everything converged here.
+
 ---
 
 ## Idea #1 — Dual limiter (fast catcher + slow leveler)  ·  *build first*
