@@ -100,6 +100,8 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 - **EDM:** same **2.6 dB breathing gap** (2.5 vs 5.1) PLUS **bass: Ozone keeps 60-160Hz (+0.7dB) and we're 1-1.75dB brighter/THINNER above — our multiband OVER-DUCKS dominant bass.**
 - **→ THE gap is MACRO-DYNAMIC BREATHING (release recovery), ~2.6 dB, CONSISTENT across genres AND across source-dynamics (very-dynamic first-mix 12.4 or less-dynamic 5.9/6.6 — Ozone always preserves ~2.5× more macro-range at equal loudness). NOT tone, NOT transients.** #1 BUILD = intelligent release that breathes on dense material. #2 (EDM-specific) = bass preservation (low-band/wideband over-ducks dominant bass). Everything converged here.
 
+**STEREO WIDTH CHECK 2026-07-05 (source vs ours vs Ozone, both genres):** **Width is NOT the gap — we're WIDER than Ozone on BOTH** (jazz Side/Mid ours −8.72 vs OZ −9.18; edm ours −9.04 vs OZ −10.84; ours lower L/R corr = wider). Limiting widens (ducks center>sides); we do it more. So "open/wide" perception = the macro-dynamics, NOT literal width. **BUT one real NEGATIVE: our EDM BASS is 1.6 dB TOO WIDE** (80-300Hz ours −10.81 vs OZ −12.44) — Ozone keeps sub MONO/centered, we spread it → less punchy/focused low end + worse mono-compat. Sharpens #2: our EDM low end is BOTH under-energied AND over-wide. **FIX = mono the sub-bass (<~120-150Hz), standard mastering practice we lack** (a low-band mono / elliptical-filter feature). Highs ~tie (OZ +0.1dB @8-16k, negligible).
+
 ---
 
 ## Idea #1 — Dual limiter (fast catcher + slow leveler)  ·  *build first*
