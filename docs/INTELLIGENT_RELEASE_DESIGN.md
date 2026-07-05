@@ -1,6 +1,14 @@
 # Intelligent (Program-Dependent) Release Engine — Design
 
-**Status:** 🎯 DESIGN, approved direction (avishali 2026-07-05: Model A · Ozone-like leakage · new engine) · **Architect:** Claude
+**Status:** ⚠️ **SUPERSEDED / CORRECTED 2026-07-06 — the main-limiter release was NOT the primary flattener; FinalCeiling is.** Smart engine built (additive, safe) but its effect is **masked by FinalCeiling** and it doesn't breathe. See correction below. Original design kept for history.
+
+> ## 🔴 CORRECTION 2026-07-06 (rig, Smart engine built + measured)
+> **Smart engine changes nothing measurable** — every param (leak/fast/slow/sustain) froze at range 2.5 (jazz)/2.8 (edm). Isolation test (FinalCeiling ON vs OFF) revealed why:
+> - **FinalCeiling is the DOMINANT macro-flattener:** FC ON crushes 300ms range (EDM 6.1→2.5 = **−3.6 dB**); it masks the entire main limiter. Root: `FinalCeilingLimiter` has a **hardcoded 100 ms release** (`FinalCeilingLimiter.cpp:32-34`) — a true-peak catcher holding the reduction 100 ms after each transient → ducks/pumps.
+> - **Slower main release breathes MORE, not less** (Lookahead rel300 FC-off = EDM 6.1 > Ozone 5.1; rel8 = 2.8). The original "fast recovery" premise (Model A) was BACKWARDS for macro-breathing.
+> - **THE FIX = `PROMPTS/SLICE_FINALCEILING_FAST_RELEASE.md`** (FinalCeiling 100→~5 ms release, tunable). Then re-measure; the main limiter (slow release) may already breathe enough → Smart may be unnecessary. Smart stays **parked** (committed-additive-safe, not shipped/tuned).
+
+**Status (original):** 🎯 DESIGN, approved direction (avishali 2026-07-05: Model A · Ozone-like leakage · new engine) · **Architect:** Claude
 **Goal:** close the measured **~2.6 dB macro-dynamic (300 ms) flattening** vs Ozone IRC 1 — the single confirmed cause of "Ozone sounds more open/punchy" (`docs/LIMITER_TYPES.md` 2026-07-05). Metric = 300 ms loudness range on avishali's two mixes: JAZZ **2.1 → ~4.7**, EDM **2.5 → ~5.1**, at matched loudness, **without** raising LF THD.
 
 ---
