@@ -82,7 +82,11 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 2. **Then #3 Spectral (IRC 4 openness)** — the long game to match their *best*, removes the wideband wall entirely.
 3. Character-styles knob (revive Transparent/Balanced/Reactive) = cheap UX win borrowed from IRC 3/4 styles.
 
-**⏭ NEXT (measure the gap, don't guess):** render avishali's mix through **Ozone IRC 1 (fast&loud, −1, +9.6)** + our output on the same mix → rig A/B: crest/transient preservation, difference-spectrum (are we darker up top?), GR program-adaptivity (faster recovery in gaps?), IMD. Turn "sounds better" into a numeric target.
+**⏭ NEXT (measure the gap, don't guess):** render avishali's mix through **Ozone IRC 1 (fast&loud, −1, +9.6)** + our output on the same mix → rig A/B. **MEASURED 2026-07-05 (48s live mix, `test_ozone_11.wav` vs `test_masterLimiter.wav`, loudness-matched):**
+- **It's DYNAMICS, not tone.** Difference-spectrum is ±0.6-0.8 dB and we're if anything slightly BRIGHTER (centroid 3823 vs 3744 Hz). **Scrap the "wideband dulls the highs" theory — we are NOT darker.**
+- **Ozone is 1.6 dB LOUDER** at the same +9.6/−1 (RMS −10.69 vs −12.30), and rides TP −0.58 vs our −1.00.
+- **The real gap = MACRO-dynamics (release breathing):** short-term 300ms loudness range OZONE 9.7 dB vs OURS **7.9 dB** — Ozone's overall level breathes ~2 dB more section-to-section = the "punch/open/life." Meanwhile OUR fast transients are actually SHARPER (crest 11.3 vs 9.7, 10ms peakiness 11.0 vs 9.7 — Real attack passing them).
+- **So: ours = flat-macro + spiky-micro (squashed but spiky); Ozone = breathing-macro + controlled-micro.** The lever is **RELEASE RECOVERY / program-dependent release** (our level over-holds down = flattens the groove), NOT attack/transient-preservation (we already pass transients) and NOT spectral/tone. Target: lift 300ms range 7.9→~9.7 AND close the 1.6 dB loudness. Tune release (LA Release/poles/algorithm) first; structural adaptive-release if needed.
 
 ---
 
