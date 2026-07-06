@@ -180,6 +180,7 @@ private:
     void commitHeavyControls();
     void cacheGainCeilingLinkParameters();
     void refreshGainCeilingLinkBaseline();
+    void enforceTransparentEngineGuard();
     void applyIoInputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels);
     void applyIoOutputGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels);
     void processLearnResetRequest();

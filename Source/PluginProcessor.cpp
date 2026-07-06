@@ -195,6 +195,8 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     apvts.addParameterListener (param::dev_lookahead_band_ms.data(), this);
     apvts.addParameterListener (param::dev_lookahead_wide_ms.data(), this);
     apvts.addParameterListener (param::dev_mb_lookahead_ms.data(), this);
+    apvts.addParameterListener (param::dev_mb_engine.data(), this);
+    apvts.addParameterListener (param::dev_release_engine.data(), this);
 
     for (auto id : { param::dev_xover_cutoff_hz, param::dev_xover_transition_hz, param::dev_xover_atten_db,
                      param::dev_xover_hi_cutoff_hz, param::dev_xover_hi_transition_hz, param::dev_xover_hi_atten_db,
@@ -225,6 +227,8 @@ MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
     apvts.removeParameterListener (param::dev_lookahead_band_ms.data(), this);
     apvts.removeParameterListener (param::dev_lookahead_wide_ms.data(), this);
     apvts.removeParameterListener (param::dev_mb_lookahead_ms.data(), this);
+    apvts.removeParameterListener (param::dev_mb_engine.data(), this);
+    apvts.removeParameterListener (param::dev_release_engine.data(), this);
 }
 
 void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -772,8 +776,39 @@ void MasterLimiterAudioProcessor::rebuildCrossoverKernels()
     unlockCrossoverBank();
 }
 
+void MasterLimiterAudioProcessor::enforceTransparentEngineGuard()
+{
+    // ALPHA GUARD: Smart/Adaptive hidden from selector — remove when Smart becomes a selectable engine (see docs/ENGINE_NAMING.md).
+    if (devMbEngine_ == nullptr)
+        return;
+
+    if (devMbEngine_->get())
+        return;
+
+    auto* releaseEngine = dynamic_cast<juce::AudioParameterChoice*> (
+        apvts.getParameter (param::dev_release_engine.data()));
+    if (releaseEngine == nullptr)
+        return;
+
+    constexpr int lookaheadIdx = 1;
+    if (releaseEngine->getIndex() == lookaheadIdx)
+        return;
+
+    releaseEngine->beginChangeGesture();
+    releaseEngine->setValueNotifyingHost (releaseEngine->convertTo0to1 (lookaheadIdx));
+    releaseEngine->endChangeGesture();
+}
+
 void MasterLimiterAudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
 {
+    if (parameterID == param::dev_mb_engine.data()
+        || parameterID == param::dev_release_engine.data())
+    {
+        juce::ignoreUnused (newValue);
+        enforceTransparentEngineGuard();
+        return;
+    }
+
     if (parameterID == param::dev_xover_cutoff_hz.data()
         || parameterID == param::dev_xover_transition_hz.data()
         || parameterID == param::dev_xover_atten_db.data()
@@ -2560,6 +2595,8 @@ void MasterLimiterAudioProcessor::setStateInformation (const void* data, int siz
             learnState_.store (std::isfinite (loadedRef) ? static_cast<int> (LearnState::Captured)
                                                          : static_cast<int> (LearnState::Idle),
                                std::memory_order_release);
+
+            enforceTransparentEngineGuard();
         }
     }
 }
