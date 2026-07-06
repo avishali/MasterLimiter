@@ -108,3 +108,12 @@ The bench extension (Cursor) + control computation (Claude) mirrors the S-C spli
 ---
 
 *The 2-band engine proves we can match Ozone cheaply. This engine is the bid to pass it: a limiter that looks ahead, understands the program spectrally, and spends its limiting budget where the ear can't hear it — parity is the floor, this is the reach.*
+
+---
+
+## ⚠️ P-A RESULT — 2026-07-06 — NEGATIVE for the LF-distortion premise; parity confirmed on LF too
+`tools/analysis/mbl_pa.py` — tested the leapfrog's first hypothesis: does a lookahead-adaptive LOW-BAND threshold (duck the low band before bass transients) reduce the clipper's LF distortion while keeping breathing? (baseline validated = MB-2 engine.)
+- **NEGATIVE.** Adaptive ducking reduces clipper WORKLOAD (clip GR −1.7 dB) but **LF-THD does not improve** (jazz unchanged, EDM WORSE −10.9→−5.1 dB) and **breathing drops** (EDM 6.02→4.02). Ducking the low band = *limiting* it harder, and the low-band limiter's fast attack distorts the bass just like the clipper — distortion moved, not removed; and the groove flattened. Same fundamental wall: **a bass transient can't be reduced fast (clipper OR limiter) without distorting.**
+- **⭐ DECISIVE CONTEXT — our LF distortion = OZONE's, exactly** (LF-THD 45–130 Hz, matched loudness): OZONE jazz −1.9 / edm −11.0; OURS (2-band+clipper) jazz −1.9 / edm −10.9. **We are NOT worse than Ozone on LF — identical.** The LF distortion at −9 LUFS is inherent to loud limiting, not a defect.
+- **→ Implication:** the leapfrog's headline justification (fix the LF) is DISPROVEN — you can't beat Ozone's LF distortion without going quieter. **Parity with Ozone is achieved on BOTH breathing AND LF distortion** by the 2-band+clipper engine. avishali's LF complaint is a **CHARACTER** difference (our hard clipper's harsh harmonics vs Ozone's smoother limiting at the same THD magnitude), addressed by **voicing** (Soft clip, lower clipper_db, `dev_mb_attack_ms`, less push), NOT a new engine.
+- **This engine (the leapfrog) is now OPTIONAL R&D** (push PAST Ozone: mids/highs openness, loudness at equal *audible* distortion via masking), **not required for parity.** Revisit only if voicing the 2-band+clipper engine leaves a gap avishali cares about.
