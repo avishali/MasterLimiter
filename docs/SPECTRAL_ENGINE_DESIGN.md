@@ -195,7 +195,19 @@ After S-C.1 added Ramp attack (`--attack-mode ramp` holds sample-peak to −1). 
 - **safety OFF: breathes hard** (range 5.7–6.4 ≫ wideband 2.1/2.9, > Ozone) **but overshoots TP +4–5 dB** (two real bands sum past ceiling — not shippable).
 - **safety ON: peak-safe (TP ~0) but FLAT** (2.2–3.2 ≈ wideband floor) — the wideband safety, catching the summed overshoot, re-flattens the macro-envelope.
 - **3-band ≈ 2-band** (no extra breathing from the 3rd band).
-**→ MECHANISM proven (band-splitting breathes); the lever for MUSICAL+TP-safe = a smarter peak catcher.** **FAST-catcher probe (`mbl_fastsafety.py`, 2-band@120 + wideband safety, release sweep):** a FAST safety release recovers most of the breathing WHILE holding TP — jazz 150ms→2.19 vs **5ms→4.02 (TP −0.39, ≈Ozone 4.68)**; edm 150ms→3.30 vs **5ms→3.83 (TP −0.29, partway to 5.11)**. So **musical multiband + a fast transient catcher (fast-release limiter or clipper on the sum tips) = breathing AND TP-safe, partially** (jazz near Ozone, edm partway; faster/clipper should close more). This is the shippable direction, all real DSP. **KILL the 16 kHz default** (2-band default → ~120–150 Hz). Next: push the catcher (clipper/2ms) + the spectral-attribution leapfrog for the rest.
+**→ MECHANISM proven (band-splitting breathes); the lever for MUSICAL+TP-safe = a smarter peak catcher.** **FAST-catcher probe (`mbl_fastsafety.py`, 2-band@120 + wideband safety, release sweep):** a FAST safety release recovers most of the breathing WHILE holding TP — jazz 150ms→2.19 vs **5ms→4.02 (TP −0.39, ≈Ozone 4.68)**; edm 150ms→3.30 vs **5ms→3.83 (TP −0.29, partway to 5.11)**. So **musical multiband + a fast transient catcher (fast-release limiter or clipper on the sum tips) = breathing AND TP-safe, partially** (jazz near Ozone, edm partway; faster/clipper should close more). This is the shippable direction, all real DSP.
+
+### ⭐ THE CATCHER ANSWER — 2026-07-06 (`mbl_clip.py`) — CLIPPER on the sum tips
+Tested tip-catchers on 2-band@120 (breathing), drive-matched, sample-peak held:
+| catcher | JAZZ range (sPk/TP) | EDM range (sPk/TP) |
+|---|---|---|
+| none (unsafe) | 5.71 (+5.0/+5.0) | 6.41 (+4.4/+4.5) |
+| **hard clip −1** | **5.34 (−1.00/+0.54)** | **6.02 (−1.00/−0.36)** |
+| soft clip | 4.49 | 4.95 |
+| fast lim 5 ms | 4.99 | 5.27 |
+| *Ozone* | *4.68* | *5.11* |
+**A CLIPPER (zero release) on the sum = breathing AT/ABOVE Ozone + sample-peak held to −1 + TP within Ozone's range.** No release → grabs tips without holding the level down → breathing barely drops (5.71→5.34). **This solves the musical breathing+TP-safe problem with DSP the plugin ALREADY HAS (multiband + the 8× oversampled clipper from F-3d).** Vindicates the first combo-test hunch (post-clip catches transients without flattening). Voicing tradeoff = clipper transient distortion (mitigated by OS clipper + the leapfrog reducing its workload).
+**→ Near-term shippable engine = 2-band musical split (~120 Hz) → sum → OS clipper (the tip-catcher), NOT a slow wideband safety.** **KILL the 16 kHz default** (2-band default → ~120 Hz). Then the spectral-attribution leapfrog for even less clipper work.
 
 **Implication (superseded above):** the cheap win is a **2-band, 0-latency (`LinkwitzRileyBandSplitter`) peak-controlled multiband limiter** — closes the gap at 16 kHz only (mirage).
 
