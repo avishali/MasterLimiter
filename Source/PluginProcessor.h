@@ -409,6 +409,7 @@ private:
     bool cachedMbSafety_ = false;
     float cachedMbCeilingDb_ = -999.0f;
     std::atomic<bool> mbEngineLookaheadDirty_ { false };
+    std::atomic<bool> transparentGuardDirty_ { false };
     float committedMbLookaheadMs_ = -1.0f;
     int  crossoverOsLatencySamples_ = 0;
     int  crossoverOsLatencyStage2Samples_ = 0;

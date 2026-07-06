@@ -805,7 +805,9 @@ void MasterLimiterAudioProcessor::parameterChanged (const juce::String& paramete
         || parameterID == param::dev_release_engine.data())
     {
         juce::ignoreUnused (newValue);
-        enforceTransparentEngineGuard();
+        // ALPHA GUARD: defer to the message thread (this callback may run on the audio thread under host automation).
+        transparentGuardDirty_.store (true, std::memory_order_release);
+        triggerAsyncUpdate();
         return;
     }
 
@@ -1021,6 +1023,9 @@ void MasterLimiterAudioProcessor::restoreCompareStateFromTree (const juce::Value
 
 void MasterLimiterAudioProcessor::handleAsyncUpdate()
 {
+    if (transparentGuardDirty_.exchange (false, std::memory_order_acq_rel))
+        enforceTransparentEngineGuard();
+
     if (heavyGestureCommitPending_.exchange (false, std::memory_order_acq_rel))
     {
         commitHeavyControls();
