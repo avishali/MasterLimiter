@@ -433,6 +433,19 @@ endfunction()
 
 assert_target_not_self_linking(${PLUGIN_NAME})
 
+# ==============================================================================
+# UI ASCII gate (SDK) — fail build on raw non-ASCII UI string literals
+# ==============================================================================
+
+if (EXISTS "${HQ_DIR}/cmake/MdspUiAsciiGate.cmake")
+    include("${HQ_DIR}/cmake/MdspUiAsciiGate.cmake")
+    set(_ui_ascii_gate_target "${PLUGIN_NAME}")
+    if (TARGET "${PLUGIN_NAME}_SharedCode")
+        set(_ui_ascii_gate_target "${PLUGIN_NAME}_SharedCode")
+    endif()
+    mdsp_add_ui_ascii_gate("${_ui_ascii_gate_target}" "${CMAKE_CURRENT_SOURCE_DIR}/Source/ui")
+endif()
+
 # Optional PACE wraptool sign + verify after AAX build (distribution signing; macOS only).
 # Secrets stay in scripts/.aax_wraptool.env or the environment, never in CMake cache.
 option(ENABLE_AAX_WRAPTOOL_SIGN "Run PACE wraptool on the AAX bundle after each AAX build (macOS)" OFF)

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Block commits that introduce raw non-ASCII UI string literals.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+exec "${REPO_ROOT}/scripts/check_ui_ascii.sh"

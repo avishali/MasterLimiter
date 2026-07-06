@@ -1,41 +1,39 @@
 #!/usr/bin/env bash
-# check_ui_ascii.sh
-# Fail if any UI string literal in Source/ contains raw non-ASCII bytes.
-#
-# WHY: bare narrow literals like "-" (em/en dash), "->" (arrow) or "x" (multiply-x)
-# typed as real UTF-8 glyphs render as mojibake ("aTM"/"a EUR") on the plugin UI,
-# depending on source/execution charset. The proven-safe pattern (used across the
-# shared mdsp_ui library) is:  juce::String::fromUTF8 (u8"<glyph>")  for real glyphs,
-# and plain ASCII everywhere else.
-#
-# RULE enforced here: a line that (a) contains a string literal (") and (b) is not a
-# pure // comment and (c) does NOT use fromUTF8, must be pure ASCII.
-#
-# Run standalone, from a slice gate, or wire into CI / a pre-commit hook.
-set -uo pipefail
+# Thin wrapper: run the canonical SDK check against this product's UI sources.
+set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$ROOT/Source"
+UI_DIR="${ROOT}/Source/ui"
 
-violations="$(
-  find "$SRC" \( -name '*.cpp' -o -name '*.h' \) -print0 \
-  | while IFS= read -r -d '' f; do
-      perl -ne '
-        my $line = $_;
-        $line =~ s{//.*}{};              # drop line comments
-        next if $line =~ /fromUTF8/;     # allowed glyph pattern
-        next unless $line =~ /"/;        # only lines with a string literal
-        print "$ARGV:$.: $_" if $line =~ /[^\x00-\x7F]/;
-      ' "$f"
+_resolve_hq_check() {
+    local candidates=()
+
+    if [[ -n "${MELECHDSP_HQ_ROOT:-}" ]]; then
+        candidates+=("${MELECHDSP_HQ_ROOT}/tools/check_ui_ascii.sh")
+        candidates+=("${MELECHDSP_HQ_ROOT}/melechdsp-hq/tools/check_ui_ascii.sh")
+    fi
+
+    candidates+=(
+        "${ROOT}/third_party/melechdsp-hq/tools/check_ui_ascii.sh"
+        "${ROOT}/../melechdsp-hq/tools/check_ui_ascii.sh"
+    )
+
+    local c
+    for c in "${candidates[@]}"; do
+        if [[ -f "$c" ]]; then
+            echo "$c"
+            return 0
+        fi
     done
-)"
 
-if [[ -n "$violations" ]]; then
-  echo "ERROR: raw non-ASCII in UI string literal(s)." >&2
-  echo "Fix: use ASCII, or juce::String::fromUTF8 (u8\"<glyph>\") for an intentional glyph." >&2
-  echo "----" >&2
-  printf '%s\n' "$violations" >&2
-  exit 1
+    return 1
+}
+
+CHECK="$(_resolve_hq_check || true)"
+if [[ -z "$CHECK" ]]; then
+    echo "ERROR: could not find melechdsp-hq/tools/check_ui_ascii.sh" >&2
+    echo "Set MELECHDSP_HQ_ROOT or vendor melechdsp-hq under third_party/." >&2
+    exit 2
 fi
 
-echo "check_ui_ascii: OK (no raw non-ASCII UI string literals in Source/)."
+exec /bin/bash "$CHECK" "$UI_DIR"
