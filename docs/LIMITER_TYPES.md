@@ -104,6 +104,27 @@ An investigation into "the limiter doesn't hold the ceiling / FinalCeiling works
 
 ---
 
+## 2026-07-06 — COMBO TEST (the tunable-ceiling number, banked) → spectral engine confirmed
+
+Ran the decomposed combo on a real 104 s raw mix through the shipped+uncommitted tools (`tools/analysis/combo_test.py`; 300 ms-range = p95−p10 of 300 ms-window RMS, **level-invariant** so comparable across configs without loudness-matching; input +9.6 / ceiling −1 TP / Lookahead-2pole).
+
+| Config | 300 ms range (breathing) | True Peak | Note |
+|---|---|---|---|
+| breather — FC off, rel300 | **4.55** | **+7.57** ❌ | max breathing, +7.5 dB overs = unshippable |
+| FC 5 ms + rel8 **or** rel300 | 4.07 | −0.72 | main release **inert** once FC catches |
+| FC 25 ms + rel300 | 3.95 | −0.95 | |
+| FC 100 ms (old hardcoded) + rel300 | 3.82 | −0.98 | the flattener the correction doc flagged |
+| FC 5 ms + rel300 + post-clip −3 | 3.99 | −1.05 | clip flattens more; crest 7.6→5.6 |
+
+**Three structural facts (robust to metric; absolute dB not comparable to the banked 2.6 dB jazz/EDM gap — different song/metric):**
+1. **TP-safety trades against breathing.** Every peak-catcher (FC, clipper) *reduces* macro-range. Max breathing (4.55) requires FC off ⇒ +7.5 dB overs ⇒ not shippable. **Shippable ceiling ≈ FC-5 ms = 4.07.**
+2. **The uncommitted `dev_fc_release_ms` (FC fast-release) is a real, measured win:** FC 5 ms recovers ~0.25 dB breathing vs the old hardcoded FC 100 ms (4.07 vs 3.82) at equal TP safety. Worth committing as the FinalCeiling default.
+3. **Main-limiter release is inert once FC is on** (rel8 ≡ rel300 = 4.07). "Slower main release breathes more" only holds with FC *off*. The clipper only flattens further.
+
+**Conclusion:** the **wideband peak-catcher IS the wall** — to hold TP it must slam the +7.5 dB transients Real passes, and any *wideband* hold-release flattens the macro envelope. Tuning the shipped tools cannot get past ~4.07. A **per-band (spectral) catcher** is the structural escape: catch the offending band's peak, leave the broadband level un-ducked → breathing *and* TP-safety together. **The combo confirms the spectral/psychoacoustic engine is the only path past the ceiling — bank the number, move to the engine.** (Base ship defaults stand: FC off / clipper off; commit FC-5 ms as the FC-on default.) See `docs/SPECTRAL_ENGINE_DESIGN.md`.
+
+---
+
 ## Idea #1 — Dual limiter (fast catcher + slow leveler)  ·  *build first*
 Two limiter stages in **series**:
 - **Stage A — fast transient catcher:** very quick attack **and** release, short lookahead. Its job is only to tame peaks. **A dedicated fast limiter — NOT the clipper** (the clipper stays *outside* the limiter for now). **Lookahead sets how fast the initial transient is caught** (shorter = snappier/earlier catch).
