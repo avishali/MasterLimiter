@@ -48,7 +48,7 @@ private:
     juce::Label lblRealAttack_ {};
     juce::Slider sldRealAttack_;
 
-    juce::GroupComponent groupAttackScaling_ { "AttackScalingGroup", "ATTACK \u00b7 per-band trim (\u00d7 base)" };
+    juce::GroupComponent groupAttackScaling_ { "AttackScalingGroup", "ATTACK - per-band trim (x base)" };
     juce::Label lblLowAttackScale_ {};
     juce::Slider sldLowAttackScale_;
     juce::Label lblMidAttackScale_ {};
@@ -82,13 +82,13 @@ private:
     juce::Label lblReleaseEngine_ {};
     juce::ComboBox cmbReleaseEngine_ { "DEV Release Engine" };
 
-    juce::GroupComponent groupLookaheadRelease_ { "LookaheadReleaseGroup", "RELEASE \u00b7 Auto (Lookahead)" };
+    juce::GroupComponent groupLookaheadRelease_ { "LookaheadReleaseGroup", "RELEASE - Auto (Lookahead)" };
     juce::Label lblLaRelease_ {};
     juce::Slider sldLaRelease_;
     juce::Label lblLaPoles_ {};
     juce::ComboBox cmbLaPoles_ { "DEV LA Poles" };
 
-    juce::GroupComponent groupSmartRelease_ { "SmartReleaseGroup", "RELEASE \u00b7 Smart" };
+    juce::GroupComponent groupSmartRelease_ { "SmartReleaseGroup", "RELEASE - Smart" };
     juce::Label lblSmartFast_ {};
     juce::Slider sldSmartFast_;
     juce::Label lblSmartSlow_ {};
@@ -98,13 +98,13 @@ private:
     juce::Label lblSmartLeak_ {};
     juce::Slider sldSmartLeak_;
 
-    juce::GroupComponent groupAdaptiveRelease_ { "AdaptiveReleaseGroup", "RELEASE \u00b7 Auto (Adaptive \u00b7 legacy)" };
+    juce::GroupComponent groupAdaptiveRelease_ { "AdaptiveReleaseGroup", "RELEASE - Auto (Adaptive - legacy)" };
     juce::Label lblSigmaAttack_ {};
     juce::Slider sldSigmaAttack_;
     juce::Label lblSigmaDecay_ {};
     juce::Slider sldSigmaDecay_;
 
-    juce::GroupComponent groupBandScaling_ { "BandScalingGroup", "RELEASE \u00b7 per-band trim (\u00d7 base)" };
+    juce::GroupComponent groupBandScaling_ { "BandScalingGroup", "RELEASE - per-band trim (x base)" };
     juce::Label lblLowScale_ {};
     juce::Slider sldLowScale_;
     juce::Label lblMidScale_ {};
@@ -114,13 +114,13 @@ private:
     juce::Label lblWideScale_ {};
     juce::Slider sldWideScale_;
 
-    juce::GroupComponent groupMultiband_ { "MultibandGroup", "BAND \u00b7 Multiband link" };
+    juce::GroupComponent groupMultiband_ { "MultibandGroup", "BAND - Multiband link" };
 
-    juce::GroupComponent groupBandStereo_ { "BandStereoGroup", "BAND \u00b7 Stereo link" };
+    juce::GroupComponent groupBandStereo_ { "BandStereoGroup", "BAND - Stereo link" };
     juce::Label lblBandStereoLink_ {};
     juce::Slider sldBandStereoLink_;
 
-    juce::GroupComponent groupBandMs_ { "BandMsGroup", "BAND \u00b7 M/S per-band" };
+    juce::GroupComponent groupBandMs_ { "BandMsGroup", "BAND - M/S per-band" };
     juce::ToggleButton btnBandMs_ { "Band M/S" };
     juce::Label lblBandMsLink_ {};
     juce::Slider sldBandMsLink_;
@@ -129,7 +129,7 @@ private:
     juce::Label lblEngine_ {};
     juce::ComboBox cmbEngine_ { "DEV Engine" };
 
-    juce::GroupComponent groupPeakControl_ { "PeakControlGroup", "PEAK \u00b7 Global (DEV)" };
+    juce::GroupComponent groupPeakControl_ { "PeakControlGroup", "PEAK - Global (DEV)" };
     juce::ToggleButton btnMsSafetyClamp_ { "M/S Safety Clamp" };
     juce::Label lblMsClampReadout_ {};
     juce::ToggleButton btnFinalCeiling_ { "Final Ceiling" };

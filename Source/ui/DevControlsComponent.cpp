@@ -85,17 +85,17 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldRealAttack_, 2, " ms");
     sldRealAttack_.setTooltip ("Decoupled attack time-constant; slow = transients punch through to the ceiling (punch).");
 
-    setupLabel (lblLowAttackScale_, "Low Atk \u00d7");
+    setupLabel (lblLowAttackScale_, "Low Atk x");
     setupSlider (sldLowAttackScale_, 2, {});
     sldLowAttackScale_.setTooltip ("Per-band attack-time scale. >1 slower (cleaner, esp. bass), <1 faster (catches transients). Try Low ~3\u20134, High ~0.3\u20130.5 to catch HF transients while keeping bass clean.");
 
-    setupLabel (lblMidAttackScale_, "Mid Atk \u00d7");
+    setupLabel (lblMidAttackScale_, "Mid Atk x");
     setupSlider (sldMidAttackScale_, 2, {});
-    sldMidAttackScale_.setTooltip ("Mid-band attack-time scale (\u00d7 base Attack / Real Atk).");
+    sldMidAttackScale_.setTooltip ("Mid-band attack-time scale (x base Attack / Real Atk).");
 
-    setupLabel (lblHighAttackScale_, "High Atk \u00d7");
+    setupLabel (lblHighAttackScale_, "High Atk x");
     setupSlider (sldHighAttackScale_, 2, {});
-    sldHighAttackScale_.setTooltip ("High-band attack-time scale (\u00d7 base Attack / Real Atk). <1 catches HF transients faster.");
+    sldHighAttackScale_.setTooltip ("High-band attack-time scale (x base Attack / Real Atk). <1 catches HF transients faster.");
 
     setupLabel (lblLookaheadBand_, "Band");
     setupSlider (sldLookaheadBand_, 2, " ms");
@@ -148,7 +148,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
 
     setupLabel (lblLaRelease_, "Release (ms)");
     setupSlider (sldLaRelease_, 1, " ms");
-    sldLaRelease_.setTooltip ("Lookahead engine: recovery time (how fast gain lets go in a gap). Per-band \u00d7 trims multiply this.");
+    sldLaRelease_.setTooltip ("Lookahead engine: recovery time (how fast gain lets go in a gap). Per-band x trims multiply this.");
 
     setupLabel (lblLaPoles_, "Smoothness");
     setupCombo (cmbLaPoles_);
@@ -175,27 +175,27 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
 
     setupLabel (lblSigmaAttack_, "Adapt Onset (ms)");
     setupSlider (sldSigmaAttack_, 1, " ms");
-    sldSigmaAttack_.setTooltip ("Adaptive (legacy): how fast it decides limiting is sustained \u2192 switches to slow release. Lower = reacts sooner.");
+    sldSigmaAttack_.setTooltip ("Adaptive (legacy): how fast it decides limiting is sustained -> switches to slow release. Lower = reacts sooner.");
 
-    setupLabel (lblSigmaDecay_, "Adapt Hold \u00d7");
+    setupLabel (lblSigmaDecay_, "Adapt Hold x");
     setupSlider (sldSigmaDecay_, 2, {});
     sldSigmaDecay_.setTooltip ("Adaptive (legacy): how long it stays in slow-release after limiting stops.");
 
-    setupLabel (lblLowScale_, "Low \u00d7");
+    setupLabel (lblLowScale_, "Low x");
     setupSlider (sldLowScale_, 2, {});
-    sldLowScale_.setTooltip ("Low-band release = this \u00d7 the base release. >1 slower (bass, less pump), <1 faster. Affects Auto + Manual.");
+    sldLowScale_.setTooltip ("Low-band release = this x the base release. >1 slower (bass, less pump), <1 faster. Affects Auto + Manual.");
 
-    setupLabel (lblMidScale_, "Mid \u00d7");
+    setupLabel (lblMidScale_, "Mid x");
     setupSlider (sldMidScale_, 2, {});
-    sldMidScale_.setTooltip ("Mid-band release trim (\u00d7 the base release).");
+    sldMidScale_.setTooltip ("Mid-band release trim (x the base release).");
 
-    setupLabel (lblHighScale_, "High \u00d7");
+    setupLabel (lblHighScale_, "High x");
     setupSlider (sldHighScale_, 2, {});
-    sldHighScale_.setTooltip ("High-band release trim (\u00d7 the base release).");
+    sldHighScale_.setTooltip ("High-band release trim (x the base release).");
 
-    setupLabel (lblWideScale_, "Wide \u00d7");
+    setupLabel (lblWideScale_, "Wide x");
     setupSlider (sldWideScale_, 2, {});
-    sldWideScale_.setTooltip ("Wideband final-stage release trim (\u00d7 the base release).");
+    sldWideScale_.setTooltip ("Wideband final-stage release trim (x the base release).");
 
     setupLabel (lblBandStereoLink_, "Band Stereo");
     setupSlider (sldBandStereoLink_, 0, " %");
@@ -429,17 +429,27 @@ void DevControlsComponent::resized()
         combo.setBounds (row.withHeight (24));
     };
 
-    auto placeGroupIfVisible = [&] (juce::GroupComponent& group, int h)
+    auto heightForRows = [&] (int rowCount) -> int
+    {
+        constexpr int chrome = 44;
+        if (rowCount <= 0)
+            return chrome;
+
+        return chrome + rowCount * rowH + (rowCount - 1) * 8;
+    };
+
+    auto placeGroupIfVisible = [&] (juce::GroupComponent& group, int rowCount)
     {
         if (! group.isVisible())
             return juce::Rectangle<int>();
 
+        const int h = heightForRows (rowCount);
         group.setBounds (margin, y, contentW - 2 * margin, h);
         y += h + gap;
         return group.getBounds().reduced (16, 22);
     };
 
-    auto inner = placeGroupIfVisible (groupPeakControl_, 136);
+    auto inner = placeGroupIfVisible (groupPeakControl_, 3);
     if (! inner.isEmpty())
     {
         {
@@ -459,7 +469,7 @@ void DevControlsComponent::resized()
         placeSliderRow (inner.removeFromTop (rowH), lblFcRelease_, sldFcRelease_);
     }
 
-    inner = placeGroupIfVisible (groupEngineSelector_, 72);
+    inner = placeGroupIfVisible (groupEngineSelector_, 1);
     if (! inner.isEmpty())
         placeComboRow (inner.removeFromTop (rowH), lblEngine_, cmbEngine_);
 
@@ -467,7 +477,7 @@ void DevControlsComponent::resized()
 
     if (! openEngine)
     {
-        inner = placeGroupIfVisible (groupAttack_, 136);
+        inner = placeGroupIfVisible (groupAttack_, 3);
         if (! inner.isEmpty())
         {
             placeComboRow (inner.removeFromTop (rowH), lblAttackMode_, cmbAttackMode_);
@@ -477,7 +487,7 @@ void DevControlsComponent::resized()
             placeSliderRow (inner.removeFromTop (rowH), lblRealAttack_, sldRealAttack_);
         }
 
-        inner = placeGroupIfVisible (groupAttackScaling_, 136);
+        inner = placeGroupIfVisible (groupAttackScaling_, 3);
         if (! inner.isEmpty())
         {
             placeSliderRow (inner.removeFromTop (rowH), lblLowAttackScale_, sldLowAttackScale_);
@@ -487,7 +497,7 @@ void DevControlsComponent::resized()
             placeSliderRow (inner.removeFromTop (rowH), lblHighAttackScale_, sldHighAttackScale_);
         }
 
-        inner = placeGroupIfVisible (groupLookahead_, 104);
+        inner = placeGroupIfVisible (groupLookahead_, 2);
         if (! inner.isEmpty())
         {
             placeSliderRow (inner.removeFromTop (rowH), lblLookaheadBand_, sldLookaheadBand_);
@@ -495,7 +505,7 @@ void DevControlsComponent::resized()
             placeSliderRow (inner.removeFromTop (rowH), lblLookaheadWide_, sldLookaheadWide_);
         }
 
-        inner = placeGroupIfVisible (groupCrossover_, 248);
+        inner = placeGroupIfVisible (groupCrossover_, 6);
         if (! inner.isEmpty())
         {
             placeSliderRow (inner.removeFromTop (rowH), lblXoverCutoff_, sldXoverCutoff_);
@@ -511,15 +521,15 @@ void DevControlsComponent::resized()
             placeSliderRow (inner.removeFromTop (rowH), lblXoverHiAtten_, sldXoverHiAtten_);
         }
 
-        inner = placeGroupIfVisible (groupMultiband_, 72);
+        inner = placeGroupIfVisible (groupMultiband_, 1);
         if (! inner.isEmpty())
             placeSliderRow (inner.removeFromTop (rowH), lblBandLink_, sldBandLink_);
 
-        inner = placeGroupIfVisible (groupBandStereo_, 72);
+        inner = placeGroupIfVisible (groupBandStereo_, 1);
         if (! inner.isEmpty())
             placeSliderRow (inner.removeFromTop (rowH), lblBandStereoLink_, sldBandStereoLink_);
 
-        inner = placeGroupIfVisible (groupBandMs_, 104);
+        inner = placeGroupIfVisible (groupBandMs_, 2);
         if (! inner.isEmpty())
         {
             auto row = inner.removeFromTop (rowH);
@@ -528,7 +538,7 @@ void DevControlsComponent::resized()
             placeSliderRow (inner.removeFromTop (rowH), lblBandMsLink_, sldBandMsLink_);
         }
 
-        inner = placeGroupIfVisible (groupLookaheadRelease_, 104);
+        inner = placeGroupIfVisible (groupLookaheadRelease_, 2);
         if (! inner.isEmpty())
         {
             placeSliderRow (inner.removeFromTop (rowH), lblLaRelease_, sldLaRelease_);
@@ -536,7 +546,7 @@ void DevControlsComponent::resized()
             placeComboRow (inner.removeFromTop (rowH), lblLaPoles_, cmbLaPoles_);
         }
 
-        inner = placeGroupIfVisible (groupBandScaling_, 172);
+        inner = placeGroupIfVisible (groupBandScaling_, 4);
         if (! inner.isEmpty())
         {
             placeSliderRow (inner.removeFromTop (rowH), lblLowScale_, sldLowScale_);
@@ -548,14 +558,14 @@ void DevControlsComponent::resized()
             placeSliderRow (inner.removeFromTop (rowH), lblWideScale_, sldWideScale_);
         }
 
-        inner = placeGroupIfVisible (groupManualRelease_, 72);
+        inner = placeGroupIfVisible (groupManualRelease_, 1);
         if (! inner.isEmpty())
             placeSliderRow (inner.removeFromTop (rowH), lblSustainRatio_, sldSustainRatio_);
     }
 
     if (openEngine)
     {
-        inner = placeGroupIfVisible (groupMbEngine_, 252);
+        inner = placeGroupIfVisible (groupMbEngine_, 6);
         if (! inner.isEmpty())
         {
             placeSliderRow (inner.removeFromTop (rowH), lblMbCrossover_, sldMbCrossover_);

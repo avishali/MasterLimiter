@@ -786,7 +786,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnClipperPosition_.setTooltip ("Clipper position: Pre = before the limiter (input shaping); "
                                     "Post = after the limiter (transient catcher; TruePeak ceiling catches its inter-sample peaks).");
     lblClipperReadout_.setTooltip ("Clipper gain-reduction depth in dB (current / max since reset). "
-                                   "Not an output-over indicator — output is limited by the ceiling stage. "
+                                   "Not an output-over indicator - output is limited by the ceiling stage. "
                                    "Click to reset max.");
     btnGainCeilingLink_.setTooltip ("When enabled, Gain and Ceiling move inversely.");
     btnGainMatchAutoTrack_.setTooltip ("Continuously matches limiter output loudness to the learned reference.");
@@ -1085,8 +1085,7 @@ void MainView::updateCompareButtons()
     const int active = processor_.getActiveCompareSlot();
     btnCompareA_.setToggleState (active == 0, juce::dontSendNotification);
     btnCompareB_.setToggleState (active == 1, juce::dontSendNotification);
-    btnCopyCompare_.setButtonText (active == 0 ? juce::String::fromUTF8 (u8"A→B")
-                                              : juce::String::fromUTF8 (u8"B→A"));
+    btnCopyCompare_.setButtonText (active == 0 ? "A>B" : "B>A");
 }
 
 void MainView::showPresetMessage (const juce::String& title, const juce::String& message)
