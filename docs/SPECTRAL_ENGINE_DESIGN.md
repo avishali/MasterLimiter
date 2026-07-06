@@ -165,6 +165,34 @@ Honest record. `tools/analysis/spectral_proto.py`.
 
 This is exactly what the SDK's `SpectralReferenceCurve` (neighbourhood reference) + `SpectralGainMask` are built for — the spectral stage is a **dynamic spectral shaper feeding a wideband brickwall**, not a per-band brickwall itself. **P-0 v3 must be rebuilt on this model** (spectral shaper → measure brickwall-GR reduction + range), NOT "hold each band to ceiling." **Do not spend C++ slices until this measures the jazz/EDM range climbing toward 4.7/5.1 at Ozone loudness/TP.** ⚠️ This is a real design/prototyping task (the hard core of the engine), not a quick script — three fast attempts proved that.
 
+### S-C first result — 2026-07-06 — ✅ PRELIMINARY POSITIVE (real production DSP, not Python)
+After the SDK module arc (ADR-0013: `SingleBandLimiter` + `MultibandLimiter`, both committed & null-tested), we finally ran §4a on the REAL DSP via the `mbl_bench` CLI + `tools/analysis/mbl_measure.py` (Claude orchestrates drive-matching + measures). **Per-band limiting recovers macro-breathing vs wideband, at matched loudness:**
+
+| | K=1 wideband | N=2 | N=8 | Ozone |
+|---|---|---|---|---|
+| JAZZ 300 ms range | 3.84 | 5.68 | **5.92** | 4.68 |
+| EDM 300 ms range | 5.66 | 6.47 | **6.41** | 5.11 |
+
+**Findings:** (1) multiband lifts 300 ms range **+1.8–2.1 dB (jazz) / +0.8 dB (edm)** over wideband, **meeting/exceeding Ozone**; (2) **most of the gain is at N=2–3** (strong diminishing returns after) — even a few bands captures it; (3) **per-band *release profile* (fast-HF/slow-LF) does NOT beat uniform release → the lever is independent per-band *limiting* (spectral separation of GR), not per-band release time-constants.** This refines §4a.
+
+⚠️ PRELIMINARY (superseded by the peak-matched run below): hybrid-default attack passed transients (TP hot).
+
+### S-C peak-matched — 2026-07-06 — ✅ §4a CONFIRMED (production DSP, RMS- AND TP-matched, both genres)
+After S-C.1 added Ramp attack (`--attack-mode ramp` holds sample-peak to −1). Re-ran `mbl_measure.py` peak-controlled. The valid (peak-matched, TP≈Ozone) comparison:
+
+| | K=1 wideband (TP) | **N=2 (TP)** | Ozone (TP) |
+|---|---|---|---|
+| JAZZ 300 ms range | 2.12 (0.52) | **4.76 (0.18)** | 4.68 (−0.49) |
+| EDM 300 ms range | 2.96 (−0.08) | **5.35 (−0.05)** | 5.11 (−0.48) |
+
+- **Sanity anchor PASSES:** peak-controlled K=1 = 2.12 / 2.96 ≈ the banked shipping floor (2.1 / 2.5).
+- **N=2 closes the entire macro-breathing gap** at matched RMS **and** matched TP — 2.1→4.8 (jazz), 3.0→5.4 (edm), landing at/above Ozone. Consistent across both genres. **This is the confirmation** (rigorous: peak+loudness matched, sanity-anchored, real DSP — not a proxy).
+- **Just 2 bands does it.** N=4/N=8 range is also high BUT NOT peak-matched (safety off → summed bands overshoot, TP +5…+10; more bands → more constructive-sum overshoot). To use N≥4 peak-controlled you must control the SUM peak (append the safety `SingleBandLimiter`, or a final limiter) — a separate step.
+- **Mechanism refined:** we close the gap via **band-separation**, not release intelligence — per-band *release profile* (fast-HF/slow-LF) still doesn't beat uniform. Note: Ozone **IRC1 is single-band** and gets its breathing from program-dependent *release*; we reach the same macro-range with a **2-band split + simple release** — a different path to the same result.
+- **Caveat (voicing, not measurement):** Ramp attack catches peaks but adds LF distortion (memory: THD −41 vs Real −51). It's the right tool to *measure* breathing peak-matched; the shipped engine needs a cleaner transient catcher. Breathing (macro-range) is unaffected by this.
+
+**Implication:** the cheap win is a **2–3 band, 0-latency (`LinkwitzRileyBandSplitter`) peak-controlled multiband limiter** — it closes the measured Ozone gap. The many-band/STFT spectral regime is now optional polish, not required to reach parity. Next probe: N≥4 with sum-peak control (safety on) — does it beat N=2, or is 2–3 bands the sweet spot?
+
 ---
 
 ## 9. C++ slice breakdown (post-prototype, Trinity flow: Claude specs → Cursor builds → avishali auditions)
