@@ -22,6 +22,7 @@ def configure(p, gain_db, xover, safety):
     p.ceiling_mode = "SamplePeak"
     p.ceiling_db = -1.0
     p.input_gain_db = min(24.0, max(0.0, gain_db))
+    p.gain_match_auto = False
 
 
 def render(x, gain_db, xover, safety):
@@ -55,6 +56,6 @@ if __name__ == "__main__":
     for g in GENRES:
         x, sr = sf.read(g["src"]); assert sr == SR
         print(f"  --- {g['name']} (Ozone {g['target_rng']:.2f}) ---")
-        for xover, safety in [(120, False), (120, True), (3000, False), (3000, True)]:
+        for xover, safety in [(120, False), (120, True), (700, False), (3000, False), (3000, True), (16000, True)]:
             d, mm = match(x, g["target_rms"], xover, safety)
             print(f"    xover {xover:4d}Hz safety {str(safety):5s}  gain +{d:4.1f}  RMS {mm['rms']:7.2f}  range {mm['rng']:5.2f}  TP {mm['tp']:6.2f}")

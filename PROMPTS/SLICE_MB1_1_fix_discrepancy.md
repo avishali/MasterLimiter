@@ -33,6 +33,20 @@ Prime suspects — verify each against `tools/mbl_bench.cpp`'s `--split lr` path
 ## Output requirements
 1. Retrieval log + the root-cause found (what differed). 2. Diff. 3. The plugin-vs-bench match numbers at 120/700/3000. 4. Confirm toggle-OFF unchanged. 5. If the bug was in the SDK `MultibandLimiter`, flag it explicitly (it would affect the bench too — but the bench matches, so more likely plugin-side).
 
+---
+
+## REVISION 1 (2026-07-06, Claude diagnosis) — TWO distinct bugs found; do the parity harness
+
+Cursor's pass fixed real bugs (attack-mode Hybrid↔Real swap; block-size/gain-staging) — keep those. Two issues remain, now isolated:
+
+**BUG 1 — `setCrossoverFrequencies` is broken at high (~16 kHz) crossovers (this breaks the PARITY config).**
+- Empirical (Claude, `mbl_bench --split lr --bands 2`, safety off, drive +8, jazz): **default (no `--crossovers`) → range 4.86, TP 0.06 (peak-controlled = the real parity result)**; **explicit `--crossovers 16000` → render FAILS** (no valid output); plugin `setCrossoverFrequencies(16000)` → flat 2.33.
+- The N=2 default places the crossover at *exactly 16000* via `setDefaultCrossovers`'s log formula (`LinkwitzRileyBandSplitter.h:203`: `exp(logLow + step) = highHz = 16000`) — yet `setCrossoverFrequencies(16000)` behaves differently/breaks. **Fix:** find why `setCrossoverFrequencies` diverges from `setDefaultCrossovers` at high freq (validation/clamp/stale-state/filter-rebuild); make them agree. Verify the SDK class directly (this may be an SDK bug, not plugin — flag if so; it would be additive to fix). Interim plugin option: for the 16 kHz default, call `setDefaultCrossovers` (works) instead of `setCrossoverFrequencies`.
+
+**BUG 2 — plugin over-limits ~1.5 dB at MID crossovers (700–3000) vs bench**, waveforms 98% correlated. Subtle config delta not yet found (not block size, not release engine, not attack for Ramp). **Prime new suspect: effective lookahead window.** Plugin prepares 20 ms headroom + `setActiveLookaheadSamples(5 ms)`; bench prepares 5 ms directly. The LookaheadFollower's window-min release depends on the lookahead window → different macro-GR → different range. Check the *effective* lookahead matches.
+
+**→ DECISIVE TOOL (do this): build the C++ parity harness inside the SDK/plugin** that calls `mbEngine_` with the EXACT plugin recipe AND the exact `mbl_bench` recipe on the same wav, and diffs sample-accurate — eliminating pedalboard, latency, and drive-match as variables. It will expose BOTH bugs cleanly (run it at crossover = default-16k, 3000, 120). This beats more pedalboard sweeps (which are confounded). Then Claude re-verifies via the plugin.
+
 ## Notes for the architect (not for Cursor)
 - Since the BENCH (`--split lr` = MultibandLimiter) matches the reference and the PLUGIN (same module) doesn't, the bug is almost certainly in the **plugin's configuration/gain-staging of the module**, not the module itself. Start there.
 - This also resolves the honesty gap: confirm on the plugin which (crossover, safety) is actually peak-controlled-AND-breathing, so the "2-band parity" claim rests on a plugin-reachable, audition-verified config — not the bench's default-16k artifact.
