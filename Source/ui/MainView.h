@@ -102,7 +102,6 @@ private:
     void updateClipperModeButton (int clipperIdx);
     void updateClipperPositionButton (int idx);
     void updateClipperActiveState();
-    void updateCharacterModeControl (int characterIdx);
     void updateAutoReleaseModeControl (int modeIdx);
     void updateReleaseAutoControls (bool forceRepaint = false);
     void updateLimiterActiveState();
@@ -190,12 +189,6 @@ private:
 
     juce::ToggleButton btnStereoMode_ { "Stereo" };
 
-    juce::Label lblBandColor_ { {}, "Color" };
-    ValueSlider sldBandColor_;
-
-    juce::Label lblCharacter_ { {}, "Character" };
-    SegmentedChoice segCharacter_;
-
     juce::ToggleButton btnGainMatchAutoTrack_ { "Auto / Track" };
     juce::Label lblGainMatchNote_ { {}, "+0.0 dB" };
     CompensationBar compGainBar_;
@@ -240,7 +233,6 @@ private:
     bool lastReleaseAuto_ { false };
     int lastClipperModeIdx_ { -1 };
     int lastClipperPositionIdx_ { 0 };
-    int lastCharacterModeIdx_ { -1 };
     int lastAutoReleaseModeIdx_ { -1 };
     bool ignoreNextEditorClickAway_ { false };
     ValueSlider* editingSlider_ { nullptr };
@@ -268,8 +260,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attReleaseAuto_;
     std::unique_ptr<juce::ParameterAttachment> attAutoReleaseMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLink_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandColor_;
-    std::unique_ptr<juce::ParameterAttachment> attCharacter_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attGainMatchAutoTrack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimL_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attIoInputTrimR_;
