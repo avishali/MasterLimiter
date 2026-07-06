@@ -210,7 +210,18 @@ After S-C.1 added Ramp attack (`--attack-mode ramp` holds sample-peak to −1). 
 - **Do NOT go many-band for loudness/breathing** — it needs sum-peak control, which re-flattens. Parity does not need STFT/many-band.
 - **Voicing gap:** Ramp attack (used to peak-match) adds LF distortion → the shipped 2-band engine still needs a cleaner transient catcher (Idea #1 dual/fast-catcher, or a better per-band attack). Breathing is solved; clean peak-catching is the remaining voicing work.
 
-**Beyond parity (the leapfrog, roadmap #2/#3, avishali's direction 2026-07-06):** STFT + spectral-intelligence detection; test the multiband on the **linear-phase crossover** too (phase-linear variant of S-B); and a **"spectral dynamic threshold lookahead" engine** — analyse incoming program spectrum and set per-band thresholds adaptively (the content-aware "brain"). These are *differentiation above parity*, not required to match Ozone.
+### Crossover robustness + correction — 2026-07-06 (`mbl_xover.py`)
+The N=2 breathing recovery is **robust to crossover frequency** — range stays high (jazz 4.9–5.8 / edm 5.6–6.5, all ≫ K=1 2.1/3.0) for crossovers 120 Hz–3 kHz. NOT a crossover artifact. **Correction to the earlier "N=2 peak-matched 4.76":** that used the bench *default* crossover (behaves like ~16 kHz — near-wideband + an air split), which is the one config that's **peak-controlled** (TP ~0.1). Sensible low/mid crossovers (120–3 kHz) breathe *more* but **overshoot the summed peak** (TP +4–5). So there is a real **crossover ⇄ sum-peak trade-off**: low crossover = more breathing but needs sum-peak control (which re-flattens, per the safety probe). **Engine-design open item:** pick the crossover (and any light sum-peak control) that maximises peak-controlled breathing — likely a mid/high crossover, or a smarter attribution. (Mechanism nuance: even the ~16 kHz split breathes because separating the highs stops HF transients from yanking the main-band envelope down — a real per-band effect.)
+
+### Phase-linearity probe — 2026-07-06 (`mbl_phase.py`, S-D) — LR wins on cost
+LR IIR split vs `LinearPhaseCrossover`, 2-band, matched loudness:
+| | range | crest10 | latency |
+|---|---|---|---|
+| LR (IIR) | 5.4–6.4 | 7.5 / 7.7 | **960 (0-latency xover)** |
+| LinearPhase | 5.3–7.0 | 7.4 / 7.7 | 4046 (+79 ms FIR) |
+**No measurable objective benefit** (breathing ±0.5 inconsistent; crest ≈ identical → no transient softening) and **+79 ms latency.** → **LR 0-latency is the default** unless avishali's low-end-coherence audition (files in `Music/ML_audition/phase_*`) justifies the latency. Objective data does not support linear-phase for this 2-band limiter.
+
+**Beyond parity (the leapfrog, roadmap #2/#3, avishali's direction 2026-07-06):** the **"spectral dynamic threshold lookahead" engine** — STFT analyses the incoming program (lookahead) and sets per-band thresholds adaptively (the content-aware "brain"; subsumes "STFT + spectral-intelligence"). *Differentiation above parity*, not required to match Ozone. Design doc next.
 
 ---
 
