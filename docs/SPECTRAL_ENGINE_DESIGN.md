@@ -191,7 +191,26 @@ After S-C.1 added Ramp attack (`--attack-mode ramp` holds sample-peak to −1). 
 - **Mechanism refined:** we close the gap via **band-separation**, not release intelligence — per-band *release profile* (fast-HF/slow-LF) still doesn't beat uniform. Note: Ozone **IRC1 is single-band** and gets its breathing from program-dependent *release*; we reach the same macro-range with a **2-band split + simple release** — a different path to the same result.
 - **Caveat (voicing, not measurement):** Ramp attack catches peaks but adds LF distortion (memory: THD −41 vs Real −51). It's the right tool to *measure* breathing peak-matched; the shipped engine needs a cleaner transient catcher. Breathing (macro-range) is unaffected by this.
 
-**Implication:** the cheap win is a **2–3 band, 0-latency (`LinkwitzRileyBandSplitter`) peak-controlled multiband limiter** — it closes the measured Ozone gap. The many-band/STFT spectral regime is now optional polish, not required to reach parity. Next probe: N≥4 with sum-peak control (safety on) — does it beat N=2, or is 2–3 bands the sweet spot?
+**Implication:** the cheap win is a **2-band, 0-latency (`LinkwitzRileyBandSplitter`) peak-controlled multiband limiter** — it closes the measured Ozone gap.
+
+### N-band + sum-safety probe — 2026-07-06 — ⭐ 2 BANDS IS THE SWEET SPOT (N≥4+safety collapses)
+`tools/analysis/mbl_safety.py` (two-pass: multiband safety-off → wideband safety limiter on the sum; peak-controlled, drive-matched final RMS to Ozone):
+
+| | N=2+safety | N=4+safety | N=8+safety | Ozone |
+|---|---|---|---|---|
+| JAZZ range (TP) | **4.61 (−0.35)** | 2.22 (−0.52) | 1.75 (0.84) | 4.68 (−0.49) |
+| EDM range (TP) | **5.03 (−0.52)** | 1.02 (0.40) | 2.16 (0.15) | 5.11 (−0.48) |
+
+**N≥4 + safety COLLAPSES the breathing** (range → ~1–2): more bands → bigger summed overshoot → the safety limiter works harder → its heavy wideband GR **re-flattens** the macro-range (the original "wideband safety masks per-band" effect). **N=2 + safety keeps ≈ Ozone range AND is fully TP-safe** (sum barely overshoots → safety does almost nothing → breathing survives).
+
+**CONCLUSION — the engine is simple and cheap:**
+- **2-band, 0-latency, peak-controlled multiband limiter** = Ozone-parity macro-breathing.
+- **Base mode** = 2-band, no safety (TP ~+0.2, ISP overs like Ozone SP−1).
+- **"TP mode"** = 2-band + light final safety limiter (TP-safe, negligible breathing cost).
+- **Do NOT go many-band for loudness/breathing** — it needs sum-peak control, which re-flattens. Parity does not need STFT/many-band.
+- **Voicing gap:** Ramp attack (used to peak-match) adds LF distortion → the shipped 2-band engine still needs a cleaner transient catcher (Idea #1 dual/fast-catcher, or a better per-band attack). Breathing is solved; clean peak-catching is the remaining voicing work.
+
+**Beyond parity (the leapfrog, roadmap #2/#3, avishali's direction 2026-07-06):** STFT + spectral-intelligence detection; test the multiband on the **linear-phase crossover** too (phase-linear variant of S-B); and a **"spectral dynamic threshold lookahead" engine** — analyse incoming program spectrum and set per-band thresholds adaptively (the content-aware "brain"). These are *differentiation above parity*, not required to match Ozone.
 
 ---
 
