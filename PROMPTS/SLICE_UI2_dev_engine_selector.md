@@ -41,6 +41,7 @@
 **Hidden for alpha (parked, keep params + code):** all `dev_smart_*` and `dev_sigma_*` groups, and the Adaptive/Smart options of `dev_release_engine`. We re-expose Smart when we build it (after alpha voicing).
 
 ## Notes
+- **Stale tooltip cleanup (from UI-1):** the DEV "Band Split %" (`band_color`) tooltip still references the now-removed main-window Color knob ("Main Color knob is greyed"). Update it — Band Split is now the sole control for band link.
 - Global user controls on the MAIN window (input/output gain, ceiling, stereo, release/auto, gain match) stay where they are — don't move them.
 - Keep the panel scrollable; group headers by topic; sensible order within each engine frame.
 - If this is too big for one reviewable diff, split: **UI-2a** = engine selector + show/hide the two frames; **UI-2b** = regroup the globals + reorder within frames. Note the split if you do it.
