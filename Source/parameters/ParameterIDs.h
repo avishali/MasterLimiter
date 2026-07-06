@@ -64,5 +64,11 @@ inline constexpr std::string_view dev_band_ms_link_pct { "dev_band_ms_link_pct" 
 inline constexpr std::string_view dev_ms_safety_clamp { "dev_ms_safety_clamp" };
 inline constexpr std::string_view dev_final_ceiling { "dev_final_ceiling" };
 inline constexpr std::string_view dev_final_ceiling_release_ms { "dev_final_ceiling_release_ms" };
+inline constexpr std::string_view dev_mb_engine { "dev_mb_engine" };
+inline constexpr std::string_view dev_mb_crossover_hz { "dev_mb_crossover_hz" };
+inline constexpr std::string_view dev_mb_attack_mode { "dev_mb_attack_mode" };
+inline constexpr std::string_view dev_mb_release_ms { "dev_mb_release_ms" };
+inline constexpr std::string_view dev_mb_safety { "dev_mb_safety" };
+inline constexpr std::string_view dev_mb_lookahead_ms { "dev_mb_lookahead_ms" };
 
 } // namespace param

@@ -134,6 +134,18 @@ private:
     juce::Label lblSustainRatio_ {};
     juce::Slider sldSustainRatio_;
 
+    juce::GroupComponent groupMbEngine_ { "MbEngineGroup", "MB Engine (2-band parity)" };
+    juce::ToggleButton btnMbEngine_ { "MB Engine" };
+    juce::Label lblMbCrossover_ {};
+    juce::Slider sldMbCrossover_;
+    juce::Label lblMbAttackMode_ {};
+    juce::ComboBox cmbMbAttackMode_ { "DEV MB Attack Mode" };
+    juce::Label lblMbRelease_ {};
+    juce::Slider sldMbRelease_;
+    juce::ToggleButton btnMbSafety_ { "MB Safety (TP)" };
+    juce::Label lblMbLookahead_ {};
+    juce::Slider sldMbLookahead_;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attAttack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attAttackMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attRealAttack_;
@@ -169,6 +181,12 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attFinalCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attFcRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMbEngine_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbCrossover_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attMbAttackMode_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbRelease_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMbSafety_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbLookahead_;
     std::unique_ptr<juce::ParameterAttachment> attReleaseAuto_;
     std::unique_ptr<juce::ParameterAttachment> attAttackModeListener_;
 

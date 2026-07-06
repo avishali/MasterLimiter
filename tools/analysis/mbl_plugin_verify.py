@@ -11,23 +11,24 @@ VST3 = "/Users/avishaylidani/Library/Audio/Plug-Ins/VST3/MasterLimiter.vst3"
 SR = 48000
 
 
-def configure(p, gain_db, xover, safety):
+def configure(p, gain_db, xover, safety, clipper_on=False):
     p.dev_mb_engine = True
     p.dev_mb_crossover_hz = float(xover)
     p.dev_mb_attack_mode = "Ramp"
     p.dev_mb_release_ms = 150.0
     p.dev_mb_safety = bool(safety)
     p.limiter_active = True
-    p.clipper_active = False
+    p.clipper_active = bool(clipper_on)
+    p.clipper_drive_db = 0.0
     p.ceiling_mode = "SamplePeak"
     p.ceiling_db = -1.0
     p.input_gain_db = min(24.0, max(0.0, gain_db))
     p.gain_match_auto = False
 
 
-def render(x, gain_db, xover, safety):
+def render(x, gain_db, xover, safety, clipper_on=False):
     p = load_plugin(VST3)
-    configure(p, gain_db, xover, safety)
+    configure(p, gain_db, xover, safety, clipper_on)
     return p(x, SR)
 
 
@@ -36,22 +37,30 @@ def meas(y):
     return dict(rms=rms_db(m), rng=st_range(m), tp=true_peak_db(y))
 
 
-def match(x, target_rms, xover, safety):
+def match(x, target_rms, xover, safety, clipper_on=False):
     best = None
     for g in np.arange(0.0, 24.01, 2.0):
-        mm = meas(render(x, float(g), xover, safety))
+        mm = meas(render(x, float(g), xover, safety, clipper_on))
         if best is None or abs(mm["rms"]-target_rms) < abs(best[1]["rms"]-target_rms):
             best = (float(g), mm)
     g0 = best[0]
     for g in np.arange(max(0, g0-1.5), min(24.0, g0+1.51), 0.5):
-        mm = meas(render(x, float(g), xover, safety))
+        mm = meas(render(x, float(g), xover, safety, clipper_on))
         if abs(mm["rms"]-target_rms) < abs(best[1]["rms"]-target_rms):
             best = (float(g), mm)
     return best
 
 
 if __name__ == "__main__":
-    print("Plugin MB-engine path — (crossover, safety) matrix, matched to Ozone RMS, Ramp, ceiling -1 SP")
+    print("MB-2 engine — 2-band@120 + OS clipper tip-catcher (safety OFF), matched to Ozone RMS")
+    print("gate: jazz range~5.3 / edm~6.0 ; sample-peak <= -1 dB (bench mbl_clip hardclip)")
+    for g in GENRES:
+        x, sr = sf.read(g["src"]); assert sr == SR
+        d, mm = match(x, g["target_rms"], 120, False, clipper_on=True)
+        spk = 20 * np.log10(np.max(np.abs(render(x, d, 120, False, True))) + 1e-12)
+        print(f"  {g['name']:4s}  gain +{d:4.1f}  RMS {mm['rms']:7.2f}  range {mm['rng']:5.2f}  TP {mm['tp']:6.2f}  sPk {spk:6.2f}")
+
+    print("\nPlugin MB-engine path — (crossover, safety) matrix, matched to Ozone RMS, Ramp, ceiling -1 SP")
     print("bench refs: 120Hz no-safety jazz~5.75/edm~6.40 ; default(~16k)+safety jazz~4.61/edm~5.03 ; wideband floor 2.1/3.0")
     for g in GENRES:
         x, sr = sf.read(g["src"]); assert sr == SR

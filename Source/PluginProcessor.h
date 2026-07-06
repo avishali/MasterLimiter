@@ -8,6 +8,7 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include <mdsp_dsp/dynamics/FinalCeilingLimiter.h>
+#include <mdsp_dsp/dynamics/MultibandLimiter.h>
 #include <mdsp_dsp/dynamics/LimiterEnvelope.h>
 #include <mdsp_dsp/dynamics/LookaheadDelay.h>
 #include <mdsp_dsp/dynamics/PeakDetector.h>
@@ -187,6 +188,18 @@ private:
     float updateDryCompensationGainDb (float liveDryLufs);
     void applyCompensationGain (juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float compGainDb) const;
     void processCore (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool forceBypass);
+    void prepareMbEngine (double sampleRate, int samplesPerBlock);
+    void updateMbEngineRuntimeConfig (bool forceUpdate = false) noexcept;
+    void syncReportedLatency (bool mbEngineOn) noexcept;
+    mdsp_dsp::LimiterEnvelope::AttackMode mapMbAttackModeIndex (int index) const noexcept;
+    void configureMbBandLimiter (mdsp_dsp::SingleBandLimiter& limiter,
+                                 float thresholdLin,
+                                 float releaseMs,
+                                 mdsp_dsp::LimiterEnvelope::AttackMode attackMode) noexcept;
+    void runClipperStage (juce::dsp::AudioBlock<float>& block,
+                          int hostNumSamples,
+                          int numChannels,
+                          bool forceActive) noexcept;
     mdsp_dsp::LinearPhaseCrossover::Spec readLoMidCrossoverSpecFromParams() const;
     mdsp_dsp::LinearPhaseCrossover::Spec readMidHiCrossoverSpecFromParams() const;
     void prepareCrossoverBanks (double osSampleRate);
@@ -223,6 +236,8 @@ private:
     static constexpr float kHighBandAutoReleaseScale = 1.0f;
     static constexpr float kAutoSigmaAttackMs = 5.0f;
     static constexpr float kAutoSigmaDecayScale = 1.0f;
+    static constexpr float kMbLookaheadHeadroomMs = 20.0f;
+    static constexpr int   kMbProcessBlockSize = 512;
 
     mdsp_dsp::LookaheadDelay<float> lookahead_;
     mdsp_dsp::LookaheadDelay<float> lookaheadWide_;
@@ -296,6 +311,7 @@ private:
     juce::AudioBuffer<float> gHighOutRBuf_;
     juce::AudioBuffer<float> bandLimitedBuf_;
     mdsp_dsp::FinalCeilingLimiter finalCeiling_;
+    mdsp_dsp::MultibandLimiter mbEngine_;
     mdsp_dsp::TruePeakDetector inputTruePeakL_;
     mdsp_dsp::TruePeakDetector inputTruePeakR_;
     mdsp_dsp::TruePeakDetector outputTruePeakL_;
@@ -310,6 +326,7 @@ private:
     juce::LinearSmoothedValue<float> ioInputGainRSmoothed_;
     juce::LinearSmoothedValue<float> ioOutputGainLSmoothed_;
     juce::LinearSmoothedValue<float> ioOutputGainRSmoothed_;
+    juce::LinearSmoothedValue<float> mbInputGainSmoothed_;
 
     juce::AudioParameterChoice* ceilingMode_ = nullptr;
     juce::AudioParameterChoice* stereoMode_ = nullptr;
@@ -369,8 +386,26 @@ private:
     std::atomic<float>* devFinalCeilingReleaseMs_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
+    juce::AudioParameterBool* devMbEngine_ = nullptr;
+    std::atomic<float>* devMbCrossoverHz_ = nullptr;
+    std::atomic<float>* devMbAttackMode_ = nullptr;
+    std::atomic<float>* devMbReleaseMs_ = nullptr;
+    juce::AudioParameterBool* devMbSafety_ = nullptr;
+    std::atomic<float>* devMbLookaheadMs_ = nullptr;
 
     int  baseLatencySamples_ = 0;
+    int  mbEngineActiveLookaheadSamples_ = 0;
+    int  mbPreparedLookaheadSamples_ = 0;
+    double mbEngineSampleRate_ = 0.0;
+    int  currentReportedLatencySamples_ = 0;
+    bool lastMbEngineOn_ = false;
+    float cachedMbCrossoverHz_ = -1.0f;
+    int cachedMbAttackModeIdx_ = -1;
+    float cachedMbReleaseMs_ = -1.0f;
+    bool cachedMbSafety_ = false;
+    float cachedMbCeilingDb_ = -999.0f;
+    std::atomic<bool> mbEngineLookaheadDirty_ { false };
+    float committedMbLookaheadMs_ = -1.0f;
     int  crossoverOsLatencySamples_ = 0;
     int  crossoverOsLatencyStage2Samples_ = 0;
     int  crossoverOsLatencyHostSamples_ = 0;

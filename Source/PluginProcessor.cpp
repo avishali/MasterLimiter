@@ -77,6 +77,28 @@ float meanSquareForChannel (const juce::AudioBuffer<float>& buffer, int channel,
     return static_cast<float> (sum / static_cast<double> (numSamples));
 }
 
+void processMbEngineInBlocks (mdsp_dsp::MultibandLimiter& limiter,
+                              juce::AudioBuffer<float>& buffer,
+                              int blockSize) noexcept
+{
+    const int total = buffer.getNumSamples();
+    const int numChannels = buffer.getNumChannels();
+    juce::AudioBuffer<float> block (numChannels, blockSize);
+
+    for (int pos = 0; pos < total; pos += blockSize)
+    {
+        const int n = std::min (blockSize, total - pos);
+        for (int ch = 0; ch < numChannels; ++ch)
+            block.copyFrom (ch, 0, buffer, ch, pos, n);
+
+        juce::AudioBuffer<float> sub (block.getArrayOfWritePointers(), numChannels, n);
+        limiter.process (sub);
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            buffer.copyFrom (ch, pos, block, ch, 0, n);
+    }
+}
+
 float rmsDbFromMeanSquare (float meanSquare) noexcept
 {
     return juce::Decibels::gainToDecibels (std::sqrt (juce::jmax (0.0f, meanSquare)), -120.0f);
@@ -150,6 +172,12 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_ms_safety_clamp.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_final_ceiling.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_final_ceiling_release_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mb_engine.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mb_crossover_hz.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mb_attack_mode.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mb_release_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mb_safety.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mb_lookahead_ms.data()) != nullptr);
 
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
     jassert (pluginBypass_ != nullptr);
@@ -165,10 +193,11 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     apvts.addParameterListener (param::dev_xover_hi_atten_db.data(), this);
     apvts.addParameterListener (param::dev_lookahead_band_ms.data(), this);
     apvts.addParameterListener (param::dev_lookahead_wide_ms.data(), this);
+    apvts.addParameterListener (param::dev_mb_lookahead_ms.data(), this);
 
     for (auto id : { param::dev_xover_cutoff_hz, param::dev_xover_transition_hz, param::dev_xover_atten_db,
                      param::dev_xover_hi_cutoff_hz, param::dev_xover_hi_transition_hz, param::dev_xover_hi_atten_db,
-                     param::dev_lookahead_band_ms, param::dev_lookahead_wide_ms })
+                     param::dev_lookahead_band_ms, param::dev_lookahead_wide_ms, param::dev_mb_lookahead_ms })
         if (auto* p = apvts.getParameter (id.data()))
             p->addListener (this);
 }
@@ -177,7 +206,7 @@ MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
 {
     for (auto id : { param::dev_xover_cutoff_hz, param::dev_xover_transition_hz, param::dev_xover_atten_db,
                      param::dev_xover_hi_cutoff_hz, param::dev_xover_hi_transition_hz, param::dev_xover_hi_atten_db,
-                     param::dev_lookahead_band_ms, param::dev_lookahead_wide_ms })
+                     param::dev_lookahead_band_ms, param::dev_lookahead_wide_ms, param::dev_mb_lookahead_ms })
         if (auto* p = apvts.getParameter (id.data()))
             p->removeListener (this);
 
@@ -194,6 +223,7 @@ MasterLimiterAudioProcessor::~MasterLimiterAudioProcessor()
     apvts.removeParameterListener (param::dev_xover_hi_atten_db.data(), this);
     apvts.removeParameterListener (param::dev_lookahead_band_ms.data(), this);
     apvts.removeParameterListener (param::dev_lookahead_wide_ms.data(), this);
+    apvts.removeParameterListener (param::dev_mb_lookahead_ms.data(), this);
 }
 
 void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -365,6 +395,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devMsSafetyClamp_ = apvts.getRawParameterValue (param::dev_ms_safety_clamp.data());
     devFinalCeiling_ = apvts.getRawParameterValue (param::dev_final_ceiling.data());
     devFinalCeilingReleaseMs_ = apvts.getRawParameterValue (param::dev_final_ceiling_release_ms.data());
+    devMbEngine_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::dev_mb_engine.data()));
+    devMbCrossoverHz_ = apvts.getRawParameterValue (param::dev_mb_crossover_hz.data());
+    devMbAttackMode_ = apvts.getRawParameterValue (param::dev_mb_attack_mode.data());
+    devMbReleaseMs_ = apvts.getRawParameterValue (param::dev_mb_release_ms.data());
+    devMbSafety_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::dev_mb_safety.data()));
+    devMbLookaheadMs_ = apvts.getRawParameterValue (param::dev_mb_lookahead_ms.data());
     finalCeiling_.setReleaseMs (devFinalCeilingReleaseMs_ != nullptr ? devFinalCeilingReleaseMs_->load() : 5.0f);
     finalCeiling_.setReleaseSustainRatio (1.0f);
     jassert (limiterActive_ != nullptr);
@@ -407,6 +443,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devBandMsLinkPct_ != nullptr);
     jassert (devFinalCeiling_ != nullptr);
     jassert (devFinalCeilingReleaseMs_ != nullptr);
+    jassert (devMbEngine_ != nullptr);
+    jassert (devMbCrossoverHz_ != nullptr);
+    jassert (devMbAttackMode_ != nullptr);
+    jassert (devMbReleaseMs_ != nullptr);
+    jassert (devMbSafety_ != nullptr);
+    jassert (devMbLookaheadMs_ != nullptr);
     bandLinkSmoothed_.reset (osSampleRate, 0.02);
     bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 0.0f));
 
@@ -483,6 +525,12 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     resetOutputTruePeakHolds();
 
     setLatencySamples (baseLatencySamples_);
+
+    mbInputGainSmoothed_.reset (sampleRate, controlSmoothingSeconds);
+    mbInputGainSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_ != nullptr ? inputGainDbParam_->get() : 0.0f));
+    prepareMbEngine (sampleRate, samplesPerBlock);
+    lastMbEngineOn_ = devMbEngine_ != nullptr && devMbEngine_->get();
+    syncReportedLatency (lastMbEngineOn_);
 
     loudness_.prepare (sampleRate, samplesPerBlock);
     loudness_.reset();
@@ -747,6 +795,15 @@ void MasterLimiterAudioProcessor::parameterChanged (const juce::String& paramete
         return;
     }
 
+    if (parameterID == param::dev_mb_lookahead_ms.data())
+    {
+        juce::ignoreUnused (newValue);
+        mbEngineLookaheadDirty_.store (true, std::memory_order_release);
+        lastHeavyChangeMs_.store (juce::Time::getMillisecondCounter(), std::memory_order_release);
+        triggerAsyncUpdate();
+        return;
+    }
+
     if (parameterID == param::gain_ceiling_link.data())
     {
         const bool enabled = newValue >= 0.5f;
@@ -932,7 +989,8 @@ void MasterLimiterAudioProcessor::handleAsyncUpdate()
         stopTimer();
     }
     else if ((heavyCrossoverDirty_.load (std::memory_order_acquire)
-              || heavyLookaheadDirty_.load (std::memory_order_acquire))
+              || heavyLookaheadDirty_.load (std::memory_order_acquire)
+              || mbEngineLookaheadDirty_.load (std::memory_order_acquire))
              && heavyGestureActive_.load (std::memory_order_acquire) == 0
              && ! isTimerRunning())
     {
@@ -953,6 +1011,14 @@ void MasterLimiterAudioProcessor::commitHeavyControls()
                                          std::memory_order_release);
         committedLookaheadWideMs_.store (devLookaheadWideMs_ != nullptr ? devLookaheadWideMs_->load (std::memory_order_relaxed) : kLookaheadMs,
                                          std::memory_order_release);
+    }
+
+    if (mbEngineLookaheadDirty_.exchange (false, std::memory_order_acq_rel))
+    {
+        const double sampleRate = getSampleRate();
+        const int blockSize = getBlockSize();
+        if (sampleRate > 0.0 && blockSize > 0)
+            prepareMbEngine (sampleRate, blockSize);
     }
 }
 
@@ -1111,6 +1177,213 @@ bool MasterLimiterAudioProcessor::isBusesLayoutSupported (const BusesLayout& lay
         && layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
 }
 
+mdsp_dsp::LimiterEnvelope::AttackMode MasterLimiterAudioProcessor::mapMbAttackModeIndex (int index) const noexcept
+{
+    if (index == 1)
+        return mdsp_dsp::LimiterEnvelope::AttackMode::Hybrid;
+
+    if (index == 2)
+        return mdsp_dsp::LimiterEnvelope::AttackMode::Real;
+
+    return mdsp_dsp::LimiterEnvelope::AttackMode::Ramp;
+}
+
+void MasterLimiterAudioProcessor::configureMbBandLimiter (mdsp_dsp::SingleBandLimiter& limiter,
+                                                          float thresholdLin,
+                                                          float releaseMs,
+                                                          mdsp_dsp::LimiterEnvelope::AttackMode attackMode) noexcept
+{
+    limiter.setThresholdLinear (thresholdLin);
+    limiter.setCeilingLinear (1.0f);
+    limiter.setReleaseMs (releaseMs);
+    limiter.setReleaseSustainRatio (4.0f);
+    limiter.setAutoRelease (false);
+    limiter.setMode (mdsp_dsp::LimiterEnvelope::Mode::Clean);
+    limiter.setAttackMode (attackMode);
+    limiter.setRealAttackMs (5.0f);
+    limiter.setReleaseEngine (mdsp_dsp::LimiterEnvelope::ReleaseEngine::LookaheadFollower);
+    limiter.setActiveLookaheadSamples (mbEngineActiveLookaheadSamples_);
+}
+
+void MasterLimiterAudioProcessor::prepareMbEngine (double sampleRate, int samplesPerBlock)
+{
+    const float lookaheadMs = readFloatParam (apvts, param::dev_mb_lookahead_ms.data());
+    const int activeLookahead = juce::jmax (0, static_cast<int> (std::lround (lookaheadMs * 0.001 * sampleRate)));
+    const int headroomLookahead = juce::jmax (0, static_cast<int> (std::lround ((double) kMbLookaheadHeadroomMs * 0.001 * sampleRate)));
+    const int preparedLookahead = std::max (activeLookahead, headroomLookahead);
+    mbEngineActiveLookaheadSamples_ = activeLookahead;
+    mbPreparedLookaheadSamples_ = preparedLookahead;
+    mbEngineSampleRate_ = sampleRate;
+    committedMbLookaheadMs_ = lookaheadMs;
+
+    mdsp_dsp::MultibandLimiter::Spec spec;
+    spec.sampleRate = sampleRate;
+    spec.numChannels = 2;
+    spec.maxBlockSize = kMbProcessBlockSize;
+    spec.numBands = 2;
+    spec.lookaheadSamples = preparedLookahead;
+    mbEngine_.prepare (spec);
+
+    cachedMbCrossoverHz_ = -1.0f;
+    cachedMbAttackModeIdx_ = -1;
+    cachedMbReleaseMs_ = -1.0f;
+    cachedMbSafety_ = ! (devMbSafety_ != nullptr && devMbSafety_->get());
+    cachedMbCeilingDb_ = -999.0f;
+    updateMbEngineRuntimeConfig (true);
+
+    if (lastMbEngineOn_)
+        syncReportedLatency (true);
+}
+
+void MasterLimiterAudioProcessor::updateMbEngineRuntimeConfig (bool forceUpdate) noexcept
+{
+    if (devMbCrossoverHz_ == nullptr || devMbAttackMode_ == nullptr || devMbReleaseMs_ == nullptr
+        || devMbSafety_ == nullptr || ceilingDbParam_ == nullptr)
+        return;
+
+    const float crossoverHz = readFloatParam (apvts, param::dev_mb_crossover_hz.data());
+    const int attackModeIdx = static_cast<int> (devMbAttackMode_->load (std::memory_order_relaxed));
+    const float releaseMs = readFloatParam (apvts, param::dev_mb_release_ms.data());
+    const bool safetyOn = devMbSafety_->get();
+    const float ceilingDb = ceilingDbParam_->get();
+    const float thresholdLin = juce::Decibels::decibelsToGain (ceilingDb);
+    const auto attackMode = mapMbAttackModeIndex (attackModeIdx);
+    const bool crossoverChanged = crossoverHz != cachedMbCrossoverHz_;
+
+    if (! forceUpdate
+        && ! crossoverChanged
+        && attackModeIdx == cachedMbAttackModeIdx_
+        && releaseMs == cachedMbReleaseMs_
+        && safetyOn == cachedMbSafety_
+        && ceilingDb == cachedMbCeilingDb_)
+        return;
+
+    if (crossoverChanged && cachedMbCrossoverHz_ > 0.0f && mbEngineSampleRate_ > 0.0)
+    {
+        mdsp_dsp::MultibandLimiter::Spec spec;
+        spec.sampleRate = mbEngineSampleRate_;
+        spec.numChannels = 2;
+        spec.maxBlockSize = kMbProcessBlockSize;
+        spec.numBands = 2;
+        spec.lookaheadSamples = mbPreparedLookaheadSamples_;
+        mbEngine_.prepare (spec);
+    }
+
+    cachedMbCrossoverHz_ = crossoverHz;
+    cachedMbAttackModeIdx_ = attackModeIdx;
+    cachedMbReleaseMs_ = releaseMs;
+    cachedMbSafety_ = safetyOn;
+    cachedMbCeilingDb_ = ceilingDb;
+
+    mbEngine_.setSafetyEnabled (safetyOn);
+    // N=2 must pass an explicit crossover: setDefaultCrossovers log-spaces 60..16000 Hz,
+    // so a single N=2 split lands at 16 kHz (top). Never rely on setDefaultCrossovers for 2 bands.
+    mbEngine_.setCrossoverFrequencies (&crossoverHz, 1);
+
+    for (int b = 0; b < mbEngine_.getNumBands(); ++b)
+        configureMbBandLimiter (mbEngine_.band (b), thresholdLin, releaseMs, attackMode);
+
+    if (safetyOn)
+        configureMbBandLimiter (mbEngine_.safety(), thresholdLin, releaseMs, mdsp_dsp::LimiterEnvelope::AttackMode::Ramp);
+}
+
+void MasterLimiterAudioProcessor::runClipperStage (juce::dsp::AudioBlock<float>& block,
+                                                   int hostNumSamples,
+                                                   int numChannels,
+                                                   bool forceActive) noexcept
+{
+    const bool clipperActive = forceActive || (clipperActive_ != nullptr && clipperActive_->get());
+    const float clipCeilingLin = forceActive && ceilingDbParam_ != nullptr
+                               ? juce::Decibels::decibelsToGain (ceilingDbParam_->get())
+                               : 1.0f;
+
+    auto clipBlock = clipperOversampler_.processSamplesUp (block);
+    const int clipN = static_cast<int> (clipBlock.getNumSamples());
+
+    if (clipperActive)
+    {
+        clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
+        const int clipperModeIdx = clipperMode_->getIndex();
+        float maxAttenuationDb = 0.0f;
+        float clipperDriveGain = clipperDriveSmoothed_.getCurrentValue();
+        const float softKneeLin = clipCeilingLin * 0.891f;
+
+        for (int i = 0; i < clipN; ++i)
+        {
+            if ((i & 1) == 0)
+                clipperDriveGain = clipperDriveSmoothed_.getNextValue();
+
+            const int hostIdx = juce::jmin (hostNumSamples - 1, hostNumSamples > 0 ? i * hostNumSamples / clipN : 0);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                auto* d = clipBlock.getChannelPointer ((size_t) ch);
+                const float x = d[i] * clipperDriveGain;
+                const float ax = std::abs (x);
+                float y = x;
+
+                if (clipperModeIdx == 0)
+                {
+                    if (ax > clipCeilingLin)
+                        y = std::copysign (clipCeilingLin, x);
+                }
+                else
+                {
+                    if (ax > softKneeLin)
+                    {
+                        const float over = (ax - softKneeLin) / (clipCeilingLin - softKneeLin + 1.0e-6f);
+                        y = std::copysign (softKneeLin + (clipCeilingLin - softKneeLin) * std::tanh (over), x);
+                    }
+                }
+
+                if (ax > 1.0e-6f)
+                {
+                    const float ay = std::abs (y);
+                    const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
+                    if (attDb < maxAttenuationDb)
+                        maxAttenuationDb = attDb;
+                    if (attDb < 0.0f && hostIdx >= 0 && hostIdx < hostNumSamples)
+                        clipEnvBuf_[(size_t) hostIdx] = std::max (clipEnvBuf_[(size_t) hostIdx], -attDb);
+                }
+
+                if (clipperDriveGain > 0.0f)
+                    y /= clipperDriveGain;
+
+                d[i] = y;
+            }
+        }
+
+        const float clipReadDb = -maxAttenuationDb;
+        currentClipDb_.store (clipReadDb, std::memory_order_relaxed);
+        if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
+            maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
+    }
+    else
+    {
+        currentClipDb_.store (0.0f, std::memory_order_relaxed);
+    }
+
+    clipperOversampler_.processSamplesDown (block);
+
+    if (clipperOsAlignPad4x_ > 0)
+    {
+        juce::dsp::ProcessContextReplacing<float> clipAlignCtx (block);
+        clipperOsAlignDelay_.process (clipAlignCtx);
+    }
+}
+
+void MasterLimiterAudioProcessor::syncReportedLatency (bool mbEngineOn) noexcept
+{
+    const int mbClipOsLatency = limiterOsLatencySamples_ + clipperOsLatencyHostSamples_;
+    const int latency = mbEngineOn ? mbEngine_.getLatencySamples() + mbClipOsLatency : baseLatencySamples_;
+
+    if (latency == currentReportedLatencySamples_)
+        return;
+
+    currentReportedLatencySamples_ = latency;
+    setLatencySamples (latency);
+    dryDelay_.setDelay (static_cast<float> (latency));
+}
+
 void MasterLimiterAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     processCore (buffer, midi, false);
@@ -1136,7 +1409,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         || devLookaheadBandMs_ == nullptr || devLookaheadWideMs_ == nullptr
         || devXoverCutoffHz_ == nullptr || devXoverTransitionHz_ == nullptr || devXoverAttenDb_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
-        || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr)
+        || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr
+        || devMbEngine_ == nullptr || devMbCrossoverHz_ == nullptr || devMbAttackMode_ == nullptr
+        || devMbReleaseMs_ == nullptr || devMbSafety_ == nullptr || devMbLookaheadMs_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();
@@ -1225,13 +1500,61 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (modeIdx != cachedCeilingMode_)
     {
-        // Final ceiling latency is fixed across SP and TP modes.
-        setLatencySamples (baseLatencySamples_);
+        syncReportedLatency (lastMbEngineOn_);
         cachedCeilingMode_ = modeIdx;
     }
 
     if (limiterActive_->get())
     {
+        const bool mbEngineOn = devMbEngine_->get();
+
+        if (mbEngineOn != lastMbEngineOn_)
+        {
+            lastMbEngineOn_ = mbEngineOn;
+            syncReportedLatency (mbEngineOn);
+        }
+
+        if (mbEngineOn)
+        {
+            buffer.applyGain (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
+
+            updateMbEngineRuntimeConfig();
+            processMbEngineInBlocks (mbEngine_, buffer, kMbProcessBlockSize);
+
+            {
+                juce::dsp::AudioBlock<float> mbBlock (buffer);
+                auto mbOsBlock = limiterOversampler_.processSamplesUp (mbBlock);
+                runClipperStage (mbOsBlock, n, nch, true);
+                limiterOversampler_.processSamplesDown (mbBlock);
+            }
+
+            const float grLow = mbEngine_.getBandGrDb (0);
+            const float grHigh = mbEngine_.getBandGrDb (1);
+            const float grMax = std::max (grLow, grHigh);
+            currentGrDb_.store (grMax, std::memory_order_relaxed);
+            currentGrLDb_.store (grLow, std::memory_order_relaxed);
+            currentGrRDb_.store (grHigh, std::memory_order_relaxed);
+            currentGrLowLDb_.store (grLow, std::memory_order_relaxed);
+            currentGrLowRDb_.store (grLow, std::memory_order_relaxed);
+            currentGrMidLDb_.store (0.0f, std::memory_order_relaxed);
+            currentGrMidRDb_.store (0.0f, std::memory_order_relaxed);
+            currentGrHighLDb_.store (grHigh, std::memory_order_relaxed);
+            currentGrHighRDb_.store (grHigh, std::memory_order_relaxed);
+            currentMsClampDb_.store (0.0f, std::memory_order_relaxed);
+            currentFinalCeilingDb_.store (0.0f, std::memory_order_relaxed);
+
+            if (grMax > maxGrSinceResetDb_.load (std::memory_order_relaxed))
+                maxGrSinceResetDb_.store (grMax, std::memory_order_relaxed);
+            if (grLow > maxGrLowLDb_.load (std::memory_order_relaxed))
+                maxGrLowLDb_.store (grLow, std::memory_order_relaxed);
+            if (grHigh > maxGrHighLDb_.load (std::memory_order_relaxed))
+                maxGrHighLDb_.store (grHigh, std::memory_order_relaxed);
+
+            frameMaxGrLowDb_ = std::max (frameMaxGrLowDb_, grLow);
+            frameMaxGrHighDb_ = std::max (frameMaxGrHighDb_, grHigh);
+        }
+        else
+        {
         if (xoDuckPhase_ == 1 && xoDuckPos_ >= xoFadeOutSamples_)
         {
             if (tryLockCrossoverBank())
@@ -1259,86 +1582,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
         const bool clipperPre = clipperPosition_->getIndex() == 0;
 
-        const auto runClipperStage = [&] (juce::dsp::AudioBlock<float>& block)
-        {
-            const bool clipperActive = clipperActive_ != nullptr && clipperActive_->get();
-
-            auto clipBlock = clipperOversampler_.processSamplesUp (block);
-            const int clipN = static_cast<int> (clipBlock.getNumSamples());
-
-            if (clipperActive)
-            {
-                clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
-                const int clipperModeIdx = clipperMode_->getIndex();
-                float maxAttenuationDb = 0.0f;
-                float clipperDriveGain = clipperDriveSmoothed_.getCurrentValue();
-
-                for (int i = 0; i < clipN; ++i)
-                {
-                    if ((i & 1) == 0)
-                        clipperDriveGain = clipperDriveSmoothed_.getNextValue();
-
-                    const int hostIdx = juce::jmin (n - 1, i * n / clipN);
-                    for (int ch = 0; ch < nch; ++ch)
-                    {
-                        auto* d = clipBlock.getChannelPointer ((size_t) ch);
-                        const float x = d[i] * clipperDriveGain;
-                        const float ax = std::abs (x);
-                        float y = x;
-
-                        if (clipperModeIdx == 0)
-                        {
-                            if (ax > 1.0f)
-                                y = std::copysign (1.0f, x);
-                        }
-                        else
-                        {
-                            constexpr float kSoftKnee = 0.891f;
-                            if (ax > kSoftKnee)
-                            {
-                                const float over = (ax - kSoftKnee) / (1.0f - kSoftKnee);
-                                y = std::copysign (kSoftKnee + (1.0f - kSoftKnee) * std::tanh (over), x);
-                            }
-                        }
-
-                        if (ax > 1.0e-6f)
-                        {
-                            const float ay = std::abs (y);
-                            const float attDb = juce::Decibels::gainToDecibels (ay / ax, -200.0f);
-                            if (attDb < maxAttenuationDb)
-                                maxAttenuationDb = attDb;
-                            if (attDb < 0.0f)
-                                clipEnvBuf_[(size_t) hostIdx] = std::max (clipEnvBuf_[(size_t) hostIdx], -attDb);
-                        }
-
-                        if (clipperDriveGain > 0.0f)
-                            y /= clipperDriveGain;
-
-                        d[i] = y;
-                    }
-                }
-
-                const float clipReadDb = -maxAttenuationDb;
-                currentClipDb_.store (clipReadDb, std::memory_order_relaxed);
-                if (clipReadDb > maxClipSinceResetDb_.load (std::memory_order_relaxed))
-                    maxClipSinceResetDb_.store (clipReadDb, std::memory_order_relaxed);
-            }
-            else
-            {
-                currentClipDb_.store (0.0f, std::memory_order_relaxed);
-            }
-
-            clipperOversampler_.processSamplesDown (block);
-
-            if (clipperOsAlignPad4x_ > 0)
-            {
-                juce::dsp::ProcessContextReplacing<float> clipAlignCtx (block);
-                clipperOsAlignDelay_.process (clipAlignCtx);
-            }
-        };
-
         if (clipperPre)
-            runClipperStage (osBlock);
+            runClipperStage (osBlock, n, nch, false);
 
         inputGainSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
         for (int i = 0; i < osN; ++i)
@@ -2005,7 +2250,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             maxGrSinceResetDb_.store (frameMaxGr, std::memory_order_relaxed);
 
         if (! clipperPre)
-            runClipperStage (osBlock);
+            runClipperStage (osBlock, n, nch, false);
 
         const int padSamples = (osMaxLookahead - laBandActive) + (osMaxLookahead - laWideActive);
         lookaheadPad_.setDelaySamples (padSamples);
@@ -2032,6 +2277,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         currentFinalCeilingDb_.store (fcGrDb, std::memory_order_relaxed);
         if (fcGrDb > maxFinalCeilingDb_.load (std::memory_order_relaxed))
             maxFinalCeilingDb_.store (fcGrDb, std::memory_order_relaxed);
+        }
     }
     else
     {
@@ -2053,8 +2299,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     }
 
     loudnessTrack_.process (buffer);
-    const float liveCompDb = updateCompensationGainDb (loudnessTrack_.getSnapshot().shortTermLufs);
-    const float dryCompDb = updateDryCompensationGainDb (loudnessRef_.getSnapshot().shortTermLufs);
+
+    const bool mbParityPath = limiterActive_->get() && devMbEngine_->get();
+    const float liveCompDb = mbParityPath ? 0.0f : updateCompensationGainDb (loudnessTrack_.getSnapshot().shortTermLufs);
+    const float dryCompDb = mbParityPath ? 0.0f : updateDryCompensationGainDb (loudnessRef_.getSnapshot().shortTermLufs);
     applyCompensationGain (buffer, n, nch, liveCompDb);
     applyCompensationGain (dryScratch_, n, nch, dryCompDb);
 

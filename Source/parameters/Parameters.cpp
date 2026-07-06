@@ -431,5 +431,45 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         5.0f,
         AudioParameterFloatAttributes().withLabel ("ms")));
 
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (dev_mb_engine, 1),
+        "DEV MB Engine",
+        false,
+        AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_mb_crossover_hz, 1),
+        "DEV MB Crossover",
+        NormalisableRange<float> (40.0f, 18000.0f, 1.0f, 0.35f),
+        120.0f,
+        AudioParameterFloatAttributes().withLabel ("Hz")));
+
+    layout.add (std::make_unique<AudioParameterChoice> (
+        pid (dev_mb_attack_mode, 1),
+        "DEV MB Attack Mode",
+        StringArray { "Ramp", "Hybrid", "Real" },
+        0,
+        AudioParameterChoiceAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_mb_release_ms, 1),
+        "DEV MB Release",
+        NormalisableRange<float> (5.0f, 400.0f, 0.1f, 0.4f),
+        150.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<AudioParameterBool> (
+        pid (dev_mb_safety, 1),
+        "DEV MB Safety",
+        false,
+        AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_mb_lookahead_ms, 1),
+        "DEV MB Lookahead",
+        NormalisableRange<float> (1.0f, 10.0f, 0.01f),
+        5.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
     return layout;
 }

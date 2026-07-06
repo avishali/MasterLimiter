@@ -49,7 +49,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     viewport_.setScrollBarThickness (10);
     addAndMakeVisible (viewport_);
 
-    for (auto* group : { &groupAttack_,
+    for (auto* group : { &groupMbEngine_,
+                         &groupAttack_,
                          &groupAttackScaling_,
                          &groupLookahead_,
                          &groupCrossover_,
@@ -220,6 +221,31 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldSustainRatio_, 2, {});
     sldSustainRatio_.setTooltip ("Manual release only (Auto OFF): fast+slow split. Higher = more sustain held.");
 
+    btnMbEngine_.setClickingTogglesState (true);
+    btnMbEngine_.setTooltip ("Route through committed MultibandLimiter (2-band LR) instead of the inline OS engine.");
+
+    setupLabel (lblMbCrossover_, "Crossover");
+    setupSlider (sldMbCrossover_, 0, " Hz");
+    sldMbCrossover_.setTooltip ("2-band LR crossover frequency (Hz).");
+
+    setupLabel (lblMbAttackMode_, "Attack");
+    setupCombo (cmbMbAttackMode_);
+    cmbMbAttackMode_.addItem ("Ramp", 1);
+    cmbMbAttackMode_.addItem ("Hybrid", 2);
+    cmbMbAttackMode_.addItem ("Real", 3);
+    cmbMbAttackMode_.setTooltip ("Ramp holds peaks (proven bench config). Hybrid/Real trade breathing vs cleanliness.");
+
+    setupLabel (lblMbRelease_, "Release");
+    setupSlider (sldMbRelease_, 1, " ms");
+    sldMbRelease_.setTooltip ("Per-band release (both bands).");
+
+    btnMbSafety_.setClickingTogglesState (true);
+    btnMbSafety_.setTooltip ("Trailing safety limiter (TP-safe sample-peak catch).");
+
+    setupLabel (lblMbLookahead_, "Lookahead");
+    setupSlider (sldMbLookahead_, 2, " ms");
+    sldMbLookahead_.setTooltip ("Prepare-time lookahead window (re-prepares on release).");
+
     for (auto* label : { &lblAttackMode_, &lblAttack_, &lblRealAttack_, &lblLowAttackScale_, &lblMidAttackScale_, &lblHighAttackScale_,
                          &lblLookaheadBand_, &lblLookaheadWide_,
                          &lblXoverCutoff_, &lblXoverTransition_, &lblXoverAtten_,
@@ -229,7 +255,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_, &lblMidScale_,
                          &lblHighScale_, &lblWideScale_,                          &lblBandStereoLink_, &lblBandMsLink_,
                          &lblMsClampReadout_,
-                         &lblFinalCeilingReadout_, &lblFcRelease_, &lblSustainRatio_ })
+                         &lblFinalCeilingReadout_, &lblFcRelease_, &lblSustainRatio_,
+                         &lblMbCrossover_, &lblMbAttackMode_, &lblMbRelease_, &lblMbLookahead_ })
     {
         content_.addAndMakeVisible (*label);
     }
@@ -240,7 +267,8 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                           &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                           &sldLaRelease_, &sldSmartFast_, &sldSmartSlow_, &sldSmartSustain_, &sldSmartLeak_,
                           &sldSigmaAttack_, &sldSigmaDecay_,
-                          &sldLowScale_, &sldMidScale_, &sldHighScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldFcRelease_, &sldSustainRatio_ })
+                          &sldLowScale_, &sldMidScale_, &sldHighScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldFcRelease_, &sldSustainRatio_,
+                          &sldMbCrossover_, &sldMbRelease_, &sldMbLookahead_ })
     {
         content_.addAndMakeVisible (*slider);
     }
@@ -251,6 +279,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     content_.addAndMakeVisible (btnMsSafetyClamp_);
     content_.addAndMakeVisible (btnFinalCeiling_);
     content_.addAndMakeVisible (btnBandMs_);
+    content_.addAndMakeVisible (btnMbEngine_);
+    content_.addAndMakeVisible (btnMbSafety_);
+    content_.addAndMakeVisible (cmbMbAttackMode_);
 
     attAttack_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_attack_ms), sldAttack_);
     attAttackMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_attack_mode), cmbAttackMode_);
@@ -287,6 +318,12 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attFinalCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_final_ceiling), btnFinalCeiling_);
     attFcRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_final_ceiling_release_ms), sldFcRelease_);
     attSustainRatio_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldSustainRatio_);
+    attMbEngine_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_mb_engine), btnMbEngine_);
+    attMbCrossover_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mb_crossover_hz), sldMbCrossover_);
+    attMbAttackMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_mb_attack_mode), cmbMbAttackMode_);
+    attMbRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mb_release_ms), sldMbRelease_);
+    attMbSafety_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_mb_safety), btnMbSafety_);
+    attMbLookahead_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mb_lookahead_ms), sldMbLookahead_);
 
     if (auto* releaseAuto = apvts_.getParameter (pid (param::release_auto)))
     {
@@ -346,7 +383,8 @@ void DevControlsComponent::resized()
                               &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                               &sldLaRelease_, &sldSmartFast_, &sldSmartSlow_, &sldSmartSustain_, &sldSmartLeak_,
                           &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldMidScale_, &sldHighScale_,
-                          &sldWideScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldFcRelease_, &sldSustainRatio_ })
+                          &sldWideScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldFcRelease_, &sldSustainRatio_,
+                          &sldMbCrossover_, &sldMbRelease_, &sldMbLookahead_ })
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
 
@@ -371,7 +409,26 @@ void DevControlsComponent::resized()
         combo.setBounds (row.withHeight (24));
     };
 
-    auto inner = placeGroup (groupAttack_, 136);
+    auto inner = placeGroup (groupMbEngine_, 240);
+    {
+        auto row = inner.removeFromTop (rowH);
+        btnMbEngine_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
+    }
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblMbCrossover_, sldMbCrossover_);
+    inner.removeFromTop (8);
+    placeComboRow (inner.removeFromTop (rowH), lblMbAttackMode_, cmbMbAttackMode_);
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblMbRelease_, sldMbRelease_);
+    inner.removeFromTop (8);
+    {
+        auto row = inner.removeFromTop (rowH);
+        btnMbSafety_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
+    }
+    inner.removeFromTop (8);
+    placeSliderRow (inner.removeFromTop (rowH), lblMbLookahead_, sldMbLookahead_);
+
+    inner = placeGroup (groupAttack_, 136);
     placeComboRow (inner.removeFromTop (rowH), lblAttackMode_, cmbAttackMode_);
     inner.removeFromTop (8);
     placeSliderRow (inner.removeFromTop (rowH), lblAttack_, sldAttack_);
