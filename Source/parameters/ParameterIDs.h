@@ -42,6 +42,10 @@ inline constexpr std::string_view dev_real_attack_ms { "dev_real_attack_ms" };
 inline constexpr std::string_view dev_release_engine { "dev_release_engine" };
 inline constexpr std::string_view dev_la_release_ms { "dev_la_release_ms" };
 inline constexpr std::string_view dev_la_release_poles { "dev_la_release_poles" };
+inline constexpr std::string_view dev_smart_fast_ms { "dev_smart_fast_ms" };
+inline constexpr std::string_view dev_smart_slow_ms { "dev_smart_slow_ms" };
+inline constexpr std::string_view dev_smart_sustain_ms { "dev_smart_sustain_ms" };
+inline constexpr std::string_view dev_smart_leak { "dev_smart_leak" };
 inline constexpr std::string_view dev_lookahead_band_ms { "dev_lookahead_band_ms" };
 inline constexpr std::string_view dev_lookahead_wide_ms { "dev_lookahead_wide_ms" };
 inline constexpr std::string_view dev_xover_cutoff_hz { "dev_xover_cutoff_hz" };
@@ -59,5 +63,6 @@ inline constexpr std::string_view dev_band_ms { "dev_band_ms" };
 inline constexpr std::string_view dev_band_ms_link_pct { "dev_band_ms_link_pct" };
 inline constexpr std::string_view dev_ms_safety_clamp { "dev_ms_safety_clamp" };
 inline constexpr std::string_view dev_final_ceiling { "dev_final_ceiling" };
+inline constexpr std::string_view dev_final_ceiling_release_ms { "dev_final_ceiling_release_ms" };
 
 } // namespace param

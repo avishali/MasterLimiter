@@ -85,6 +85,16 @@ private:
     juce::Label lblLaPoles_ {};
     juce::ComboBox cmbLaPoles_ { "DEV LA Poles" };
 
+    juce::GroupComponent groupSmartRelease_ { "SmartReleaseGroup", "RELEASE \u00b7 Smart" };
+    juce::Label lblSmartFast_ {};
+    juce::Slider sldSmartFast_;
+    juce::Label lblSmartSlow_ {};
+    juce::Slider sldSmartSlow_;
+    juce::Label lblSmartSustain_ {};
+    juce::Slider sldSmartSustain_;
+    juce::Label lblSmartLeak_ {};
+    juce::Slider sldSmartLeak_;
+
     juce::GroupComponent groupAdaptiveRelease_ { "AdaptiveReleaseGroup", "RELEASE \u00b7 Auto (Adaptive \u00b7 legacy)" };
     juce::Label lblSigmaAttack_ {};
     juce::Slider sldSigmaAttack_;
@@ -117,6 +127,8 @@ private:
     juce::Label lblMsClampReadout_ {};
     juce::ToggleButton btnFinalCeiling_ { "Final Ceiling" };
     juce::Label lblFinalCeilingReadout_ {};
+    juce::Label lblFcRelease_ {};
+    juce::Slider sldFcRelease_;
 
     juce::GroupComponent groupManualRelease_ { "ManualReleaseGroup", "RELEASE - Manual" };
     juce::Label lblSustainRatio_ {};
@@ -140,6 +152,10 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attReleaseEngine_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLaRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attLaPoles_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSmartFast_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSmartSlow_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSmartSustain_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSmartLeak_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSigmaAttack_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSigmaDecay_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attLowScale_;
@@ -151,6 +167,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandMsLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMsSafetyClamp_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attFinalCeiling_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attFcRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;
     std::unique_ptr<juce::ParameterAttachment> attReleaseAuto_;
     std::unique_ptr<juce::ParameterAttachment> attAttackModeListener_;

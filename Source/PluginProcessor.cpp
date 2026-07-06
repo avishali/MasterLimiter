@@ -128,6 +128,10 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_release_engine.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_la_release_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_la_release_poles.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_smart_fast_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_smart_slow_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_smart_sustain_ms.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_smart_leak.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_lookahead_band_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_lookahead_wide_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_xover_cutoff_hz.data()) != nullptr);
@@ -145,6 +149,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_band_ms_link_pct.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_ms_safety_clamp.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_final_ceiling.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_final_ceiling_release_ms.data()) != nullptr);
 
     pluginBypass_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::plugin_bypass.data()));
     jassert (pluginBypass_ != nullptr);
@@ -334,6 +339,10 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devReleaseEngine_ = apvts.getRawParameterValue (param::dev_release_engine.data());
     devLaReleaseMs_ = apvts.getRawParameterValue (param::dev_la_release_ms.data());
     devLaReleasePoles_ = apvts.getRawParameterValue (param::dev_la_release_poles.data());
+    devSmartFastMs_ = apvts.getRawParameterValue (param::dev_smart_fast_ms.data());
+    devSmartSlowMs_ = apvts.getRawParameterValue (param::dev_smart_slow_ms.data());
+    devSmartSustainMs_ = apvts.getRawParameterValue (param::dev_smart_sustain_ms.data());
+    devSmartLeak_ = apvts.getRawParameterValue (param::dev_smart_leak.data());
     devLookaheadBandMs_ = apvts.getRawParameterValue (param::dev_lookahead_band_ms.data());
     devLookaheadWideMs_ = apvts.getRawParameterValue (param::dev_lookahead_wide_ms.data());
     committedLookaheadBandMs_.store (devLookaheadBandMs_ != nullptr ? devLookaheadBandMs_->load() : kLookaheadMs,
@@ -355,6 +364,9 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devBandMsLinkPct_ = apvts.getRawParameterValue (param::dev_band_ms_link_pct.data());
     devMsSafetyClamp_ = apvts.getRawParameterValue (param::dev_ms_safety_clamp.data());
     devFinalCeiling_ = apvts.getRawParameterValue (param::dev_final_ceiling.data());
+    devFinalCeilingReleaseMs_ = apvts.getRawParameterValue (param::dev_final_ceiling_release_ms.data());
+    finalCeiling_.setReleaseMs (devFinalCeilingReleaseMs_ != nullptr ? devFinalCeilingReleaseMs_->load() : 5.0f);
+    finalCeiling_.setReleaseSustainRatio (1.0f);
     jassert (limiterActive_ != nullptr);
     jassert (pluginBypass_ != nullptr);
     jassert (clipperActive_ != nullptr);
@@ -374,6 +386,10 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devReleaseEngine_ != nullptr);
     jassert (devLaReleaseMs_ != nullptr);
     jassert (devLaReleasePoles_ != nullptr);
+    jassert (devSmartFastMs_ != nullptr);
+    jassert (devSmartSlowMs_ != nullptr);
+    jassert (devSmartSustainMs_ != nullptr);
+    jassert (devSmartLeak_ != nullptr);
     jassert (devLookaheadBandMs_ != nullptr);
     jassert (devLookaheadWideMs_ != nullptr);
     jassert (devXoverCutoffHz_ != nullptr);
@@ -389,6 +405,8 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devBandStereoLinkPct_ != nullptr);
     jassert (devBandMs_ != nullptr);
     jassert (devBandMsLinkPct_ != nullptr);
+    jassert (devFinalCeiling_ != nullptr);
+    jassert (devFinalCeilingReleaseMs_ != nullptr);
     bandLinkSmoothed_.reset (osSampleRate, 0.02);
     bandLinkSmoothed_.setCurrentAndTargetValue (mapBandColorToLink (bandColor_ != nullptr ? bandColor_->load (std::memory_order_relaxed) : 0.0f));
 
@@ -1113,6 +1131,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         || devSigmaAttackMs_ == nullptr || devSigmaDecayScale_ == nullptr
         || devAttackMs_ == nullptr || devAttackMode_ == nullptr || devRealAttackMs_ == nullptr
         || devReleaseEngine_ == nullptr || devLaReleaseMs_ == nullptr || devLaReleasePoles_ == nullptr
+        || devSmartFastMs_ == nullptr || devSmartSlowMs_ == nullptr || devSmartSustainMs_ == nullptr
+        || devSmartLeak_ == nullptr
         || devLookaheadBandMs_ == nullptr || devLookaheadWideMs_ == nullptr
         || devXoverCutoffHz_ == nullptr || devXoverTransitionHz_ == nullptr || devXoverAttenDb_ == nullptr
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
@@ -1335,6 +1355,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         finalCeiling_.setMode (modeIdx == 1 ? mdsp_dsp::FinalCeilingLimiter::Mode::TruePeak
                                              : mdsp_dsp::FinalCeilingLimiter::Mode::SamplePeak);
         finalCeiling_.setCeilingLinear (ceilingLin);
+        finalCeiling_.setReleaseMs (devFinalCeilingReleaseMs_ != nullptr ? devFinalCeilingReleaseMs_->load (std::memory_order_relaxed)
+                                                                          : 5.0f);
+        finalCeiling_.setReleaseSustainRatio (1.0f);
         const float thresholdLin = 1.0f;
         const float bandThresholdLin = thresholdLin * juce::Decibels::decibelsToGain (-kBandHeadroomDb);
         const float releaseMs = readFloatParam (apvts, "release_ms");
@@ -1379,6 +1402,14 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                                                              : 80.0f;
         const int laReleasePoles = 2 + (devLaReleasePoles_ != nullptr ? (int) devLaReleasePoles_->load (std::memory_order_relaxed)
                                                                       : 1);
+        const float smartFastMs = devSmartFastMs_ != nullptr ? devSmartFastMs_->load (std::memory_order_relaxed)
+                                                             : 20.0f;
+        const float smartSlowMs = devSmartSlowMs_ != nullptr ? devSmartSlowMs_->load (std::memory_order_relaxed)
+                                                             : 300.0f;
+        const float smartSustainMs = devSmartSustainMs_ != nullptr ? devSmartSustainMs_->load (std::memory_order_relaxed)
+                                                                   : 120.0f;
+        const float smartLeak = devSmartLeak_ != nullptr ? devSmartLeak_->load (std::memory_order_relaxed)
+                                                        : 0.3f;
         const float devLaBandMs = committedLookaheadBandMs_.load (std::memory_order_acquire);
         const float devLaWideMs = committedLookaheadWideMs_.load (std::memory_order_acquire);
         const int osMaxLookahead = juce::jmax (1, osMaxLookaheadSamples_);
@@ -1387,6 +1418,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         const int laWideActive = juce::jlimit (1, osMaxLookahead, static_cast<int> (std::llround ((double) devLaWideMs * 1.0e-3 * activeOsRate)));
         const auto laEngine = laReleaseEngineIdx == 1
             ? mdsp_dsp::LimiterEnvelope::ReleaseEngine::LookaheadFollower
+            : laReleaseEngineIdx == 2
+            ? mdsp_dsp::LimiterEnvelope::ReleaseEngine::Smart
             : mdsp_dsp::LimiterEnvelope::ReleaseEngine::AdaptiveSigma;
         bandLinkSmoothed_.setTargetValue (mapBandColorToLink (bandColor));
 
@@ -1416,6 +1449,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             envelope.setReleaseEngine (laEngine);
             envelope.setLookaheadReleaseMs (laReleaseMs * autoReleaseScale);
             envelope.setLookaheadReleasePoles (laReleasePoles);
+            envelope.setSmartFastReleaseMs (smartFastMs);
+            envelope.setSmartSlowReleaseMs (smartSlowMs);
+            envelope.setSmartSustainMs (smartSustainMs);
+            envelope.setSmartLeak (smartLeak);
             envelope.setAttackMode (attackMode);
             envelope.setRealAttackMs (realAttackMs * attackScale);
             envelope.setAttackOverrideMs (devAttackMs * attackScale);

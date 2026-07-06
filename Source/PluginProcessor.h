@@ -345,6 +345,10 @@ private:
     std::atomic<float>* devReleaseEngine_ = nullptr;
     std::atomic<float>* devLaReleaseMs_ = nullptr;
     std::atomic<float>* devLaReleasePoles_ = nullptr;
+    std::atomic<float>* devSmartFastMs_ = nullptr;
+    std::atomic<float>* devSmartSlowMs_ = nullptr;
+    std::atomic<float>* devSmartSustainMs_ = nullptr;
+    std::atomic<float>* devSmartLeak_ = nullptr;
     std::atomic<float>* devLookaheadBandMs_ = nullptr;
     std::atomic<float>* devLookaheadWideMs_ = nullptr;
     std::atomic<float>* devXoverCutoffHz_ = nullptr;
@@ -362,6 +366,7 @@ private:
     std::atomic<float>* devBandMsLinkPct_ = nullptr;
     std::atomic<float>* devMsSafetyClamp_ = nullptr;
     std::atomic<float>* devFinalCeiling_ = nullptr;
+    std::atomic<float>* devFinalCeilingReleaseMs_ = nullptr;
     juce::AudioParameterBool* ioInputLink_ = nullptr;
     juce::AudioParameterBool* ioOutputLink_ = nullptr;
 

@@ -262,7 +262,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (dev_release_engine, 1),
         "DEV Release Engine",
-        StringArray { "Adaptive", "Lookahead" },
+        StringArray { "Adaptive", "Lookahead", "Smart" },
         1,
         AudioParameterChoiceAttributes()));
 
@@ -279,6 +279,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         StringArray { "2", "3", "4" },
         1,
         AudioParameterChoiceAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_smart_fast_ms, 1),
+        "DEV Smart Fast",
+        NormalisableRange<float> (1.0f, 200.0f, 0.1f, 0.35f),
+        20.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_smart_slow_ms, 1),
+        "DEV Smart Slow",
+        NormalisableRange<float> (50.0f, 1000.0f, 1.0f, 0.4f),
+        300.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_smart_sustain_ms, 1),
+        "DEV Smart Sustain",
+        NormalisableRange<float> (10.0f, 500.0f, 1.0f, 0.35f),
+        120.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_smart_leak, 1),
+        "DEV Smart Leak",
+        NormalisableRange<float> (0.0f, 1.0f, 0.01f),
+        0.3f,
+        AudioParameterFloatAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_lookahead_band_ms, 1),
@@ -395,6 +423,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
         "DEV Final Ceiling",
         true,
         AudioParameterBoolAttributes()));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        pid (dev_final_ceiling_release_ms, 1),
+        "DEV FC Release",
+        NormalisableRange<float> (1.0f, 100.0f, 0.1f, 0.35f),
+        5.0f,
+        AudioParameterFloatAttributes().withLabel ("ms")));
 
     return layout;
 }
