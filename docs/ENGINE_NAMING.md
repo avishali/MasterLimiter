@@ -15,6 +15,11 @@
 | **Smart** | *(intended)* program-dependent breathing via adaptive release | inline limiter, `ReleaseEngine::Smart` (`dev_smart_*`) | `dev_release_engine = Smart` | ⏸ **PARKED** — next dev target after alpha voicing begins; NOT in the alpha tester selector |
 | ~~Adaptive~~ | — | `ReleaseEngine::AdaptiveSigma` (legacy) | `dev_release_engine = Adaptive` | ❌ legacy — remove from selector |
 
+## Stages (shared across engines) — naming (CLIP-1, planned)
+- **Drive** = optional PRE-engine tone/saturation (the old "Clipper", pre-only). Character, not peak safety. (Params keep `clipper_*` IDs to avoid preset breakage; UI/docs say "Drive".)
+- **Ceiling** = the single peak-safety stage, spanning **Limiter → Clipper** (Release knob; MIN = physical hard-clip). Absorbs the old "FinalCeiling". The Open engine uses Ceiling (clip end) as its tip-catcher — no more forced clipper.
+- One Drive (tone) + one Ceiling (peak) → you cannot stack two peak stages.
+
 ## Rules
 - **Alpha tester selector = 2 engines: Transparent · Open.** Smart/Adaptive kept as params (for our R&D) but NOT presented to the tester.
 - When adding/renaming an engine, **update this table first**, then propagate the product name to: UI labels, `SPECTRAL_ENGINE_DESIGN.md`, `SIGNAL_FLOW.md`, `MANUAL.md`, and any DEV prompt. SDK primitive names stay as-is.
