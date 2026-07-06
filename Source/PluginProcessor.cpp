@@ -175,6 +175,7 @@ MasterLimiterAudioProcessor::MasterLimiterAudioProcessor()
     jassert (apvts.getParameter (param::dev_mb_engine.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_mb_crossover_hz.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_mb_attack_mode.data()) != nullptr);
+    jassert (apvts.getParameter (param::dev_mb_attack_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_mb_release_ms.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_mb_safety.data()) != nullptr);
     jassert (apvts.getParameter (param::dev_mb_lookahead_ms.data()) != nullptr);
@@ -398,6 +399,7 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devMbEngine_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::dev_mb_engine.data()));
     devMbCrossoverHz_ = apvts.getRawParameterValue (param::dev_mb_crossover_hz.data());
     devMbAttackMode_ = apvts.getRawParameterValue (param::dev_mb_attack_mode.data());
+    devMbAttackMs_ = apvts.getRawParameterValue (param::dev_mb_attack_ms.data());
     devMbReleaseMs_ = apvts.getRawParameterValue (param::dev_mb_release_ms.data());
     devMbSafety_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::dev_mb_safety.data()));
     devMbLookaheadMs_ = apvts.getRawParameterValue (param::dev_mb_lookahead_ms.data());
@@ -446,6 +448,7 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     jassert (devMbEngine_ != nullptr);
     jassert (devMbCrossoverHz_ != nullptr);
     jassert (devMbAttackMode_ != nullptr);
+    jassert (devMbAttackMs_ != nullptr);
     jassert (devMbReleaseMs_ != nullptr);
     jassert (devMbSafety_ != nullptr);
     jassert (devMbLookaheadMs_ != nullptr);
@@ -1191,6 +1194,7 @@ mdsp_dsp::LimiterEnvelope::AttackMode MasterLimiterAudioProcessor::mapMbAttackMo
 void MasterLimiterAudioProcessor::configureMbBandLimiter (mdsp_dsp::SingleBandLimiter& limiter,
                                                           float thresholdLin,
                                                           float releaseMs,
+                                                          float attackMs,
                                                           mdsp_dsp::LimiterEnvelope::AttackMode attackMode) noexcept
 {
     limiter.setThresholdLinear (thresholdLin);
@@ -1200,7 +1204,8 @@ void MasterLimiterAudioProcessor::configureMbBandLimiter (mdsp_dsp::SingleBandLi
     limiter.setAutoRelease (false);
     limiter.setMode (mdsp_dsp::LimiterEnvelope::Mode::Clean);
     limiter.setAttackMode (attackMode);
-    limiter.setRealAttackMs (5.0f);
+    // Attack RC for Hybrid/Real; Ramp pre-hold is set by dev_mb_lookahead_ms.
+    limiter.setRealAttackMs (attackMs);
     limiter.setReleaseEngine (mdsp_dsp::LimiterEnvelope::ReleaseEngine::LookaheadFollower);
     limiter.setActiveLookaheadSamples (mbEngineActiveLookaheadSamples_);
 }
@@ -1226,6 +1231,7 @@ void MasterLimiterAudioProcessor::prepareMbEngine (double sampleRate, int sample
 
     cachedMbCrossoverHz_ = -1.0f;
     cachedMbAttackModeIdx_ = -1;
+    cachedMbAttackMs_ = -1.0f;
     cachedMbReleaseMs_ = -1.0f;
     cachedMbSafety_ = ! (devMbSafety_ != nullptr && devMbSafety_->get());
     cachedMbCeilingDb_ = -999.0f;
@@ -1237,12 +1243,14 @@ void MasterLimiterAudioProcessor::prepareMbEngine (double sampleRate, int sample
 
 void MasterLimiterAudioProcessor::updateMbEngineRuntimeConfig (bool forceUpdate) noexcept
 {
-    if (devMbCrossoverHz_ == nullptr || devMbAttackMode_ == nullptr || devMbReleaseMs_ == nullptr
+    if (devMbCrossoverHz_ == nullptr || devMbAttackMode_ == nullptr || devMbAttackMs_ == nullptr
+        || devMbReleaseMs_ == nullptr
         || devMbSafety_ == nullptr || ceilingDbParam_ == nullptr)
         return;
 
     const float crossoverHz = readFloatParam (apvts, param::dev_mb_crossover_hz.data());
     const int attackModeIdx = static_cast<int> (devMbAttackMode_->load (std::memory_order_relaxed));
+    const float attackMs = readFloatParam (apvts, param::dev_mb_attack_ms.data());
     const float releaseMs = readFloatParam (apvts, param::dev_mb_release_ms.data());
     const bool safetyOn = devMbSafety_->get();
     const float ceilingDb = ceilingDbParam_->get();
@@ -1253,6 +1261,7 @@ void MasterLimiterAudioProcessor::updateMbEngineRuntimeConfig (bool forceUpdate)
     if (! forceUpdate
         && ! crossoverChanged
         && attackModeIdx == cachedMbAttackModeIdx_
+        && attackMs == cachedMbAttackMs_
         && releaseMs == cachedMbReleaseMs_
         && safetyOn == cachedMbSafety_
         && ceilingDb == cachedMbCeilingDb_)
@@ -1271,6 +1280,7 @@ void MasterLimiterAudioProcessor::updateMbEngineRuntimeConfig (bool forceUpdate)
 
     cachedMbCrossoverHz_ = crossoverHz;
     cachedMbAttackModeIdx_ = attackModeIdx;
+    cachedMbAttackMs_ = attackMs;
     cachedMbReleaseMs_ = releaseMs;
     cachedMbSafety_ = safetyOn;
     cachedMbCeilingDb_ = ceilingDb;
@@ -1281,10 +1291,11 @@ void MasterLimiterAudioProcessor::updateMbEngineRuntimeConfig (bool forceUpdate)
     mbEngine_.setCrossoverFrequencies (&crossoverHz, 1);
 
     for (int b = 0; b < mbEngine_.getNumBands(); ++b)
-        configureMbBandLimiter (mbEngine_.band (b), thresholdLin, releaseMs, attackMode);
+        configureMbBandLimiter (mbEngine_.band (b), thresholdLin, releaseMs, attackMs, attackMode);
 
     if (safetyOn)
-        configureMbBandLimiter (mbEngine_.safety(), thresholdLin, releaseMs, mdsp_dsp::LimiterEnvelope::AttackMode::Ramp);
+        configureMbBandLimiter (mbEngine_.safety(), thresholdLin, releaseMs, attackMs,
+                                mdsp_dsp::LimiterEnvelope::AttackMode::Ramp);
 }
 
 void MasterLimiterAudioProcessor::runClipperStage (juce::dsp::AudioBlock<float>& block,
@@ -1411,7 +1422,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         || ioInputLDb_ == nullptr || ioInputRDb_ == nullptr || ioOutputLDb_ == nullptr || ioOutputRDb_ == nullptr
         || stereoLinkPct_ == nullptr || msLinkPct_ == nullptr || gainMatchAuto_ == nullptr || ioInputLink_ == nullptr || ioOutputLink_ == nullptr
         || devMbEngine_ == nullptr || devMbCrossoverHz_ == nullptr || devMbAttackMode_ == nullptr
-        || devMbReleaseMs_ == nullptr || devMbSafety_ == nullptr || devMbLookaheadMs_ == nullptr)
+        || devMbAttackMs_ == nullptr || devMbReleaseMs_ == nullptr || devMbSafety_ == nullptr || devMbLookaheadMs_ == nullptr)
         return;
 
     const int n = buffer.getNumSamples();

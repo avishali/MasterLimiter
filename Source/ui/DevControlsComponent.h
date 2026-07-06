@@ -140,6 +140,8 @@ private:
     juce::Slider sldMbCrossover_;
     juce::Label lblMbAttackMode_ {};
     juce::ComboBox cmbMbAttackMode_ { "DEV MB Attack Mode" };
+    juce::Label lblMbAttackMs_ {};
+    juce::Slider sldMbAttackMs_;
     juce::Label lblMbRelease_ {};
     juce::Slider sldMbRelease_;
     juce::ToggleButton btnMbSafety_ { "MB Safety (TP)" };
@@ -184,6 +186,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMbEngine_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbCrossover_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attMbAttackMode_;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbAttackMs_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMbSafety_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbLookahead_;

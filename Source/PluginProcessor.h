@@ -195,6 +195,7 @@ private:
     void configureMbBandLimiter (mdsp_dsp::SingleBandLimiter& limiter,
                                  float thresholdLin,
                                  float releaseMs,
+                                 float attackMs,
                                  mdsp_dsp::LimiterEnvelope::AttackMode attackMode) noexcept;
     void runClipperStage (juce::dsp::AudioBlock<float>& block,
                           int hostNumSamples,
@@ -389,6 +390,7 @@ private:
     juce::AudioParameterBool* devMbEngine_ = nullptr;
     std::atomic<float>* devMbCrossoverHz_ = nullptr;
     std::atomic<float>* devMbAttackMode_ = nullptr;
+    std::atomic<float>* devMbAttackMs_ = nullptr;
     std::atomic<float>* devMbReleaseMs_ = nullptr;
     juce::AudioParameterBool* devMbSafety_ = nullptr;
     std::atomic<float>* devMbLookaheadMs_ = nullptr;
@@ -401,6 +403,7 @@ private:
     bool lastMbEngineOn_ = false;
     float cachedMbCrossoverHz_ = -1.0f;
     int cachedMbAttackModeIdx_ = -1;
+    float cachedMbAttackMs_ = -1.0f;
     float cachedMbReleaseMs_ = -1.0f;
     bool cachedMbSafety_ = false;
     float cachedMbCeilingDb_ = -999.0f;
