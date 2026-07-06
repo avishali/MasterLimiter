@@ -27,6 +27,9 @@ private:
     void updateManualReleaseEnabled (bool enabled);
     void updateAttackModeControls (int attackModeIdx);
     void updateReleaseEngineEnablement();
+    void syncEngineSelectorFromParams();
+    void applyEngineSelectorChoice();
+    void updateEngineFrameVisibility();
     static juce::String formatClampReadout (float currentDb, float maxDb);
 
     MasterLimiterAudioProcessor& processor_;
@@ -122,7 +125,11 @@ private:
     juce::Label lblBandMsLink_ {};
     juce::Slider sldBandMsLink_;
 
-    juce::GroupComponent groupPeakControl_ { "PeakControlGroup", "PEAK CONTROL (DEV)" };
+    juce::GroupComponent groupEngineSelector_ { "EngineSelectorGroup", "ENGINE" };
+    juce::Label lblEngine_ {};
+    juce::ComboBox cmbEngine_ { "DEV Engine" };
+
+    juce::GroupComponent groupPeakControl_ { "PeakControlGroup", "PEAK \u00b7 Global (DEV)" };
     juce::ToggleButton btnMsSafetyClamp_ { "M/S Safety Clamp" };
     juce::Label lblMsClampReadout_ {};
     juce::ToggleButton btnFinalCeiling_ { "Final Ceiling" };
@@ -134,8 +141,7 @@ private:
     juce::Label lblSustainRatio_ {};
     juce::Slider sldSustainRatio_;
 
-    juce::GroupComponent groupMbEngine_ { "MbEngineGroup", "MB Engine (2-band parity)" };
-    juce::ToggleButton btnMbEngine_ { "MB Engine" };
+    juce::GroupComponent groupMbEngine_ { "MbEngineGroup", "OPEN" };
     juce::Label lblMbCrossover_ {};
     juce::Slider sldMbCrossover_;
     juce::Label lblMbAttackMode_ {};
@@ -183,7 +189,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attFinalCeiling_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attFcRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMbEngine_;
+    std::unique_ptr<juce::ParameterAttachment> attMbEngineListener_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbCrossover_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attMbAttackMode_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbAttackMs_;

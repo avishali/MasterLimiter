@@ -49,21 +49,22 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     viewport_.setScrollBarThickness (10);
     addAndMakeVisible (viewport_);
 
-    for (auto* group : { &groupMbEngine_,
+    for (auto* group : { &groupPeakControl_,
+                         &groupEngineSelector_,
                          &groupAttack_,
                          &groupAttackScaling_,
                          &groupLookahead_,
                          &groupCrossover_,
-                         &groupReleaseEngine_,
-                         &groupLookaheadRelease_,
-                         &groupSmartRelease_,
-                         &groupAdaptiveRelease_,
-                         &groupBandScaling_,
                          &groupMultiband_,
                          &groupBandStereo_,
                          &groupBandMs_,
-                         &groupPeakControl_,
-                         &groupManualRelease_ })
+                         &groupLookaheadRelease_,
+                         &groupBandScaling_,
+                         &groupManualRelease_,
+                         &groupMbEngine_,
+                         &groupReleaseEngine_,
+                         &groupSmartRelease_,
+                         &groupAdaptiveRelease_ })
     {
         setupGroup (*group);
         content_.addAndMakeVisible (*group);
@@ -130,7 +131,13 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
 
     setupLabel (lblBandLink_, "Band Split");
     setupSlider (sldBandLink_, 0, " %");
-    sldBandLink_.setTooltip ("Multiband band-to-band link. 0 = bands glued (single shared GR), 100 = fully independent 3-band. (Main Color knob is greyed; this is the live control.)");
+    sldBandLink_.setTooltip ("Multiband band-to-band link. 0 = bands glued (single shared GR), 100 = fully independent 3-band.");
+
+    setupLabel (lblEngine_, "Engine");
+    setupCombo (cmbEngine_);
+    cmbEngine_.addItem ("Transparent", 1);
+    cmbEngine_.addItem ("Open", 2);
+    cmbEngine_.setTooltip ("Limiter engine for alpha voicing. Transparent = inline 3-band + Lookahead release. Open = 2-band MultibandLimiter.");
 
     setupLabel (lblReleaseEngine_, "Auto Engine");
     setupCombo (cmbReleaseEngine_);
@@ -221,9 +228,6 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     setupSlider (sldSustainRatio_, 2, {});
     sldSustainRatio_.setTooltip ("Manual release only (Auto OFF): fast+slow split. Higher = more sustain held.");
 
-    btnMbEngine_.setClickingTogglesState (true);
-    btnMbEngine_.setTooltip ("Route through committed MultibandLimiter (2-band LR) instead of the inline OS engine.");
-
     setupLabel (lblMbCrossover_, "Crossover");
     setupSlider (sldMbCrossover_, 0, " Hz");
     sldMbCrossover_.setTooltip ("2-band LR crossover frequency (Hz).");
@@ -257,9 +261,9 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &lblReleaseEngine_, &lblLaRelease_, &lblLaPoles_,
                          &lblSmartFast_, &lblSmartSlow_, &lblSmartSustain_, &lblSmartLeak_,
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_, &lblMidScale_,
-                         &lblHighScale_, &lblWideScale_,                          &lblBandStereoLink_, &lblBandMsLink_,
+                         &lblHighScale_, &lblWideScale_, &lblBandStereoLink_, &lblBandMsLink_,
                          &lblMsClampReadout_,
-                         &lblFinalCeilingReadout_, &lblFcRelease_, &lblSustainRatio_,
+                         &lblFinalCeilingReadout_, &lblFcRelease_, &lblSustainRatio_, &lblEngine_,
                          &lblMbCrossover_, &lblMbAttackMode_, &lblMbAttackMs_, &lblMbRelease_, &lblMbLookahead_ })
     {
         content_.addAndMakeVisible (*label);
@@ -278,12 +282,12 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     }
 
     content_.addAndMakeVisible (cmbAttackMode_);
+    content_.addAndMakeVisible (cmbEngine_);
     content_.addAndMakeVisible (cmbReleaseEngine_);
     content_.addAndMakeVisible (cmbLaPoles_);
     content_.addAndMakeVisible (btnMsSafetyClamp_);
     content_.addAndMakeVisible (btnFinalCeiling_);
     content_.addAndMakeVisible (btnBandMs_);
-    content_.addAndMakeVisible (btnMbEngine_);
     content_.addAndMakeVisible (btnMbSafety_);
     content_.addAndMakeVisible (cmbMbAttackMode_);
 
@@ -322,7 +326,17 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attFinalCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_final_ceiling), btnFinalCeiling_);
     attFcRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_final_ceiling_release_ms), sldFcRelease_);
     attSustainRatio_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldSustainRatio_);
-    attMbEngine_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_mb_engine), btnMbEngine_);
+    if (auto* mbEngineParam = apvts_.getParameter (pid (param::dev_mb_engine)))
+    {
+        attMbEngineListener_ = std::make_unique<juce::ParameterAttachment> (
+            *mbEngineParam,
+            [this] (float /*value*/)
+            {
+                syncEngineSelectorFromParams();
+            },
+            nullptr);
+        attMbEngineListener_->sendInitialUpdate();
+    }
     attMbCrossover_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mb_crossover_hz), sldMbCrossover_);
     attMbAttackMode_ = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts_, pid (param::dev_mb_attack_mode), cmbMbAttackMode_);
     attMbAttackMs_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_mb_attack_ms), sldMbAttackMs_);
@@ -358,6 +372,14 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     {
         updateReleaseEngineEnablement();
     };
+
+    cmbEngine_.onChange = [this]
+    {
+        applyEngineSelectorChoice();
+    };
+
+    syncEngineSelectorFromParams();
+    updateEngineFrameVisibility();
     updateReleaseEngineEnablement();
 }
 
@@ -393,13 +415,6 @@ void DevControlsComponent::resized()
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
 
-    auto placeGroup = [&] (juce::GroupComponent& group, int h)
-    {
-        group.setBounds (margin, y, contentW - 2 * margin, h);
-        y += h + gap;
-        return group.getBounds().reduced (16, 22);
-    };
-
     auto placeSliderRow = [&] (juce::Rectangle<int> row, juce::Label& label, juce::Slider& slider)
     {
         label.setBounds (row.removeFromLeft (labelW));
@@ -414,123 +429,151 @@ void DevControlsComponent::resized()
         combo.setBounds (row.withHeight (24));
     };
 
-    auto inner = placeGroup (groupMbEngine_, 288);
+    auto placeGroupIfVisible = [&] (juce::GroupComponent& group, int h)
     {
-        auto row = inner.removeFromTop (rowH);
-        btnMbEngine_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
-    }
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblMbCrossover_, sldMbCrossover_);
-    inner.removeFromTop (8);
-    placeComboRow (inner.removeFromTop (rowH), lblMbAttackMode_, cmbMbAttackMode_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblMbAttackMs_, sldMbAttackMs_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblMbRelease_, sldMbRelease_);
-    inner.removeFromTop (8);
+        if (! group.isVisible())
+            return juce::Rectangle<int>();
+
+        group.setBounds (margin, y, contentW - 2 * margin, h);
+        y += h + gap;
+        return group.getBounds().reduced (16, 22);
+    };
+
+    auto inner = placeGroupIfVisible (groupPeakControl_, 136);
+    if (! inner.isEmpty())
     {
-        auto row = inner.removeFromTop (rowH);
-        btnMbSafety_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
+        {
+            auto row = inner.removeFromTop (rowH);
+            btnMsSafetyClamp_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 88)));
+            row.removeFromLeft (8);
+            lblMsClampReadout_.setBounds (row);
+        }
+        inner.removeFromTop (8);
+        {
+            auto row = inner.removeFromTop (rowH);
+            btnFinalCeiling_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 88)));
+            row.removeFromLeft (8);
+            lblFinalCeilingReadout_.setBounds (row);
+        }
+        inner.removeFromTop (8);
+        placeSliderRow (inner.removeFromTop (rowH), lblFcRelease_, sldFcRelease_);
     }
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblMbLookahead_, sldMbLookahead_);
 
-    inner = placeGroup (groupAttack_, 136);
-    placeComboRow (inner.removeFromTop (rowH), lblAttackMode_, cmbAttackMode_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblAttack_, sldAttack_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblRealAttack_, sldRealAttack_);
+    inner = placeGroupIfVisible (groupEngineSelector_, 72);
+    if (! inner.isEmpty())
+        placeComboRow (inner.removeFromTop (rowH), lblEngine_, cmbEngine_);
 
-    inner = placeGroup (groupAttackScaling_, 136);
-    placeSliderRow (inner.removeFromTop (rowH), lblLowAttackScale_, sldLowAttackScale_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblMidAttackScale_, sldMidAttackScale_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblHighAttackScale_, sldHighAttackScale_);
+    const bool openEngine = cmbEngine_.getSelectedId() == 2;
 
-    inner = placeGroup (groupLookahead_, 104);
-    placeSliderRow (inner.removeFromTop (rowH), lblLookaheadBand_, sldLookaheadBand_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblLookaheadWide_, sldLookaheadWide_);
-
-    inner = placeGroup (groupCrossover_, 248);
-    placeSliderRow (inner.removeFromTop (rowH), lblXoverCutoff_, sldXoverCutoff_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblXoverTransition_, sldXoverTransition_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblXoverAtten_, sldXoverAtten_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblXoverHiCutoff_, sldXoverHiCutoff_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblXoverHiTransition_, sldXoverHiTransition_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblXoverHiAtten_, sldXoverHiAtten_);
-
-    inner = placeGroup (groupReleaseEngine_, 72);
-    placeComboRow (inner.removeFromTop (rowH), lblReleaseEngine_, cmbReleaseEngine_);
-
-    inner = placeGroup (groupLookaheadRelease_, 104);
-    placeSliderRow (inner.removeFromTop (rowH), lblLaRelease_, sldLaRelease_);
-    inner.removeFromTop (8);
-    placeComboRow (inner.removeFromTop (rowH), lblLaPoles_, cmbLaPoles_);
-
-    inner = placeGroup (groupSmartRelease_, 172);
-    placeSliderRow (inner.removeFromTop (rowH), lblSmartFast_, sldSmartFast_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblSmartSlow_, sldSmartSlow_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblSmartSustain_, sldSmartSustain_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblSmartLeak_, sldSmartLeak_);
-
-    inner = placeGroup (groupAdaptiveRelease_, 104);
-    placeSliderRow (inner.removeFromTop (rowH), lblSigmaAttack_, sldSigmaAttack_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblSigmaDecay_, sldSigmaDecay_);
-
-    inner = placeGroup (groupBandScaling_, 172);
-    placeSliderRow (inner.removeFromTop (rowH), lblLowScale_, sldLowScale_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblMidScale_, sldMidScale_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblHighScale_, sldHighScale_);
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblWideScale_, sldWideScale_);
-
-    inner = placeGroup (groupMultiband_, 72);
-    placeSliderRow (inner.removeFromTop (rowH), lblBandLink_, sldBandLink_);
-
-    inner = placeGroup (groupBandStereo_, 72);
-    placeSliderRow (inner.removeFromTop (rowH), lblBandStereoLink_, sldBandStereoLink_);
-
-    inner = placeGroup (groupBandMs_, 104);
+    if (! openEngine)
     {
-        auto row = inner.removeFromTop (rowH);
-        btnBandMs_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
-    }
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblBandMsLink_, sldBandMsLink_);
+        inner = placeGroupIfVisible (groupAttack_, 136);
+        if (! inner.isEmpty())
+        {
+            placeComboRow (inner.removeFromTop (rowH), lblAttackMode_, cmbAttackMode_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblAttack_, sldAttack_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblRealAttack_, sldRealAttack_);
+        }
 
-    inner = placeGroup (groupPeakControl_, 136);
-    {
-        auto row = inner.removeFromTop (rowH);
-        btnMsSafetyClamp_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 88)));
-        row.removeFromLeft (8);
-        lblMsClampReadout_.setBounds (row);
-    }
-    inner.removeFromTop (8);
-    {
-        auto row = inner.removeFromTop (rowH);
-        btnFinalCeiling_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 88)));
-        row.removeFromLeft (8);
-        lblFinalCeilingReadout_.setBounds (row);
-    }
-    inner.removeFromTop (8);
-    placeSliderRow (inner.removeFromTop (rowH), lblFcRelease_, sldFcRelease_);
+        inner = placeGroupIfVisible (groupAttackScaling_, 136);
+        if (! inner.isEmpty())
+        {
+            placeSliderRow (inner.removeFromTop (rowH), lblLowAttackScale_, sldLowAttackScale_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblMidAttackScale_, sldMidAttackScale_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblHighAttackScale_, sldHighAttackScale_);
+        }
 
-    inner = placeGroup (groupManualRelease_, 72);
-    placeSliderRow (inner.removeFromTop (rowH), lblSustainRatio_, sldSustainRatio_);
+        inner = placeGroupIfVisible (groupLookahead_, 104);
+        if (! inner.isEmpty())
+        {
+            placeSliderRow (inner.removeFromTop (rowH), lblLookaheadBand_, sldLookaheadBand_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblLookaheadWide_, sldLookaheadWide_);
+        }
+
+        inner = placeGroupIfVisible (groupCrossover_, 248);
+        if (! inner.isEmpty())
+        {
+            placeSliderRow (inner.removeFromTop (rowH), lblXoverCutoff_, sldXoverCutoff_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblXoverTransition_, sldXoverTransition_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblXoverAtten_, sldXoverAtten_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblXoverHiCutoff_, sldXoverHiCutoff_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblXoverHiTransition_, sldXoverHiTransition_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblXoverHiAtten_, sldXoverHiAtten_);
+        }
+
+        inner = placeGroupIfVisible (groupMultiband_, 72);
+        if (! inner.isEmpty())
+            placeSliderRow (inner.removeFromTop (rowH), lblBandLink_, sldBandLink_);
+
+        inner = placeGroupIfVisible (groupBandStereo_, 72);
+        if (! inner.isEmpty())
+            placeSliderRow (inner.removeFromTop (rowH), lblBandStereoLink_, sldBandStereoLink_);
+
+        inner = placeGroupIfVisible (groupBandMs_, 104);
+        if (! inner.isEmpty())
+        {
+            auto row = inner.removeFromTop (rowH);
+            btnBandMs_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblBandMsLink_, sldBandMsLink_);
+        }
+
+        inner = placeGroupIfVisible (groupLookaheadRelease_, 104);
+        if (! inner.isEmpty())
+        {
+            placeSliderRow (inner.removeFromTop (rowH), lblLaRelease_, sldLaRelease_);
+            inner.removeFromTop (8);
+            placeComboRow (inner.removeFromTop (rowH), lblLaPoles_, cmbLaPoles_);
+        }
+
+        inner = placeGroupIfVisible (groupBandScaling_, 172);
+        if (! inner.isEmpty())
+        {
+            placeSliderRow (inner.removeFromTop (rowH), lblLowScale_, sldLowScale_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblMidScale_, sldMidScale_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblHighScale_, sldHighScale_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblWideScale_, sldWideScale_);
+        }
+
+        inner = placeGroupIfVisible (groupManualRelease_, 72);
+        if (! inner.isEmpty())
+            placeSliderRow (inner.removeFromTop (rowH), lblSustainRatio_, sldSustainRatio_);
+    }
+
+    if (openEngine)
+    {
+        inner = placeGroupIfVisible (groupMbEngine_, 252);
+        if (! inner.isEmpty())
+        {
+            placeSliderRow (inner.removeFromTop (rowH), lblMbCrossover_, sldMbCrossover_);
+            inner.removeFromTop (8);
+            placeComboRow (inner.removeFromTop (rowH), lblMbAttackMode_, cmbMbAttackMode_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblMbAttackMs_, sldMbAttackMs_);
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblMbRelease_, sldMbRelease_);
+            inner.removeFromTop (8);
+            {
+                auto row = inner.removeFromTop (rowH);
+                btnMbSafety_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 8)));
+            }
+            inner.removeFromTop (8);
+            placeSliderRow (inner.removeFromTop (rowH), lblMbLookahead_, sldMbLookahead_);
+        }
+    }
 
     content_.setSize (contentW, y + 4);
 }
@@ -601,41 +644,104 @@ juce::String DevControlsComponent::formatClampReadout (float currentDb, float ma
     return juce::String (juce::jmax (0.0f, currentDb), 1) + " / " + juce::String (juce::jmax (0.0f, maxDb), 1) + " dB";
 }
 
+void DevControlsComponent::syncEngineSelectorFromParams()
+{
+    const bool openEngine = [&]
+    {
+        if (auto* raw = apvts_.getRawParameterValue (pid (param::dev_mb_engine)))
+            return raw->load (std::memory_order_relaxed) >= 0.5f;
+
+        return false;
+    }();
+
+    cmbEngine_.setSelectedId (openEngine ? 2 : 1, juce::dontSendNotification);
+    updateEngineFrameVisibility();
+}
+
+void DevControlsComponent::applyEngineSelectorChoice()
+{
+    const bool openEngine = cmbEngine_.getSelectedId() == 2;
+
+    if (auto* mbEngine = dynamic_cast<juce::AudioParameterBool*> (apvts_.getParameter (pid (param::dev_mb_engine))))
+    {
+        mbEngine->beginChangeGesture();
+        mbEngine->setValueNotifyingHost (openEngine ? 1.0f : 0.0f);
+        mbEngine->endChangeGesture();
+    }
+
+    if (! openEngine)
+    {
+        if (auto* releaseEngine = dynamic_cast<juce::AudioParameterChoice*> (apvts_.getParameter (pid (param::dev_release_engine))))
+        {
+            constexpr int lookaheadIdx = 1;
+            if (releaseEngine->getIndex() != lookaheadIdx)
+            {
+                releaseEngine->beginChangeGesture();
+                releaseEngine->setValueNotifyingHost (releaseEngine->convertTo0to1 (lookaheadIdx));
+                releaseEngine->endChangeGesture();
+            }
+        }
+    }
+
+    updateEngineFrameVisibility();
+    updateReleaseEngineEnablement();
+    resized();
+}
+
+void DevControlsComponent::updateEngineFrameVisibility()
+{
+    const bool openEngine = cmbEngine_.getSelectedId() == 2;
+
+    groupPeakControl_.setVisible (true);
+    groupEngineSelector_.setVisible (true);
+
+    groupAttack_.setVisible (! openEngine);
+    groupAttackScaling_.setVisible (! openEngine);
+    groupLookahead_.setVisible (! openEngine);
+    groupCrossover_.setVisible (! openEngine);
+    groupMultiband_.setVisible (! openEngine);
+    groupBandStereo_.setVisible (! openEngine);
+    groupBandMs_.setVisible (! openEngine);
+    groupLookaheadRelease_.setVisible (! openEngine);
+    groupBandScaling_.setVisible (! openEngine);
+    groupManualRelease_.setVisible (! openEngine);
+
+    groupMbEngine_.setVisible (openEngine);
+
+    groupReleaseEngine_.setVisible (false);
+    groupSmartRelease_.setVisible (false);
+    groupAdaptiveRelease_.setVisible (false);
+}
+
 void DevControlsComponent::updateReleaseEngineEnablement()
 {
-    const int engineIdx = [&]
-    {
-        if (auto* raw = apvts_.getRawParameterValue (pid (param::dev_release_engine)))
-            return (int) raw->load (std::memory_order_relaxed);
+    const bool openEngine = cmbEngine_.getSelectedId() == 2;
+    if (openEngine)
+        return;
 
-        return cmbReleaseEngine_.getSelectedItemIndex();
-    }();
-    const bool lookahead = engineIdx == 1;
-    const bool smart = engineIdx == 2;
-    const bool adaptive = engineIdx == 0;
+    lblLaRelease_.setEnabled (true);
+    sldLaRelease_.setEnabled (true);
+    lblLaPoles_.setEnabled (true);
+    cmbLaPoles_.setEnabled (true);
 
-    lblLaRelease_.setEnabled (lookahead);
-    sldLaRelease_.setEnabled (lookahead);
-    lblLaPoles_.setEnabled (lookahead || smart);
-    cmbLaPoles_.setEnabled (lookahead || smart);
+    lblSmartFast_.setEnabled (false);
+    sldSmartFast_.setEnabled (false);
+    lblSmartSlow_.setEnabled (false);
+    sldSmartSlow_.setEnabled (false);
+    lblSmartSustain_.setEnabled (false);
+    sldSmartSustain_.setEnabled (false);
+    lblSmartLeak_.setEnabled (false);
+    sldSmartLeak_.setEnabled (false);
 
-    lblSmartFast_.setEnabled (smart);
-    sldSmartFast_.setEnabled (smart);
-    lblSmartSlow_.setEnabled (smart);
-    sldSmartSlow_.setEnabled (smart);
-    lblSmartSustain_.setEnabled (smart);
-    sldSmartSustain_.setEnabled (smart);
-    lblSmartLeak_.setEnabled (smart);
-    sldSmartLeak_.setEnabled (smart);
-
-    lblSigmaAttack_.setEnabled (adaptive);
-    sldSigmaAttack_.setEnabled (adaptive);
-    lblSigmaDecay_.setEnabled (adaptive);
-    sldSigmaDecay_.setEnabled (adaptive);
+    lblSigmaAttack_.setEnabled (false);
+    sldSigmaAttack_.setEnabled (false);
+    lblSigmaDecay_.setEnabled (false);
+    sldSigmaDecay_.setEnabled (false);
 }
 
 void DevControlsComponent::syncReadouts()
 {
+    syncEngineSelectorFromParams();
     updateReleaseEngineEnablement();
 
     lblMsClampReadout_.setText (formatClampReadout (processor_.getCurrentMsClampDb(), processor_.getMaxMsClampDb()),
