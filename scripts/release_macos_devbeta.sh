@@ -23,6 +23,7 @@ echo ""
 BUILD_DIR="${MASTERLIMITER_RELEASE_BUILD_DIR:-build-release}"
 ARTIFACTS="$BUILD_DIR/MasterLimiter_artefacts/Release"
 PLUGIN="MasterLimiter"
+PLUGIN_VERSION="${PLUGIN_VERSION:-0.3.2}"
 
 verify_binary() {
     local path="$1"
@@ -48,7 +49,7 @@ if [[ -f "$ARTIFACTS/AAX/${PLUGIN}.aaxplugin/Contents/MacOS/${PLUGIN}" ]]; then
     verify_binary "$ARTIFACTS/AAX/${PLUGIN}.aaxplugin/Contents/MacOS/${PLUGIN}" "AAX"
 fi
 
-SIGNED_PKG="installer/${PLUGIN}-0.3.1-macOS-signed.pkg"
+SIGNED_PKG="installer/${PLUGIN}-${PLUGIN_VERSION}-macOS-signed.pkg"
 if [[ -f "$SIGNED_PKG" ]]; then
     echo "--- Installer ---"
     ls -la "$SIGNED_PKG"
