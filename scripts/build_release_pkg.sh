@@ -17,7 +17,7 @@ CONFIG="Release"
 PLUGIN_DEV_MODE="${PLUGIN_DEV_MODE:-OFF}"
 
 PLUGIN_NAME="MasterLimiter"
-PLUGIN_VERSION="0.3.1"
+PLUGIN_VERSION="0.3.2"
 COMPANY_NAME="MelechDSP"
 
 echo "=========================================="

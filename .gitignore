@@ -60,4 +60,5 @@ tools/analysis/__pycache__/
 release/*.pkg
 release/*.sha256
 release/*.dmg
+release/staging/
 release/*.pdf

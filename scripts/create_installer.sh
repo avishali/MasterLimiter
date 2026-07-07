@@ -18,7 +18,7 @@ cd "$PROJECT_ROOT"
 source "$SCRIPT_DIR/source_repo_env.sh"
 
 PLUGIN_NAME="MasterLimiter"
-PLUGIN_VERSION="0.3.1"
+PLUGIN_VERSION="${PLUGIN_VERSION:-0.3.2}"
 COMPANY_NAME="MelechDSP"
 BUNDLE_ID="com.MelechDSP.MasterLimiter"
 BUILD_DIR="${MASTERLIMITER_RELEASE_BUILD_DIR:-build-release}"
