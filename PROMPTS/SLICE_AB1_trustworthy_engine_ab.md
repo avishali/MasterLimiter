@@ -4,23 +4,15 @@
 **Prerequisites now met:** CLIP-1/1.1, LINK-1, SMART-0/1/1.1/1.2, CLIP-2, UI-4 have all landed.
 **Repo/scope:** plugin `MasterLimiter` only. **No SDK change.** No engine/breathing DSP change.
 
-## Why (measured 2026-08-02, installed 0.3.2-beta VST3, jazz `MIX 0003`, ceiling -1 SP)
+## Why
 
-The 0.3.2-beta asks testers to flip **Transparent <-> Open** and report which sounds better. As shipped,
-that comparison is confounded by two things that have nothing to do with engine character:
+The 0.3.2-beta asked testers to flip **Transparent <-> Open** and report which sounded better. That
+comparison was confounded by two things unrelated to engine character. **One is now fixed:**
 
-**1. Latency is not equal across engines — it jumps 44 ms on switch.**
-
-| engine | reported latency |
-|---|---|
-| Transparent | 3229 samples = **67.27 ms** |
-| Open | 1104 samples = **23.00 ms** |
-
-`syncReportedLatency()` (`Source/PluginProcessor.cpp:1425`) reports
-`mbEngine_.getLatencySamples() + mbClipOsLatency` for Open vs `baseLatencySamples_` for Transparent.
-Flipping mid-session either forces the host to renegotiate PDC (click / playback re-sync at exactly the
-moment of comparison) or silently shifts the plugin 44 ms against the rest of the session. Testers will
-hear that as "the engine".
+**1. ~~Latency jumped 44 ms on switch~~ — FIXED.** On 0.3.2-beta, Transparent reported 3229 samples
+(67.3 ms) and Open 1104 (23.0 ms), so flipping mid-session re-synced or misaligned playback at the exact
+moment of comparison. CLIP-1.1 fixed latency at the maximum across all configurations; both engines now
+report **3003** on every corpus source. Nothing to build — but keep it as a regression check (gate below).
 
 **2. The loudness offset is SMALLER now, but it VARIES BY SOURCE — which is worse.**
 
@@ -38,9 +30,10 @@ and neither can we: the match has to be **live and program-dependent**. That is 
 0.8-1.2 dB figure was Transparent vs Open+**Manual**; Smart is much closer in level, which is why the
 *variance* rather than the offset is now the problem.)
 
-Louder is reliably heard as fuller/punchier/better. The release notes currently say *"Match levels by ear
-if one is louder"* — that is not a control, it is a request for the tester to do the hardest part of the
-experiment unaided. `gain_match_auto` does NOT solve this: it tracks a *learned dry reference*
+Louder is reliably heard as fuller/punchier/better. The 0.3.2 release notes said *"Match levels by ear
+if one is louder"* — that is not a control, it is asking the tester to do the hardest part of the
+experiment unaided, and with a sign-flipping per-source offset it cannot be done by hand at all.
+`gain_match_auto` (exposed as **"Auto / Track"**) does NOT solve it: it tracks a *learned dry reference*
 (`learnedRefLufs_`), not engine-to-engine, and `PresetManager.cpp:118` sets it OFF on preset load.
 
 **Consequence:** the engine verdict gates what ships in 1.0. A biased verdict is worse than no verdict,
@@ -61,10 +54,10 @@ Transparent wins on live-recorded material; Open+Smart wins on dense studio prod
 **not** ask "which engine is better" — it asks **"which engine for which material"**. The blind A/B and the
 loudness match are still exactly what is needed; only the framing and the analysis change.
 
-> ⚠️ **Retrieval log first.** Read and report: `syncReportedLatency` + `baseLatencySamples_` +
-> `mbEngine_.getLatencySamples()`; the loudness estimator + `learnedRefLufs_` / `updateCompensationGainDb`
-> / `applyCompensationGain`; `dryDelay_` and how it tracks reported latency; the DEV Engine selector
-> (UI-2) and its param listener; `setStateInformation` (the UI-2.1a async guard pattern).
+> ⚠️ **Retrieval log first.** Read and report: the loudness estimator + `learnedRefLufs_` /
+> `updateCompensationGainDb` / `applyCompensationGain`; the DEV Engine selector (UI-2) and its param
+> listener; `setStateInformation` (the UI-2.1a async guard pattern); and the UI-4 control->group
+> association, since the new controls must join it or they will leak across engine frames again.
 
 ## What to build
 
@@ -94,17 +87,19 @@ engines mid-playback is already glitch-free. Nothing to do here.
 - ⚠️ **ASCII-GATE**: labels are ASCII only (the build now fails on non-ASCII UI literals).
 
 ## Gate (Claude verifies by measurement — same rig as the Why table)
-- [ ] **Latency identical across engines**, both formats, fresh instance per engine, and unchanged when
-      toggling `dev_mb_engine` live. This is the headline number: `Transparent == Open`.
-- [ ] **Loudness-matched switch:** at input +3/+6/+9/+12 dB, |Open RMS - Transparent RMS| <= **0.15 dB**
-      with `ab_match` ON (vs the 0.81-1.21 dB above).
-- [ ] **Ceiling still held:** sample peak <= -1.0 dB on both engines at every gain above, `ab_match` ON.
-- [ ] **`ab_match` OFF is a null** vs pre-AB-1 HEAD (bit-identical or -140 dBFS residual), so the
-      measured Open voicing in `SPECTRAL_ENGINE_DESIGN.md` is untouched.
-- [ ] **Open's macro-breathing is preserved:** 300 ms range still ~4.9 jazz / ~6.4 edm at matched loudness.
-      The padding and trim must not change what Open *does*, only how fairly it can be compared.
+- [ ] **`ab_match` OFF is a null** vs pre-slice HEAD (residual <= -140 dB). This slice must not move either
+      engine's measured voicing.
+- [ ] **Loudness-matched switch:** on all four corpus sources at +14 dB input,
+      |Open+Smart RMS - Transparent RMS| <= **0.15 dB** with `ab_match` ON
+      (today: +0.11 / -0.11 / +0.97 / +0.07 — the +0.97 on `easy-master` is the one to kill).
+- [ ] **Ceiling still held:** sample peak <= -1.00 dB on both engines with `ab_match` ON. The trim must not
+      buy a level match by letting peaks through.
+- [ ] **Latency regression check:** both engines still report **3003**, unchanged by `ab_match`.
+- [ ] **`mbl_calibrate.py` 58/59** — A-N and Z all PASS except the known Open-vs-inline IMD.
+- [ ] **Frontier score unmoved** with `ab_match` OFF: `mbl_frontier2.py` Open+Smart mean still **3.956**.
 - [ ] Blind mapping stable across UI reopen + preset save/load; `.mlpreset` still records the true engine.
-- [ ] Build clean, AU + VST3, **both installed** (verify mtimes — this keeps getting missed).
+- [ ] New controls join the UI-4 control->group association (no leaking across engine frames).
+- [ ] Build clean, AU + VST3, **both installed**, mtimes for both.
 
 ## Non-goals
 - No SDK edits. No change to either engine's DSP. No new engine.
@@ -116,5 +111,10 @@ ceiling still holds. 4. Build + install mtimes. 5. Confirm no SDK edits.
 6. Open questions.
 
 ## Note for the architect
-Do NOT ship another tester round on the old protocol. The blind + matched build is what produces a
-verdict we can act on; the freeform "match by ear" round produces a number we would have to throw away.
+Do NOT ship another tester round on the old protocol. The blind + matched build is what produces a verdict
+we can act on; the freeform "match by ear" round produces a number we would have to throw away.
+
+`docs/AB_PROTOCOL.md` also needs its analysis section updated: the "split by source type" branch, written
+as a fallback outcome, is now the **expected** one — the measurement predicts Transparent wins on
+live-recorded material and Open+Smart on dense studio production. The protocol must ask testers to bring
+**both kinds of source** or it cannot detect the split it is looking for.

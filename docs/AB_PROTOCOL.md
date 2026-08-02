@@ -33,8 +33,13 @@ Fixing the rule in advance is the point. It stops us reading whatever comes back
 - **Ship the winner** if it takes **>= 70% of consistent votes** across all testers.
 - **50-70%** => the engines are close enough that the choice is not being made on quality. Decide on
   simplicity/CPU/latency instead, and say so explicitly rather than pretending the ears decided.
-- **Split by source type** (e.g. Open wins on dense/electronic, Transparent on acoustic) => that is a real
-  result and argues for **shipping both as a user-facing choice**, not for picking one.
+- ⭐ **Split by source type => this is now the EXPECTED outcome, not a fallback.** Measured 2026-08-02
+  (`mbl_frontier2.py`, |MACRO|+|PUMP|+|ROUGH|, peak-gated): Transparent is the best engine we have on the
+  **live-recorded** source (3.05, beating Pro-L 2 Allround 3.18) and the worst on **dense studio
+  production** (10.94); Open+Smart is the exact inverse (2.91 and 2.22 on the dense sources, 4.91 on the
+  live one). If the listening splits the same way, that **confirms both engines earn their place** and the
+  selector is a product feature, not a leftover. If it does NOT split that way, the measurement and the
+  ears disagree and we stop and find out why before shipping either.
 
 Minimum for any conclusion: **3 testers**. Below that, report it as anecdote and say so.
 
@@ -55,11 +60,15 @@ Use five contrasting sources. Suggested spread — swap in your own, but keep th
 
 | # | Source type |
 |---|---|
-| 1 | Full mix, dense / electronic |
-| 2 | Full mix, acoustic or dynamic |
-| 3 | Drums / percussion-led |
-| 4 | Vocal-forward material |
+| 1 | **Live recording** (live show, room mics) — REQUIRED, this is where the engines are predicted to differ most |
+| 2 | **Dense studio production** (loud, tightly mixed) — REQUIRED, the predicted opposite case |
+| 3 | Full mix, acoustic or dynamic |
+| 4 | Drums / percussion-led, or vocal-forward |
 | 5 | Bass-heavy material |
+
+⚠️ **Sources 1 and 2 are not optional.** The measurement predicts the engines swap places between exactly
+those two kinds of material. A tester who brings five dense productions cannot detect the split, and their
+data would read as "Open always wins" — which would be an artefact of their library, not a verdict.
 
 For each source:
 
