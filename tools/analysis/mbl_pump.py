@@ -117,7 +117,7 @@ def _plug(path):
     return _CACHE[path]
 
 
-def render_ours(x, sr, gain, mb, release_ms=150.0):
+def render_ours(x, sr, gain, mb, release_ms=150.0, attack_ms=None, crossover_hz=120.0):
     p = _plug(OURS)
     names = set(p.parameters.keys())
 
@@ -128,9 +128,11 @@ def render_ours(x, sr, gain, mb, release_ms=150.0):
 
     put("dev_mb_engine", mb)
     if mb:
-        put("dev_mb_crossover_hz", 120.0)
+        put("dev_mb_crossover_hz", float(crossover_hz))
         put("dev_mb_attack_mode", "Ramp")
         put("dev_mb_release_ms", release_ms)
+        if attack_ms is not None:
+            put("dev_mb_attack_ms", float(attack_ms))
         put("dev_mb_safety", False)
     put("limiter_active", True)
     put("drive_active", False)
