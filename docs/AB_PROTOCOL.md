@@ -63,8 +63,14 @@ Use five contrasting sources. Suggested spread — swap in your own, but keep th
 
 For each source:
 
-1. Raise **Input Gain** until the History Graph shows **3-6 dB** of gain reduction on the loudest section.
+1. Raise **Input Gain** until the History Graph shows **6-10 dB** of gain reduction on the loudest section.
    **Leave it there for the whole comparison** — do not re-tune it per engine. Note the value.
+
+   > ⚠️ **Why not 3-6 dB (the original instruction)?** Measured 2026-08-02 on a 2.6-minute live mix:
+   > at ~7 dB of push every engine — ours and both references — preserves the source's macro-dynamics
+   > to within **0.04 dB** of each other. They are genuinely indistinguishable on the metrics there.
+   > At ~11 dB of push they spread out over **2.3 dB**. Asking testers to judge at 3-6 dB GR would be
+   > asking them to hear a difference that is not present. Push until the engines actually differ.
 2. Play a **10-20 s section** that includes both a loud and a quiet part.
 3. Flip **A <-> B** at least four times while it loops. Loudness is already matched, so what changes is
    character only.
