@@ -166,13 +166,18 @@ So the objective is explicitly **multi-term** — not just macro preservation. F
 prototype in this programme:
 
 ```
-score =  w1 * |MACRO 0.1-0.5 Hz|        flatness AND invented slow swings (both are errors)
-       + w2 * max(0, PUMP_added)        2-8 Hz movement the source did not have
-       + w3 * max(0, ROUGH_added)       8-20 Hz -- grit/artifacts
+score =  w1 * |MACRO 0.1-0.5 Hz|   +   w2 * |PUMP 2-8 Hz|   +   w3 * |ROUGH 8-20 Hz|
        subject to   sample peak <= ceiling            HARD GATE, never traded
                     measured at matched ACTUAL gain reduction, realistic push, full corpus
 minimise score
 ```
+
+⚠️ **Corrected 2026-08-02 — use `|deviation|` in EVERY band, not `max(0, added)`.**
+The first version penalised only *added* movement. But every limiter we have measured *removes* movement
+in the PUMP and ROUGH bands (all values negative), so `max(0, .)` was always zero and the whole score
+silently collapsed to `|MACRO|` alone. Removal is exactly the **flatness** avishali asked us to prevent —
+it has to count. This was not academic: on the very first measurement it inverted the verdict, scoring the
+existing Smart engine as the *worst* of three when on the correct objective it is the *best* (§9).
 
 Loudness is deliberately **not** in the objective. Holding perceived loudness is the user's job via the
 gain knob; the engine's job is to make the reduction inaudible. `tools/analysis/mbl_pump.py` already
@@ -187,3 +192,32 @@ reports all three terms — the weights are the open voicing question, not the s
   that leaving Ramp changes the engine's character, not just a time constant.
 - Release has no global optimum (§1); default moves to 30 ms on avishali's listening, and the adaptive
   release of axis 1 is the real answer.
+
+## 9. Axis 1 is already substantially built — `ReleaseEngine::Smart` measured 2026-08-02
+
+`ReleaseEngine::Smart` (commit `775a1c3`, July, `dev_smart_fast_ms` / `_slow_ms` / `_sustain_ms` / `_leak`)
+had never been measured against a real objective — it predates the MACRO/PUMP metric by three weeks.
+Measured now, inline path, 60 s excerpts, matched to ~3 dB RMS-GR, ceiling held at −1.00 by all three:
+
+| source | engine | \|MACRO\| | \|PUMP\| | \|ROUGH\| | **total** |
+|---|---|---:|---:|---:|---:|
+| live-show | Adaptive | 0.93 | 1.42 | 0.66 | 3.01 |
+| live-show | Lookahead *(shipping)* | **0.53** | 1.32 | 1.99 | 3.84 |
+| live-show | **Smart** | 1.19 | **1.24** | **0.47** | **2.90** ✅ |
+| homework | Adaptive | **0.51** | 1.43 | 1.00 | **2.94** ✅ |
+| homework | Lookahead *(shipping)* | 0.96 | 1.60 | 2.64 | 5.20 |
+| homework | **Smart** | 1.22 | **1.02** | **0.73** | 2.97 |
+
+**Smart is not inert and it is not a failure.** It trades macro preservation for markedly better
+preservation of beat-rate (PUMP) and fast (ROUGH) movement — best or tied-best overall on both sources,
+and it beats the shipping `Lookahead` engine on total deviation by a wide margin on both.
+
+`Lookahead` — what Transparent ships with — is the **worst** of the three on total deviation, because it
+flattens the ROUGH band hardest (1.99 / 2.64).
+
+⇒ **SMART-1 shrinks.** It is not "build adaptive release"; it is **port the existing Smart release into the
+Open engine's `MultibandLimiter` path and drive it from the unified lookahead analysis (§4), scaled by
+`f(GR_depth)` (§7.2)**.
+
+⚠️ Caveats before acting: 2 sources, 60 s, one operating point, and the four `dev_smart_*` params are at
+untuned defaults. Confirm across the full corpus and sweep those params before treating this as settled.
