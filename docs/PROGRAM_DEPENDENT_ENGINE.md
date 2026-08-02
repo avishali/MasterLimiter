@@ -87,10 +87,63 @@ after C++ work had begun. Prototype in Python, measure, then commit to DSP.
 - SDK primitives keep their technical names (`ENGINE_NAMING.md`); "Smart" is the product name for the
   composition.
 
-## 7. Open questions for avishali
+## 7. ANSWERED by avishali, 2026-08-02 — these are now design law
 
-1. **Does Smart replace Open, or sit beside it?** (Affects whether the alpha selector becomes 3-way.)
-2. **How much adaptation is too much?** A limiter whose behaviour changes under the user is harder to
-   trust on a master. Should adaptation depth itself be a user control (an "Adapt" amount)?
-3. **Axis 3 target:** adapt depth to preserve macro-dynamics, or to hold a *perceived* loudness? Those
-   pull in different directions and the choice defines the engine.
+### 7.1 Smart sits BESIDE Open (not a replacement)
+Three engines: Transparent · Open · Smart. Alpha selector becomes 3-way when Smart is auditionable.
+Open stays exactly as measured today; Smart must be A/B-able against it at all times.
+
+### 7.2 ⭐ Adaptation scales with how hard the user is pushing
+> *"when user is pushing a little that means he is getting the results with little movements and
+> reduction; when he pushes hard and reduction is bigger, that's more audible, and there we should
+> adapt harder to smooth artifacts and keep the limiter transparent."*
+
+**The adaptation amount is a function of the measured gain reduction depth**, not a fixed law:
+
+```
+adapt(t) = f( GR_depth(t) )      f(0 dB) = 0   ->  Smart degenerates EXACTLY to Open
+                                 f(large) = 1  ->  full adaptation where artifacts live
+```
+
+Three things make this the right shape, and one of them is measured:
+
+1. **It is measured.** At ~7 dB push every engine we tested — ours, Pro-L 2, Ozone — preserved
+   macro-dynamics to within **0.04 dB** of each other. There is nothing to win at light push. At ~11 dB
+   they spread over **2.3 dB**. Adaptation should therefore be ~0 where the engines are already
+   indistinguishable and maximal where they diverge. The push-dependent law falls straight out of the data.
+2. **It cannot hurt light use.** At low GR, Smart ≡ Open bit-for-bit. A user doing 2 dB of gentle
+   limiting gets today's proven engine and none of the risk.
+3. **It makes the A/B clean.** Any Smart-vs-Open difference a tester reports is attributable to the
+   heavy passages, because the light ones are identical by construction.
+
+`GR_depth(t)` must be a *smoothed* measure (the adaptation must not itself become a fast modulator —
+that would be a new pumping source). Time constant is a voicing parameter; start ~1 s.
+
+### 7.3 Axis 3 optimises for DYNAMICS, not loudness
+> *"preserving dynamics, preventing pumping and flatness and other artifacts"*
+
+So the objective is explicitly **multi-term** — not just macro preservation. Formalised for every
+prototype in this programme:
+
+```
+score =  w1 * |MACRO 0.1-0.5 Hz|        flatness AND invented slow swings (both are errors)
+       + w2 * max(0, PUMP_added)        2-8 Hz movement the source did not have
+       + w3 * max(0, ROUGH_added)       8-20 Hz -- grit/artifacts
+       subject to   sample peak <= ceiling            HARD GATE, never traded
+                    measured at matched ACTUAL gain reduction, realistic push, full corpus
+minimise score
+```
+
+Loudness is deliberately **not** in the objective. Holding perceived loudness is the user's job via the
+gain knob; the engine's job is to make the reduction inaudible. `tools/analysis/mbl_pump.py` already
+reports all three terms — the weights are the open voicing question, not the structure.
+
+## 8. Measured facts the implementation must respect
+
+- **`dev_mb_attack_ms` is INERT in `Ramp` attack mode** (bit-identical from 0.5 to 25 ms), and active only
+  in `Hybrid` / `Real`. Ramp derives its attack from the lookahead pre-ramp, so there is no attack
+  constant to set — **Ramp already is the fast attack** avishali asked for. Every frontier and voicing
+  number we have was measured in Ramp. Do not "sweep attack" without first leaving Ramp, and understand
+  that leaving Ramp changes the engine's character, not just a time constant.
+- Release has no global optimum (§1); default moves to 30 ms on avishali's listening, and the adaptive
+  release of axis 1 is the real answer.
