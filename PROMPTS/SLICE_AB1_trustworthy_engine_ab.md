@@ -1,7 +1,7 @@
-# SLICE AB-1 — make the tester engine A/B trustworthy (latency parity + loudness match + blind labels)
+# SLICE AB-1 — make the tester engine A/B trustworthy (loudness match + blind labels)
 
-**Status:** spec ready · **Sequenced AFTER `SLICE_CLIP1_ceiling_unification.md`** (both touch the processor's
-post-engine stage — do not run them in parallel) · **Architect:** Claude · **Verify:** Claude (measured, below) · **Audition:** avishali
+**Status:** REVISED 2026-08-03 for the current build · **Architect:** Claude · **Verify:** Claude (measured) · **Audition:** avishali
+**Prerequisites now met:** CLIP-1/1.1, LINK-1, SMART-0/1/1.1/1.2, CLIP-2, UI-4 have all landed.
 **Repo/scope:** plugin `MasterLimiter` only. **No SDK change.** No engine/breathing DSP change.
 
 ## Why (measured 2026-08-02, installed 0.3.2-beta VST3, jazz `MIX 0003`, ceiling -1 SP)
@@ -22,14 +22,21 @@ Flipping mid-session either forces the host to renegotiate PDC (click / playback
 moment of comparison) or silently shifts the plugin 44 ms against the rest of the session. Testers will
 hear that as "the engine".
 
-**2. Open is 0.8-1.2 dB LOUDER at the same input gain.**
+**2. The loudness offset is SMALLER now, but it VARIES BY SOURCE — which is worse.**
 
-| input gain | Transparent RMS | Open RMS | Open louder by |
-|---:|---:|---:|---:|
-| +3.0 | -16.96 | -16.01 | **+0.95** |
-| +6.0 | -14.19 | -13.24 | **+0.95** |
-| +9.0 | -11.70 | -10.88 | **+0.81** |
-| +12.0 | -10.15 | -8.94 | **+1.21** |
+Re-measured 2026-08-03, Transparent vs **Open+Smart** (the current defaults), +14 dB input:
+
+| source | Transparent | Open+Smart | offset |
+|---|---:|---:|---:|
+| live-show | -12.14 | -12.03 | +0.11 |
+| ishay-ribo | -9.58 | -9.69 | -0.11 |
+| **easy-master** | -14.54 | -13.57 | **+0.97** |
+| homework-dense | -11.06 | -10.99 | +0.07 |
+
+Mean +0.26 dB, **spread 1.08 dB, and the sign flips**. So a tester cannot compensate with one fixed trim,
+and neither can we: the match has to be **live and program-dependent**. That is what AB-1b does. (The old
+0.8-1.2 dB figure was Transparent vs Open+**Manual**; Smart is much closer in level, which is why the
+*variance* rather than the offset is now the problem.)
 
 Louder is reliably heard as fuller/punchier/better. The release notes currently say *"Match levels by ear
 if one is louder"* — that is not a control, it is a request for the tester to do the hardest part of the
@@ -39,6 +46,21 @@ experiment unaided. `gain_match_auto` does NOT solve this: it tracks a *learned 
 **Consequence:** the engine verdict gates what ships in 1.0. A biased verdict is worse than no verdict,
 because we would act on it. Fix the instrument before collecting more data.
 
+### ⭐ AND THE QUESTION HAS CHANGED — this is the important revision
+The frontier measurement (2026-08-02, `mbl_frontier2.py`) shows the two engines are **complementary, not
+competing**:
+
+| source | OPEN+Smart | TRANSPARENT |
+|---|---:|---:|
+| live-show (live recording) | 4.91 | **3.05** — best of our engines, beats Pro-L 2 Allround |
+| ishay-ribo | **2.91** | 10.94 — worst of everything measured |
+| easy-master | **5.78** | 6.41 |
+| homework-dense | **2.22** | 5.39 |
+
+Transparent wins on live-recorded material; Open+Smart wins on dense studio production. So the A/B must
+**not** ask "which engine is better" — it asks **"which engine for which material"**. The blind A/B and the
+loudness match are still exactly what is needed; only the framing and the analysis change.
+
 > ⚠️ **Retrieval log first.** Read and report: `syncReportedLatency` + `baseLatencySamples_` +
 > `mbEngine_.getLatencySamples()`; the loudness estimator + `learnedRefLufs_` / `updateCompensationGainDb`
 > / `applyCompensationGain`; `dryDelay_` and how it tracks reported latency; the DEV Engine selector
@@ -46,14 +68,10 @@ because we would act on it. Fix the instrument before collecting more data.
 
 ## What to build
 
-### AB-1a — latency parity (the correctness fix)
-- Report **one constant latency for both engines**: `abLatencySamples_ = max(transparentLatency, openLatency)`,
-  computed once in `prepareToPlay`.
-- Pad the shorter engine's wet path to that common latency with a fixed delay (reuse the existing
-  align-delay pattern, e.g. `clipperOsAlignDelay_` / `lookaheadPad_`).
-- `setLatencySamples()` is then called **once per prepare, never on engine switch**. Switching engines
-  must not change reported latency at all.
-- `dryDelay_` keeps tracking the reported value (unchanged relationship).
+### ~~AB-1a — latency parity~~ ✅ ALREADY DONE — do not rebuild
+CLIP-1.1 fixed reported latency at the maximum across every configuration. **Re-measured 2026-08-03 on the
+current build: Transparent and Open+Smart both report 3003 samples on all four corpus sources.** Switching
+engines mid-playback is already glitch-free. Nothing to do here.
 
 ### AB-1b — loudness-matched switching (the validity fix)
 - New param `ab_match` (bool, **default ON**), UI label **"A/B Match"**, next to the engine selector.
