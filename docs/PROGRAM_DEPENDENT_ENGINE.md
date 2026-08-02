@@ -30,7 +30,7 @@ there aren't any:
 | # | Axis | What adapts | Detailed design |
 |---|---|---|---|
 | 1 | **Release** | recovery rate follows program density / transient rate | `INTELLIGENT_RELEASE_DESIGN.md` (`ReleaseEngine::AdaptiveLookahead`) |
-| 2 | **Attack** | fast by default; slows only where a fast attack would audibly distort (LF) | new — see §4 |
+| 2 | **Attack** | ramp shape decided from what the lookahead window actually contains | new — see §4 |
 | 3 | **Reduction depth** | *how much* GR to apply, per program and per band | `ADAPTIVE_THRESHOLD_ENGINE.md` (dynamic threshold) |
 
 **Axis 3 is avishali's 2026-08-02 addition and it is the most novel.** Every limiter on the market adapts
@@ -56,15 +56,55 @@ minimise |added envelope modulation| in 0.1-0.5 Hz  (MACRO)
 MACRO while missing the ceiling has not improved anything** — that mistake cost us three weeks of
 believing Open was at parity.
 
-## 4. Axis 2 — attack (the small one, do it first)
+## 4. Axis 2 — attack, decided from the lookahead (avishali, 2026-08-02)
 
-avishali: attack should be fast by default. The known counter-pressure is that a fast attack on
-low-frequency content produces waveform distortion (measured, `SPECTRAL_ENGINE_DESIGN.md`: "the wideband
-attack distortion law"). The 3-band work already showed per-band attack scaling is a weak lever on its own.
+> *"attack should also be program dependent, using the lookahead to determine how fast to react."*
 
-Proposal: **fast global attack, with the LF band alone permitted to slow down when its own crest demands
-it.** This is a much smaller adaptive rule than axes 1 and 3 and is a good first slice — it exercises the
-adaptation plumbing on a low-risk axis before the harder ones.
+This is the right formulation and it supersedes the weaker "fast globally, LF slows down" proposal.
+
+### The insight
+The lookahead window **already contains the future**. Today's `Ramp` mode uses it, but with a *fixed*
+shape — which is exactly why `dev_mb_attack_ms` is inert in Ramp (§8): there is no decision being made,
+just a constant pre-ramp. Program-dependent attack makes that shape a **decision** taken from what is
+actually sitting in the buffer.
+
+### The lookahead window is a budget
+The ramp must finish before the peak arrives — that is what makes a lookahead limiter distortion-free
+instead of a fast RC follower. So the lookahead time is a **budget**, and the question per event is how
+much of it to spend:
+
+| what the lookahead sees | ramp | why |
+|---|---|---|
+| isolated sharp transient, HF-dominated | **short** — spend little of the budget | ear is insensitive to fast gain change on HF; a long ramp needlessly ducks the material before the hit |
+| large overshoot on LF content | **long** — spend most of the budget | fast gain change on a low-frequency waveform IS waveform distortion (the measured "wideband attack distortion law", `SPECTRAL_ENGINE_DESIGN.md`) |
+| sustained loud passage, small overshoot | **long / gentle** | nothing transient to catch; a fast attack here only adds movement |
+| dense transient train | **short, and hold** | re-ramping per hit is a modulation source; better to stay down |
+
+Signals to extract from the lookahead buffer: **time-to-peak**, **overshoot height above threshold**,
+**LF content of the upcoming block**, **transient density**. These are the "eyes" in the
+eyes -> brain -> hands framing of `ADAPTIVE_THRESHOLD_ENGINE.md` §3.
+
+### Why this unifies the whole engine
+All three axes want to look at the same thing. **One analysis of the lookahead window can drive all three
+decisions** — release rate (axis 1), ramp shape (axis 2), and reduction depth (axis 3) — instead of three
+independent detectors. That is cheaper, easier to reason about, and means the axes cannot fight each other
+by acting on different views of the signal.
+
+```
+        lookahead buffer  ->  ANALYSE  ->  { time-to-peak, overshoot, LF share, density, GR depth }
+                                             |            |             |
+                                          attack       release       depth
+                                          (ramp)       (recovery)    (how hard)
+```
+
+This also composes with §7.2: the whole block scales by `f(GR_depth)`, so at light push the analysis
+output is ignored and the engine is Open exactly.
+
+### Consequence for lookahead time
+A bigger budget buys more room to be gentle. `dev_mb_lookahead_ms` (currently 5 ms) becomes a real design
+parameter rather than a fixed cost, and the latency trade is now a *voicing* decision. Worth sweeping once
+axis 2 exists — but note the plugin's reported latency is fixed at the maximum by design (CLIP-1.1), so
+raising the lookahead raises latency for every configuration.
 
 ## 5. Sequencing
 
@@ -72,7 +112,7 @@ adaptation plumbing on a low-risk axis before the harder ones.
 |---|---|---|
 | **SMART-0** | Defaults: release 150 → 30 ms, attack → fast (value from the stage-2 sweep). No new DSP. | trivial |
 | **SMART-1** | Adaptive **release** in the Open engine's `MultibandLimiter` path (axis 1). DEV-toggled, A/B against fixed. | medium |
-| **SMART-2** | Adaptive **attack** (axis 2), LF-aware. | low |
+| **SMART-2** | Adaptive **attack** (axis 2): ramp shape from the lookahead analysis. | medium |
 | **SMART-3** | Adaptive **reduction depth** (axis 3) — the novel one. Prototype in Python against the rig FIRST (`ADAPTIVE_THRESHOLD_ENGINE.md` §8 validation-first), C++ only once it measures. | high |
 
 **Do SMART-0 now** (it is a default change avishali's ears already back). **Do not start SMART-3 in C++**
