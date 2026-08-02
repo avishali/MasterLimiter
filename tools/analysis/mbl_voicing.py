@@ -10,16 +10,21 @@ large lever on macro-dynamic preservation:
 So our default costs ~0.85 dB against 60 ms, and Open at 60 ms sits close to Pro-L 2 / Ozone. Before
 building any new engine, find out how much of the "frontier gap" is just an untuned default.
 
-METRIC: MACRO preservation (0.1-0.5 Hz added envelope modulation, see mbl_pump.py). Higher (closer to 0)
-is better -- it means the limiter passed the source's section-level dynamics through. `st_range` is
-reported alongside but is NOT the objective: it cannot tell breathing from pumping.
+METRIC: |MACRO| -- the ABSOLUTE 0.1-0.5 Hz added envelope modulation (see mbl_pump.py). Zero means the
+limiter passed the source's section-level dynamics through untouched. Negative = it flattened them;
+POSITIVE = it invented slow swings that were never in the source (long releases do this as gain crawls
+back over seconds). Both directions are errors, so the objective is distance from zero -- ranking on the
+signed value once crowned 300 ms purely because one source scored +1.53. `st_range` is reported
+alongside but is NOT the objective: it cannot tell breathing from pumping.
 
 METHOD: coordinate descent, not a full grid (a full grid is ~2.4 h per source).
     stage 1  release      (attack/crossover at default)
     stage 2  attack       (at stage 1's winner)
     stage 3  crossover    (at stage 1+2's winner)
-Every config is loudness-matched to the same push, and every config must hold sPk <= -1.00 -- a setting
-that wins by letting peaks through is not a win (that is exactly how the old 6.39 EDM figure happened).
+Every config is matched to the same ACTUAL gain reduction (not the same output RMS -- on a high-headroom
+source an RMS "push" can be reached with ~0 dB of limiting, which made one source return identical rows
+at every setting). Every config must also hold sPk <= -1.00: a setting that wins by letting peaks through
+is not a win, which is exactly how the old 6.39 EDM figure happened.
 
 Usage:
     ./.venv/bin/python mbl_voicing.py --stage 1
@@ -42,7 +47,7 @@ CORPUS = [   # spread of macro-dynamics (dry rng3s in comment), all 44.1 kHz
     ("homework-dense", TF + "/Homework MIX nom.wav"),
 ]
 
-PUSH_DB = 11.0          # dB above the source's own RMS -- where engines actually differ
+GR_TARGET = 8.0         # dB of ACTUAL gain reduction -- see match() for why this replaced an RMS push
 MAX_SECS = 120.0        # plenty of 3 s windows for the macro statistic, half the render cost
 
 
@@ -56,18 +61,32 @@ def load(path):
     return np.ascontiguousarray(x.astype(np.float32)), sr
 
 
-def match(x, sr, target, **kw):
-    """Search input gain so output RMS ~= target. Coarse then fine."""
+def gr_of(x, y, drive_db):
+    """Actual gain reduction: gain we asked for, minus level we actually got."""
+    return drive_db - (rms_of(y) - rms_of(x))
+
+
+def match(x, sr, target_gr, **kw):
+    """Search input gain so the limiter does `target_gr` dB of ACTUAL gain reduction.
+
+    Matching on output RMS instead was a methodology flaw: on a source with a lot of headroom
+    (easy-master, peak -9.9 dBFS) an 11 dB "push" was achieved almost entirely by clean gain with
+    ~0 dB of limiting, so every release setting produced byte-identical results and the source
+    contributed nothing but a flat row. Matching on GR guarantees the limiter is actually working
+    equally hard on every source and every setting -- which is the thing being compared.
+    """
     best = None
-    for g in np.arange(4.0, 24.01, 1.5):
+    for g in np.arange(2.0, 24.01, 1.5):
         y = render_ours(x, sr, float(g), True, **kw)
-        if best is None or abs(rms_of(y) - target) < abs(rms_of(best[1]) - target):
-            best = (float(g), y)
+        e = abs(gr_of(x, y, g) - target_gr)
+        if best is None or e < best[2]:
+            best = (float(g), y, e)
     for g in np.arange(max(0.0, best[0] - 1.25), min(24.0, best[0] + 1.26), 0.5):
         y = render_ours(x, sr, float(g), True, **kw)
-        if abs(rms_of(y) - target) < abs(rms_of(best[1]) - target):
-            best = (float(g), y)
-    return best
+        e = abs(gr_of(x, y, g) - target_gr)
+        if e < best[2]:
+            best = (float(g), y, e)
+    return best[0], best[1]
 
 
 def evaluate(label, variants, kwargs_for):
@@ -75,24 +94,36 @@ def evaluate(label, variants, kwargs_for):
     per_source = {}
     for name, path in CORPUS:
         x, sr = load(path)
-        target = rms_of(x) + PUSH_DB
-        print(f"\n  {name}  ({len(x)/sr:.0f}s, dry RMS {rms_of(x):.1f} -> target {target:.1f})")
-        print(f"    {label:>10} {'drive':>6} {'sPk':>6} {'MACRO':>7} {'PUMP':>7} {'rng3s':>7}")
+        print(f"\n  {name}  ({len(x)/sr:.0f}s, dry RMS {rms_of(x):.1f}, target {GR_TARGET:.0f} dB GR)")
+        print(f"    {label:>10} {'drive':>6} {'GR':>6} {'sPk':>6} {'MACRO':>7} {'PUMP':>7} {'rng3s':>7}")
         for v in variants:
-            d, y = match(x, sr, target, **kwargs_for(v))
+            d, y = match(x, sr, GR_TARGET, **kwargs_for(v))
             am = added_modulation(x, y, sr)
-            spk = sample_peak_db(y)
-            ok = "" if spk <= -0.99 else "  <-- PEAK MISS, result invalid"
-            per_source.setdefault(v, []).append(am["MACRO 0.1-0.5"] if spk <= -0.99 else np.nan)
-            print(f"    {str(v):>10} {d:+6.1f} {spk:6.2f} {am['MACRO 0.1-0.5']:+7.2f} "
-                  f"{am['PUMP 2-8']:+7.2f} {st_range_win(y,3.0,sr):7.2f}{ok}")
-    print(f"\n  ===== MEAN MACRO across corpus (higher = better; 0 = perfectly preserved) =====")
-    ranked = sorted(per_source.items(), key=lambda kv: -np.nanmean(kv[1]))
+            spk, gr = sample_peak_db(y), gr_of(x, y, d)
+            bad = spk > -0.99 or gr < GR_TARGET - 2.0
+            note = "" if not bad else ("  <-- PEAK MISS" if spk > -0.99 else "  <-- GR NOT REACHED")
+            per_source.setdefault(v, []).append(np.nan if bad else am["MACRO 0.1-0.5"])
+            print(f"    {str(v):>10} {d:+6.1f} {gr:6.2f} {spk:6.2f} {am['MACRO 0.1-0.5']:+7.2f} "
+                  f"{am['PUMP 2-8']:+7.2f} {st_range_win(y,3.0,sr):7.2f}{note}")
+    # Objective is |MACRO| -- distance from transparency in EITHER direction. A positive MACRO means
+    # the limiter ADDED slow level movement the source never had (long releases do this: gain crawls
+    # back over seconds and invents 0.1-0.5 Hz swings). That is not "better than" removing movement,
+    # it is a different way of being wrong. Ranking on the signed mean made 300 ms look like the
+    # winner purely because one source scored +1.53.
+    print(f"\n  ===== MEAN |MACRO| across corpus (LOWER = closer to transparent) =====")
+    ranked = sorted(per_source.items(), key=lambda kv: np.nanmean(np.abs(kv[1])))
     for v, vals in ranked:
-        bar = "#" * max(0, int(round((3.0 + np.nanmean(vals)) * 12)))
-        print(f"    {str(v):>10}  {np.nanmean(vals):+7.3f}  {bar}")
-    print(f"\n  WINNER: {ranked[0][0]}  (mean MACRO {np.nanmean(ranked[0][1]):+.3f})")
-    return ranked[0][0]
+        a = np.nanmean(np.abs(vals))
+        spread = np.nanmax(np.abs(vals)) - np.nanmin(np.abs(vals))
+        print(f"    {str(v):>10}  {a:6.3f}  {'#' * int(round(a * 20)):30s} "
+              f"per-source spread {spread:5.2f}"
+              + ("   <-- source-dependent, treat mean with caution" if spread > 1.0 else ""))
+    best = ranked[0]
+    print(f"\n  BEST MEAN: {best[0]}  (|MACRO| {np.nanmean(np.abs(best[1])):.3f})")
+    if np.nanmax(np.abs(best[1])) - np.nanmin(np.abs(best[1])) > 1.0:
+        print("  ** The per-source spread exceeds the between-setting differences: this corpus does NOT")
+        print("     support a single global winner. Report it as source-dependent, not as a default. **")
+    return best[0]
 
 
 if __name__ == "__main__":
@@ -102,8 +133,10 @@ if __name__ == "__main__":
     ap.add_argument("--attack", type=float, default=5.0)
     args = ap.parse_args()
 
-    print("VOICING SWEEP — objective = MACRO preservation (0.1-0.5 Hz), peak-gated at sPk <= -1.00")
-    print(f"push {PUSH_DB:.0f} dB above source RMS; corpus of {len(CORPUS)}; centre {MAX_SECS:.0f}s excerpts")
+    print("VOICING SWEEP — objective = |MACRO| (0.1-0.5 Hz distance from transparent), "
+          "peak-gated at sPk <= -1.00")
+    print(f"matched to {GR_TARGET:.0f} dB of ACTUAL gain reduction; corpus of {len(CORPUS)}; "
+          f"centre {MAX_SECS:.0f}s excerpts")
 
     if args.stage == 1:
         print("\nSTAGE 1 — RELEASE (attack/crossover at default)")
