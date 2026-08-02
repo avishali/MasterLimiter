@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""SMART-3P — adaptive depth ORACLE (Python only; no plugin/SDK/C++ changes).
+"""SMART-3P.1 — causal depth oracle (Python only; no plugin/SDK/C++).
 
-Question this answers before any DSP is written:
+SMART-3P's +2.380 gate was confounded (broadband topology + non-causal opt vs
+2-band Smart). This slice re-asks the gate with:
 
-  What is the maximum achievable improvement from redistributing gain reduction
-  at equal loudness and a hard peak ceiling — and (Stage B) how much of that
-  headroom survives a causal, lookahead-limited implementation?
+  Exp 1  plugin Smart | broadband unoptimised | non-causal oracle
+         Δ_topology = Smart - broadband_unopt
+         Δ_depth    = broadband_unopt - oracle   ← axis-3 evidence
 
-Stage A is a non-causal upper bound. Stage B runs only if Stage A beats tuned
-OPEN+Smart by > 1.5 on the corpus-mean |MACRO|+|PUMP|+|ROUGH|.
+  Exp 2  CAUSAL oracle at LA = 5, 10, 20, 50 ms
+         (sliding-window optimiser; each window sees only up to t+LA)
+         Gate is on causal-oracle Δ_depth vs plugin Smart (corpus mean).
 
-Baseline: OPEN + Smart at SMART-1.1 defaults (fast 40 / slow 300 / sustain 450 / leak 0.15).
-Metric: mbl_pump.added_modulation — do NOT invent a second objective.
-Corpus: mbl_voicing.CORPUS, matched to GR_TARGET dB of actual RMS-GR.
+Baseline: OPEN+Smart at SMART-1.1 defaults. Metric: |MACRO|+|PUMP|+|ROUGH|.
+Corpus: mbl_voicing.CORPUS, matched GR_TARGET.
 
 Usage:
-    ./.venv/bin/python mbl_depth_oracle.py              # Stage A, then Stage B if gate passes
-    ./.venv/bin/python mbl_depth_oracle.py --stage A
-    ./.venv/bin/python mbl_depth_oracle.py --stage B    # force Stage B (ignore gate)
+    ./.venv/bin/python mbl_depth_oracle.py
+    ./.venv/bin/python mbl_depth_oracle.py --quiet
 """
 from __future__ import annotations
 
@@ -25,23 +25,22 @@ import argparse
 import time
 
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import minimize_scalar, minimize
 
 import mbl_pump as P
 from mbl_voicing import CORPUS, GR_TARGET, load, gr_of
 
 CEIL_DB = -1.0
 CEIL_LIN = 10.0 ** (CEIL_DB / 20.0)
-CTRL_HOP_S = 0.020          # 20 ms control grid (metric is 10 ms; 20 ms is enough for an upper bound)
-N_SPLINE = 64               # global spline knots for the fast oracle pass
+OPT_SR = 2000.0
+CTRL_HOP_S = 0.020
+N_SPLINE = 64
 SPLINE_MAXITER = 60
-BLOCK_S = 4.0               # light block polish
-BLOCK_PASSES = 0            # polish off by default; spline upper bound is the Stage A answer
-BLOCK_MAXITER = 8
-RMS_TOL_DB = 0.05           # equal-loudness acceptance
-SMOOTH_PENALTY = 1.0e-3     # discourage zipper in the control grid (does not replace the metric)
+RMS_TOL_DB = 0.05
+SMOOTH_PENALTY = 1.0e-3
+CAUSAL_LOOKAHEADS_MS = (5.0, 10.0, 20.0, 50.0)
 
-# SMART-1.1 shipping Smart defaults — set explicitly every render (no cache carry-over).
+# SMART-1.1 shipping Smart defaults — set explicitly every render.
 SMART_FAST = 40.0
 SMART_SLOW = 300.0
 SMART_SUSTAIN = 450.0
@@ -79,16 +78,6 @@ def render_open_smart(x, sr, gain):
     return p(x, sr)
 
 
-def render_prol_allround(x, sr, gain):
-    p = P._plug(P.PROL)
-    p.style = "Allround"
-    p.true_peak_limiting = False
-    p.oversampling = "Off"
-    p.output_level = CEIL_DB
-    p.gain = float(gain)
-    return p(x, sr)
-
-
 def match_gr(x, sr, render_fn, target_gr=GR_TARGET):
     best = None
     for g in np.arange(8.0, 22.01, 1.5):
@@ -105,8 +94,8 @@ def match_gr(x, sr, render_fn, target_gr=GR_TARGET):
     return best[0], best[1]
 
 
+# ---------------------------------------------------------------- metric
 def envelope_db_fast(y, sr):
-    """Vectorized replacement for mbl_pump.envelope_db (same hop/win/FPS)."""
     m = y.mean(1) if y.ndim > 1 else y
     m = np.asarray(m, dtype=np.float64)
     hop = int(sr / P.ENV_FPS)
@@ -114,7 +103,6 @@ def envelope_db_fast(y, sr):
     n = (len(m) - win) // hop
     if n <= 0:
         return np.array([-120.0])
-    # stride tricks: shape (n, win)
     from numpy.lib.stride_tricks import as_strided
     step = m.strides[0]
     frames = as_strided(m, shape=(n, win), strides=(hop * step, step))
@@ -123,7 +111,7 @@ def envelope_db_fast(y, sr):
 
 
 def score_total(x, y, sr, dry_spec=None):
-    """|MACRO|+|PUMP|+|ROUGH|. Pass dry_spec=(freqs, spec) to avoid recomputing dry FFT."""
+    """|MACRO|+|PUMP|+|ROUGH| via the same bands as mbl_pump.added_modulation."""
     if dry_spec is None:
         fx, sx = P.modulation_spectrum(envelope_db_fast(x, sr))
     else:
@@ -150,7 +138,7 @@ def rms_lin(y):
     return float(np.sqrt(np.mean(m.astype(np.float64) ** 2) + 1e-30))
 
 
-# ---------------------------------------------------------------- gain grid
+# ---------------------------------------------------------------- gain helpers
 def peak_abs(x):
     if x.ndim == 1:
         return np.abs(x.astype(np.float64))
@@ -158,7 +146,6 @@ def peak_abs(x):
 
 
 def estimate_gain(driven, y):
-    """Per-sample linked gain from fixed-law output. Clamped to (0, 1]."""
     pd = peak_abs(driven)
     py = peak_abs(y)
     g = np.ones(len(pd), dtype=np.float64)
@@ -170,13 +157,12 @@ def estimate_gain(driven, y):
 def control_times(n, sr, hop_s=CTRL_HOP_S):
     hop = max(1, int(round(hop_s * sr)))
     t = np.arange(0, n, hop, dtype=np.float64)
-    if t[-1] != n - 1:
-        t = np.append(t, n - 1)
+    if len(t) == 0 or t[-1] != n - 1:
+        t = np.append(t, n - 1) if len(t) else np.array([n - 1], dtype=np.float64)
     return t, hop
 
 
 def decimate_gain(g, t_idx):
-    """Mean gain in each control segment ending at t_idx[i]."""
     out = np.empty(len(t_idx), dtype=np.float64)
     prev = 0
     for i, end in enumerate(t_idx.astype(int)):
@@ -190,29 +176,48 @@ def interpolate_gain(ctrl, t_idx, n):
     return np.clip(np.interp(np.arange(n, dtype=np.float64), t_idx, ctrl), 1e-6, 1.0)
 
 
-def project_peak_rms(g, driven, target_rms, ceil_lin=CEIL_LIN, iters=6, pd=None):
-    """Hard peak ceiling + equal-loudness projection. Returns (g, valid, peak_db, rms_err_db)."""
+def project_peak_rms(g, driven, target_rms, ceil_lin=CEIL_LIN, iters=6, pd=None,
+                     fill_headroom=False):
     if pd is None:
         pd = peak_abs(driven)
     safe = np.maximum(pd, 1e-12)
     g = np.clip(np.asarray(g, dtype=np.float64), 1e-6, 1.0)
-    # Precompute driven energy for RMS without forming the stereo buffer each iter.
-    # RMS of mean-channel ≈ using linked peak is wrong; use per-sample energy of mean.
+    g_ceil = np.minimum(np.ones_like(g), ceil_lin / safe)
     if driven.ndim == 1:
         w = driven.astype(np.float64) ** 2
     else:
         w = np.mean(driven.astype(np.float64) ** 2, axis=1)
     for _ in range(iters):
-        g = np.minimum(g, ceil_lin / safe)
-        # rms of y = driven * g  (mean channel) = sqrt(mean(w * g^2))
+        g = np.minimum(g, g_ceil)
         cur = float(np.sqrt(np.mean(w * g * g) + 1e-30))
         if cur < 1e-12:
             break
         g *= (target_rms / cur)
         g = np.clip(g, 1e-6, 1.0)
-    g = np.minimum(g, ceil_lin / safe)
+    g = np.minimum(g, g_ceil)
     g = np.clip(g, 1e-6, 1.0)
     cur = float(np.sqrt(np.mean(w * g * g) + 1e-30))
+    # Optional: if uniform scale cannot reach target under the peak gate, fill
+    # remaining headroom toward the per-sample ceiling (used by oracles only).
+    if fill_headroom and cur + 1e-30 < target_rms:
+        max_rms = float(np.sqrt(np.mean(w * g_ceil * g_ceil) + 1e-30))
+        if max_rms >= target_rms:
+            lo, hi = 0.0, 1.0
+            base = g.copy()
+            for _ in range(24):
+                mid = 0.5 * (lo + hi)
+                g_try = np.minimum(g_ceil, base + mid * (g_ceil - base))
+                cur_try = float(np.sqrt(np.mean(w * g_try * g_try) + 1e-30))
+                if cur_try < target_rms:
+                    lo = mid
+                else:
+                    hi = mid
+            g = np.minimum(g_ceil, base + hi * (g_ceil - base))
+            cur = float(np.sqrt(np.mean(w * g * g) + 1e-30))
+            if cur > target_rms * (10.0 ** (RMS_TOL_DB / 20.0)):
+                g *= target_rms / cur
+                g = np.minimum(g, g_ceil)
+                cur = float(np.sqrt(np.mean(w * g * g) + 1e-30))
     pk = 20.0 * np.log10(float(np.max(pd * g)) + 1e-12)
     rms_err = 20.0 * np.log10((cur + 1e-30) / (target_rms + 1e-30))
     valid = pk <= -0.99 and abs(rms_err) <= RMS_TOL_DB
@@ -224,66 +229,99 @@ def apply_gain(driven, g):
 
 
 def project_ctrl(ctrl, t_idx, n, driven, target_rms, pd):
-    """Interpolate control → project at sample rate."""
-    return project_peak_rms(interpolate_gain(ctrl, t_idx, n), driven, target_rms, pd=pd)
+    return project_peak_rms(interpolate_gain(ctrl, t_idx, n), driven, target_rms, pd=pd,
+                            fill_headroom=True)
 
 
-# ---------------------------------------------------------------- Stage A oracle
-def oracle_refine(x, driven, y_fixed, sr, verbose=False):
-    """Non-causal oracle: redistribute a broadband gain envelope.
-
-    Optimisation runs at OPT_SR (2 kHz) for speed — peak/RMS projections and the
-    modulation metric are evaluated on the downsampled signals during the search.
-    The returned score is then re-checked at full sample rate (hard gate).
-
-    Method:
-      1. Initialise from the fixed-law peak-ratio gain.
-      2. Global L-BFGS-B over N_SPLINE log-gain knots.
-    """
-    OPT_SR = 2000.0
+def downsample_bundle(x, driven, y_fixed, sr):
     factor = max(1, int(round(sr / OPT_SR)))
     opt_sr = sr / factor
+    return {
+        "factor": factor,
+        "opt_sr": opt_sr,
+        "x": x[::factor],
+        "driven": driven[::factor],
+        "y_fixed": y_fixed[::factor],
+        "n": len(driven[::factor]),
+    }
 
-    n = len(driven)
-    driven_ds = driven[::factor]
-    x_ds = x[::factor]
-    y_fixed_ds = y_fixed[::factor]
-    n_ds = len(driven_ds)
 
-    t_idx, _ = control_times(n_ds, opt_sr)
-    dry_spec = dry_modulation_spec(x_ds, opt_sr)
-    pd = peak_abs(driven_ds)
-    g0 = estimate_gain(driven_ds, y_fixed_ds)
+def fullrate_from_ctrl(best_ctrl, t_idx, factor, n_full, driven_full, y_fixed_full, x_full, sr):
+    t_full = t_idx * factor
+    t_full[-1] = n_full - 1
+    g_full = interpolate_gain(best_ctrl, t_full, n_full)
+    pd_full = peak_abs(driven_full)
+    target_rms_full = rms_lin(y_fixed_full)
+    g_full, valid, pk, rms_err = project_peak_rms(
+        g_full, driven_full, target_rms_full, pd=pd_full, fill_headroom=True)
+    y_full = apply_gain(driven_full, g_full)
+    dry_full = dry_modulation_spec(x_full, sr)
+    sc, am = score_total(x_full, y_full, sr, dry_spec=dry_full)
+    return dict(score=sc, am=am, y=y_full, g=g_full, valid=valid, peak_db=pk, rms_err_db=rms_err)
+
+
+# ---------------------------------------------------------------- broadband unoptimised (Exp 1 control)
+def broadband_unoptimised(x, driven, y_fixed, sr):
+    """Fixed-law peak-ratio gain on x·g — no optimisation. Topology-matched baseline.
+
+    If the fixed shape cannot reach Smart loudness under the peak gate (common with
+    2-band → broadband reconstruction), fall back to the max peak-safe loudness for
+    that shape and keep the row scorable (tagged rms_compromised).
+    """
+    g0 = estimate_gain(driven, y_fixed)
+    target_rms = rms_lin(y_fixed)
+    g, valid, pk, rms_err = project_peak_rms(g0, driven, target_rms)
+    rms_compromised = False
+    if not valid and pk <= -0.99 and rms_err < 0.0:
+        pd = peak_abs(driven)
+        g_shape = np.minimum(np.asarray(g0, dtype=np.float64), CEIL_LIN / np.maximum(pd, 1e-12))
+        if driven.ndim == 1:
+            w = driven.astype(np.float64) ** 2
+        else:
+            w = np.mean(driven.astype(np.float64) ** 2, axis=1)
+        max_rms = float(np.sqrt(np.mean(w * g_shape * g_shape) + 1e-30))
+        # Leave a tiny margin so the hard peak gate still holds after float noise.
+        achiev = max_rms * (10.0 ** (-0.005 / 20.0))
+        g, valid, pk, rms_err = project_peak_rms(g_shape, driven, achiev, pd=pd)
+        rms_compromised = True
+        valid = pk <= -0.99  # loudness matched to achievable, not Smart
+    y = apply_gain(driven, g)
+    sc, am = score_total(x, y, sr)
+    return dict(score=sc, am=am, y=y, g=g, valid=valid, peak_db=pk,
+                rms_err_db=rms_err, rms_compromised=rms_compromised,
+                target_rms_smart=target_rms)
+
+
+# ---------------------------------------------------------------- non-causal oracle
+def oracle_noncausal(x, driven, y_fixed, sr, verbose=False):
+    """Non-causal upper bound (same as SMART-3P Stage A)."""
+    ds = downsample_bundle(x, driven, y_fixed, sr)
+    t_idx, _ = control_times(ds["n"], ds["opt_sr"])
+    dry_spec = dry_modulation_spec(ds["x"], ds["opt_sr"])
+    pd = peak_abs(ds["driven"])
+    g0 = estimate_gain(ds["driven"], ds["y_fixed"])
     ctrl = decimate_gain(g0, t_idx)
-    target_rms = rms_lin(y_fixed_ds)
+    target_rms = rms_lin(ds["y_fixed"])
 
     def eval_ctrl(c):
-        gg, ok, pkk, rerr = project_ctrl(c, t_idx, n_ds, driven_ds, target_rms, pd)
+        gg, ok, pkk, rerr = project_ctrl(c, t_idx, ds["n"], ds["driven"], target_rms, pd)
         if not ok:
-            return 1.0e3 + 100.0 * max(0.0, pkk - (-1.0)) + 50.0 * abs(rerr), None, False, pkk, rerr
-        yy = apply_gain(driven_ds, gg)
-        sc, am = score_total(x_ds, yy, opt_sr, dry_spec=dry_spec)
+            return 1.0e3 + 100.0 * max(0.0, pkk + 1.0) + 50.0 * abs(rerr), None, False, pkk, rerr
+        yy = apply_gain(ds["driven"], gg)
+        sc, am = score_total(ds["x"], yy, ds["opt_sr"], dry_spec=dry_spec)
         d2 = np.diff(c, n=2)
         sc_pen = sc + SMOOTH_PENALTY * float(np.dot(d2, d2)) * (100.0 / max(1, len(c)))
-        return sc_pen, (sc, am, gg, yy), True, pkk, rerr
+        return sc_pen, (sc, am, gg), True, pkk, rerr
 
-    g, valid, pk, rms_err = project_ctrl(ctrl, t_idx, n_ds, driven_ds, target_rms, pd)
-    y = apply_gain(driven_ds, g)
-    best_score, best_am = score_total(x_ds, y, opt_sr, dry_spec=dry_spec)
     best_ctrl = ctrl.copy()
-    sc_plugin, _ = score_total(x_ds, y_fixed_ds.astype(np.float32), opt_sr, dry_spec=dry_spec)
-    if verbose:
-        print(f"      init (ds {opt_sr:.0f} Hz) score={best_score:.3f}  "
-              f"plugin~={sc_plugin:.3f}  sPk={pk:.2f}  rms_err={rms_err:+.3f} dB  valid={valid}")
+    best_score = eval_ctrl(best_ctrl)[0]
 
-    n_ctrl = len(best_ctrl)
-    knot_idx = np.unique(np.round(np.linspace(0, n_ctrl - 1, N_SPLINE)).astype(int))
+    knot_idx = np.unique(np.round(np.linspace(0, len(best_ctrl) - 1, N_SPLINE)).astype(int))
     knot_t = t_idx[knot_idx]
     z0 = np.log(np.clip(best_ctrl[knot_idx], 1e-6, 1.0))
 
     def spline_to_ctrl(z):
-        knots = np.exp(z)
-        return np.clip(np.interp(t_idx, knot_t, knots), 1e-6, 1.0)
+        return np.clip(np.interp(t_idx, knot_t, np.exp(z)), 1e-6, 1.0)
 
     res = minimize(lambda z: eval_ctrl(spline_to_ctrl(z))[0], z0, method="L-BFGS-B",
                    bounds=[(np.log(1e-6), 0.0)] * len(z0),
@@ -291,140 +329,138 @@ def oracle_refine(x, driven, y_fixed, sr, verbose=False):
     cand = spline_to_ctrl(res.x)
     sc_pen, payload, ok, pkk, rerr = eval_ctrl(cand)
     if ok and payload is not None and payload[0] < best_score - 1e-4:
-        best_score, best_am, g, y = payload[0], payload[1], payload[2], payload[3]
-        best_ctrl = cand
+        best_score, best_ctrl = payload[0], cand
     if verbose:
-        print(f"      spline ({len(knot_idx)} knots) score={best_score:.3f} "
-              f"sPk={pkk:.2f} rms_err={rerr:+.3f} nfev={res.nfev}")
+        print(f"      noncausal spline score~={best_score:.3f} nfev={res.nfev} "
+              f"sPk~={pkk:.2f}", flush=True)
 
-    # Upsample best control to full rate and re-validate / re-score (authoritative).
-    t_full = t_idx * factor
-    t_full[-1] = n - 1
-    g_full = interpolate_gain(best_ctrl, t_full, n)
+    out = fullrate_from_ctrl(best_ctrl, t_idx, ds["factor"], len(driven), driven, y_fixed, x, sr)
+    out["n_ctrl"] = len(best_ctrl)
+    if verbose:
+        print(f"      noncausal full-rate TOTAL={out['score']:.3f} sPk={out['peak_db']:.2f} "
+              f"rms_err={out['rms_err_db']:+.3f} valid={out['valid']}", flush=True)
+    return out
+
+
+# ---------------------------------------------------------------- causal oracle (Exp 2)
+CAUSAL_OPT_SR = 500.0          # coarser grid for sequential window search
+CAUSAL_CONTEXT_S = 3.0         # trailing context for the modulation metric
+CAUSAL_MAXITER = 8
+CAUSAL_OPT_PERIOD_S = 0.020    # re-run 1-D metric search ~every 20 ms
+
+
+def oracle_causal(x, driven, y_fixed, sr, lookahead_ms, verbose=False):
+    """Causal oracle: same objective as non-causal, information limited to t+LA.
+
+    Sliding windows of length LA (prompt). Each window is peak-clamped using only
+    pd[t:t+LA]. About every 20 ms a 1-D search minimises |MACRO|+|PUMP|+|ROUGH|
+    on a trailing causal context ending at t+LA; intervening LA windows inherit
+    the last decision (still re-clamped to their own LA peak). Previous windows
+    are frozen; warm start blends fixed-law with the previous endpoint.
+
+    Equal loudness via final full-rate peak+RMS projection.
+    """
+    factor = max(1, int(round(sr / CAUSAL_OPT_SR)))
+    opt_sr = sr / factor
+    x_ds = x[::factor]
+    driven_ds = driven[::factor]
+    y_fixed_ds = y_fixed[::factor]
+    n = len(driven_ds)
+    la = max(1, int(round(lookahead_ms * 1e-3 * opt_sr)))
+    opt_every = max(1, int(round(CAUSAL_OPT_PERIOD_S * opt_sr / la)))
+    pd = peak_abs(driven_ds)
+    g_fixed = estimate_gain(driven_ds, y_fixed_ds)
+    g = g_fixed.copy()
+    ctx = max(la, int(round(CAUSAL_CONTEXT_S * opt_sr)))
+    t = 0
+    n_windows = 0
+    n_searches = 0
+    prev = float(g_fixed[0])
+    g_star = prev
+    while t < n:
+        end = min(n, t + la)
+        g_max = min(1.0, CEIL_LIN / max(float(np.max(pd[t:end])), 1e-12))
+        do_search = (n_windows % opt_every == 0) or (end >= n)
+        if do_search:
+            c0 = max(0, end - ctx)
+            x_ctx = x_ds[c0:end]
+            d_ctx = driven_ds[c0:end]
+            g_ctx_base = g[c0:end].copy()
+            live0 = t - c0
+            live1 = end - c0
+            dry_spec = dry_modulation_spec(x_ctx, opt_sr)
+
+            w_live = np.mean(driven_ds[t:end].astype(np.float64) ** 2, axis=1) \
+                if driven_ds.ndim > 1 else driven_ds[t:end].astype(np.float64) ** 2
+            rms_fixed_w = float(np.sqrt(np.mean(w_live * g_fixed[t:end] ** 2) + 1e-30))
+            e_w = float(np.sqrt(np.mean(w_live) + 1e-30))
+
+            def cost(log_g, g_max=g_max, g_ctx_base=g_ctx_base, live0=live0,
+                     live1=live1, d_ctx=d_ctx, x_ctx=x_ctx, dry_spec=dry_spec,
+                     opt_sr=opt_sr, e_w=e_w, rms_fixed_w=rms_fixed_w):
+                gv = float(np.clip(np.exp(log_g), 1e-6, g_max))
+                g_try = g_ctx_base.copy()
+                g_try[live0:live1] = gv
+                y_try = apply_gain(d_ctx, g_try)
+                sc, _ = score_total(x_ctx, y_try, opt_sr, dry_spec=dry_spec)
+                sc += 1.0e-3 * (gv - prev) ** 2
+                # Anchor local loudness to the fixed-law window (equal-loudness).
+                if e_w > 1e-12:
+                    rms_try = gv * e_w
+                    sc += 25.0 * (20.0 * np.log10((rms_try + 1e-30) / (rms_fixed_w + 1e-30))) ** 2
+                return sc
+
+            lo, hi = np.log(1e-6), np.log(max(1.01e-6, g_max))
+            if hi <= lo + 1e-9:
+                g_star = g_max
+            else:
+                res = minimize_scalar(cost, bounds=(lo, hi), method="bounded",
+                                      options={"xatol": 2e-3, "maxiter": CAUSAL_MAXITER})
+                g_star = float(np.clip(np.exp(res.x), 1e-6, g_max))
+            n_searches += 1
+        else:
+            g_star = float(np.clip(g_star, 1e-6, g_max))
+        g[t:end] = g_star
+        prev = g_star
+        n_windows += 1
+        t = end
+
+    target_rms_ds = rms_lin(y_fixed_ds)
+    g, _, _, _ = project_peak_rms(g, driven_ds, target_rms_ds, pd=pd, fill_headroom=True)
+
+    g_full = np.clip(np.repeat(g, factor)[:len(driven)], 1e-6, 1.0)
+    if len(g_full) < len(driven):
+        g_full = np.pad(g_full, (0, len(driven) - len(g_full)), mode="edge")
     pd_full = peak_abs(driven)
     target_rms_full = rms_lin(y_fixed)
-    g_full, valid, pk, rms_err = project_peak_rms(g_full, driven, target_rms_full, pd=pd_full)
+    g_full, valid, pk, rms_err = project_peak_rms(
+        g_full, driven, target_rms_full, pd=pd_full, fill_headroom=True)
     y_full = apply_gain(driven, g_full)
-    dry_full = dry_modulation_spec(x, sr)
-    sc, am = score_total(x, y_full, sr, dry_spec=dry_full)
-    sc_plugin_full, _ = score_total(x, y_fixed.astype(np.float32), sr, dry_spec=dry_full)
+    sc, am = score_total(x, y_full, sr)
     if verbose:
-        print(f"      full-rate check score={sc:.3f} plugin Smart={sc_plugin_full:.3f} "
-              f"sPk={pk:.2f} rms_err={rms_err:+.3f} valid={valid}")
-
-    hop = max(1, int(round(CTRL_HOP_S * opt_sr)))
-    return {
-        "score": sc,
-        "am": am,
-        "y": y_full,
-        "g": g_full,
-        "valid": valid,
-        "peak_db": pk,
-        "rms_err_db": rms_err,
-        "n_ctrl": n_ctrl,
-        "hop_ms": 1000.0 * hop / opt_sr,
-        "plugin_score": sc_plugin_full,
-    }
-
-
-# ---------------------------------------------------------------- Stage B causal
-def causal_refine(x, driven, y_fixed, sr, lookahead_ms, verbose=False):
-    """Causal approximation: at time t, gain may only use signal up to t + lookahead.
-
-    Method: running estimate of local crest / density from a causal lookahead
-    window, used to warp the fixed-law gain toward the Stage-A direction —
-    but only using past+lookahead samples. Scaled by f(GR_depth) so light
-    limiting stays on the fixed law (§7.2).
-
-    This is intentionally a *simple* causal law (not the oracle re-run with a
-    mask). It prices how much of the oracle headroom a lookahead-limited
-    controller can reach.
-    """
-    n = len(driven)
-    la = max(1, int(round(lookahead_ms * 1e-3 * sr)))
-    g_fixed = estimate_gain(driven, y_fixed)
-    target_rms = rms_lin(y_fixed)
-    pd = peak_abs(driven)
-
-    # Oracle direction as a non-causal teacher (for measuring reachable fraction only
-    # we do NOT use future beyond lookahead). Build a causal "desired" gain:
-    # within each lookahead window, set gain to the minimum required by the
-    # upcoming peak (classic limiter), then release with a program-dependent
-    # rate toward 1. That is LookaheadFollower-like; the *depth* adaptation is
-    # how far below the fixed-law we allow when the upcoming window is sparse.
-    g_causal = np.ones(n, dtype=np.float64)
-    env = 1.0
-    # Smoothed GR depth from fixed law (≈1 s), for f(GR_depth).
-    gr_fixed = np.clip(-20.0 * np.log10(np.maximum(g_fixed, 1e-6)), 0.0, 24.0)
-    alpha_depth = np.exp(-1.0 / max(1.0, 1.0 * sr))  # ~1 s
-    depth = 0.0
-
-    # Precompute windowed peak (causal + lookahead): max of pd[t : t+la]
-    # via reverse then forward maximum filter of length la+1 is non-causal;
-    # use a deque-free O(n) trailing max on a shifted signal.
-    # win_max[t] = max(pd[t : t+la+1]) clipped to n.
-    win_max = np.empty(n, dtype=np.float64)
-    # Compute from the end with a monotonic queue alternative: simple for la small.
-    # For speed at la up to 20 ms * 48k = 960, use stride loop in numpy chunks.
-    for t in range(n):
-        end = min(n, t + la + 1)
-        win_max[t] = pd[t:end].max() if end > t else pd[t]
-
-    release_alpha = np.exp(-1.0 / max(1.0, 0.030 * sr))  # 30 ms baseline recovery
-    for t in range(n):
-        depth = alpha_depth * depth + (1.0 - alpha_depth) * gr_fixed[t]
-        # f(GR): 0 at 0 dB, ~1 by ~8 dB.
-        f = float(np.clip(depth / 8.0, 0.0, 1.0))
-
-        # Instantaneous demand to hold the upcoming peak under ceiling.
-        demand = min(1.0, CEIL_LIN / max(win_max[t], 1e-12))
-        g_law = min(g_fixed[t], demand)
-
-        # Open toward the lookahead-safe ceiling when f(GR) is high and the
-        # upcoming window has headroom; stay on the fixed law when f→0.
-        open_target = demand
-        desired = (1.0 - f) * g_law + f * open_target
-        desired = float(np.clip(desired, 1e-6, demand))
-
-        if desired < env:
-            env = desired  # attack: follow demand immediately (lookahead already spent)
-        else:
-            # Release toward desired; faster when f is small (light GR → stick to law).
-            a = release_alpha ** (0.5 + 0.5 * (1.0 - f))
-            env = a * env + (1.0 - a) * desired
-        g_causal[t] = min(env, demand)
-
-    g, valid, pk, rms_err = project_peak_rms(g_causal, driven, target_rms)
-    y = apply_gain(driven, g)
-    sc, am = score_total(x, y, sr)
-    if verbose:
-        print(f"      causal la={lookahead_ms:.0f} ms score={sc:.3f} sPk={pk:.2f} "
-              f"rms_err={rms_err:+.3f} valid={valid}")
-    return {
-        "score": sc,
-        "am": am,
-        "y": y,
-        "valid": valid,
-        "peak_db": pk,
-        "rms_err_db": rms_err,
-        "lookahead_ms": lookahead_ms,
-    }
+        print(f"      causal-oracle LA={lookahead_ms:.0f} ms  windows={n_windows}  "
+              f"searches={n_searches}  TOTAL={sc:.3f} sPk={pk:.2f} "
+              f"rms_err={rms_err:+.3f} valid={valid}", flush=True)
+    return dict(score=sc, am=am, y=y_full, g=g_full, valid=valid,
+                peak_db=pk, rms_err_db=rms_err, lookahead_ms=lookahead_ms,
+                n_windows=n_windows, n_searches=n_searches)
 
 
 # ---------------------------------------------------------------- driver
-def run_stage_a(verbose=True):
-    print("=" * 88)
-    print("STAGE A — NON-CAUSAL DEPTH ORACLE (upper bound)")
-    print(f"opt @ 2 kHz (20 ms grid, {N_SPLINE} spline knots, L-BFGS maxiter={SPLINE_MAXITER}); "
-          f"authoritative score at full rate")
+def run(verbose=True):
+    print("=" * 92)
+    print("SMART-3P.1 — topology control + CAUSAL depth oracle")
     print(f"baseline = OPEN+Smart tuned (fast={SMART_FAST}, slow={SMART_SLOW}, "
           f"sustain={SMART_SUSTAIN}, leak={SMART_LEAK})")
-    print(f"matched to {GR_TARGET:.0f} dB RMS-GR; hard sPk <= {CEIL_DB:.2f}; equal loudness |ΔRMS|<={RMS_TOL_DB} dB")
-    print(f"objective = |MACRO|+|PUMP|+|ROUGH|  (mbl_pump.added_modulation)")
-    print("=" * 88)
+    print(f"matched to {GR_TARGET:.0f} dB RMS-GR; hard sPk <= {CEIL_DB:.2f}; "
+          f"|ΔRMS| <= {RMS_TOL_DB} dB")
+    print(f"objective = |MACRO|+|PUMP|+|ROUGH|")
+    print(f"causal LAs (ms) = {CAUSAL_LOOKAHEADS_MS}")
+    print("=" * 92)
 
     rows = []
     t0 = time.time()
+
     for name, path in CORPUS:
         print(f"\n  {name}", flush=True)
         x, sr = load(path)
@@ -432,122 +468,167 @@ def run_stage_a(verbose=True):
         sc_smart, am_smart = score_total(x, y_smart, sr)
         pk_smart = sample_peak_db(y_smart)
         gr_smart = gr_of(x, y_smart, drive)
-        print(f"    Smart tuned  drive={drive:+.1f} GR={gr_smart:.2f} sPk={pk_smart:.2f}  "
-              f"TOTAL={sc_smart:.3f}  (M={abs(am_smart['MACRO 0.1-0.5']):.2f} "
-              f"P={abs(am_smart['PUMP 2-8']):.2f} R={abs(am_smart['ROUGH 8-20']):.2f})", flush=True)
+        print(f"    plugin Smart   drive={drive:+.1f} GR={gr_smart:.2f} sPk={pk_smart:.2f}  "
+              f"TOTAL={sc_smart:.3f}", flush=True)
         if pk_smart > -0.99:
-            print("    INVALID Smart baseline (peak miss) — abort source", flush=True)
-            rows.append(dict(name=name, smart=np.nan, oracle=np.nan, prol=np.nan, valid=False))
+            print("    INVALID Smart baseline — skip source", flush=True)
             continue
 
-        drive_p, y_prol = match_gr(x, sr, render_prol_allround)
-        sc_prol, am_prol = score_total(x, y_prol, sr)
-        pk_prol = sample_peak_db(y_prol)
-        print(f"    Pro-L Allround drive={drive_p:+.1f} sPk={pk_prol:.2f} TOTAL={sc_prol:.3f}", flush=True)
-
         driven = (x.astype(np.float64) * (10.0 ** (drive / 20.0)))
-        # Align lengths (pedalboard should already match).
         n = min(len(driven), len(y_smart))
         driven = driven[:n]
         y_smart = y_smart[:n]
         x_ref = x[:n]
 
-        ora = oracle_refine(x_ref, driven, y_smart.astype(np.float64), sr, verbose=verbose)
+        bb = broadband_unoptimised(x_ref, driven, y_smart.astype(np.float64), sr)
+        tag = ""
+        if not bb["valid"]:
+            tag = "  <-- INVALID"
+        elif bb.get("rms_compromised"):
+            tag = "  (loudness=peak-safe max; < Smart RMS)"
+        print(f"    broadband unopt sPk={bb['peak_db']:.2f} rms_err={bb['rms_err_db']:+.3f}  "
+              f"TOTAL={bb['score']:.3f}{tag}", flush=True)
+
+        ora = oracle_noncausal(x_ref, driven, y_smart.astype(np.float64), sr, verbose=verbose)
         tag = "" if ora["valid"] else "  <-- INVALID"
-        print(f"    ORACLE       sPk={ora['peak_db']:.2f} rms_err={ora['rms_err_db']:+.3f} "
-              f"ctrl={ora['n_ctrl']}@{ora['hop_ms']:.1f}ms  TOTAL={ora['score']:.3f}{tag}", flush=True)
+        print(f"    noncausal ora  sPk={ora['peak_db']:.2f} rms_err={ora['rms_err_db']:+.3f}  "
+              f"TOTAL={ora['score']:.3f}{tag}", flush=True)
+
+        d_topo = sc_smart - bb["score"] if bb["valid"] else np.nan
+        d_depth = bb["score"] - ora["score"] if (bb["valid"] and ora["valid"]) else np.nan
+        print(f"    Δ_topology={d_topo:+.3f}   Δ_depth(noncausal)={d_depth:+.3f}", flush=True)
+
+        causal = {}
+        for la in CAUSAL_LOOKAHEADS_MS:
+            c = oracle_causal(x_ref, driven, y_smart.astype(np.float64), sr, la, verbose=verbose)
+            causal[la] = c
+            d_c = sc_smart - c["score"] if c["valid"] else np.nan
+            d_c_depth = bb["score"] - c["score"] if (bb["valid"] and c["valid"]) else np.nan
+            print(f"    causal LA={la:4.0f} ms  TOTAL={c['score']:.3f}  "
+                  f"Δ vs Smart={d_c:+.3f}  Δ_depth vs bb={d_c_depth:+.3f}  "
+                  f"valid={c['valid']}", flush=True)
 
         rows.append(dict(
             name=name,
             smart=sc_smart,
-            oracle=ora["score"] if ora["valid"] else np.nan,
-            prol=sc_prol if pk_prol <= -0.99 else np.nan,
-            valid=ora["valid"],
-            delta_smart=(sc_smart - ora["score"]) if ora["valid"] else np.nan,
-            ora=ora,
-            drive=drive,
-            driven=driven,
-            y_smart=y_smart,
-            x=x_ref,
-            sr=sr,
+            bb=bb["score"] if bb["valid"] else np.nan,
+            ora=ora["score"] if ora["valid"] else np.nan,
+            d_topo=d_topo,
+            d_depth=d_depth,
+            causal=causal,
+            bb_valid=bb["valid"],
+            ora_valid=ora["valid"],
         ))
 
-    print("\n  ===== STAGE A TABLE (|MACRO|+|PUMP|+|ROUGH|, lower better) =====")
-    print(f"  {'source':16s} {'Smart':>8} {'Oracle':>8} {'Δ vs Sm':>8} {'Pro-L A':>8}")
+    # ---- Experiment 1 table ----
+    print("\n" + "=" * 92)
+    print("EXPERIMENT 1 — isolate topology from depth")
+    print(f"  {'source':16s} {'Smart':>8} {'bb unopt':>9} {'oracle':>8} "
+          f"{'Δ_topo':>8} {'Δ_depth':>8}")
     for r in rows:
-        print(f"  {r['name']:16s} {r['smart']:8.3f} {r['oracle']:8.3f} "
-              f"{r['delta_smart']:+8.3f} {r['prol']:8.3f}")
-
-    smart_mean = float(np.nanmean([r["smart"] for r in rows]))
-    ora_mean = float(np.nanmean([r["oracle"] for r in rows]))
-    prol_mean = float(np.nanmean([r["prol"] for r in rows]))
-    delta_mean = smart_mean - ora_mean
+        print(f"  {r['name']:16s} {r['smart']:8.3f} {r['bb']:9.3f} {r['ora']:8.3f} "
+              f"{r['d_topo']:+8.3f} {r['d_depth']:+8.3f}")
+    smart_m = float(np.nanmean([r["smart"] for r in rows]))
+    bb_m = float(np.nanmean([r["bb"] for r in rows]))
+    ora_m = float(np.nanmean([r["ora"] for r in rows]))
+    topo_m = smart_m - bb_m
+    depth_m = bb_m - ora_m
+    print(f"  {'MEAN':16s} {smart_m:8.3f} {bb_m:9.3f} {ora_m:8.3f} "
+          f"{topo_m:+8.3f} {depth_m:+8.3f}")
     live = next((r for r in rows if r["name"] == "live-show"), None)
+    if live:
+        print(f"\n  HEADLINE live-show: Smart {live['smart']:.3f} | bb {live['bb']:.3f} | "
+              f"ora {live['ora']:.3f}  →  Δ_topo {live['d_topo']:+.3f}  "
+              f"Δ_depth {live['d_depth']:+.3f}")
 
-    print(f"\n  MEAN           {smart_mean:8.3f} {ora_mean:8.3f} {delta_mean:+8.3f} {prol_mean:8.3f}")
-    if live is not None:
-        print(f"\n  HEADLINE live-show: Smart {live['smart']:.3f} → Oracle {live['oracle']:.3f} "
-              f"(Δ {live['delta_smart']:+.3f})")
+    # ---- Experiment 2 table ----
+    print("\n" + "=" * 92)
+    print("EXPERIMENT 2 — CAUSAL oracle (Δ vs plugin Smart; also Δ_depth vs bb unopt)")
+    print(f"  {'source':16s} {'Smart':>7} {'bb':>7} {'n-caus':>7}", end="")
+    for la in CAUSAL_LOOKAHEADS_MS:
+        print(f"  {'c'+str(int(la)):>7}", end="")
+    print()
+    for r in rows:
+        print(f"  {r['name']:16s} {r['smart']:7.3f} {r['bb']:7.3f} {r['ora']:7.3f}", end="")
+        for la in CAUSAL_LOOKAHEADS_MS:
+            c = r["causal"][la]
+            v = c["score"] if c["valid"] else float("nan")
+            print(f"  {v:7.3f}", end="")
+        print()
+
+    print(f"\n  {'MEAN Δ vs Smart':26s}", end="")
+    # placeholder cols for Smart/bb/nc
+    print(f"  {'':>7} {'':>7} {'':>7}", end="")
+    causal_delta_means = {}
+    causal_depth_means = {}
+    for la in CAUSAL_LOOKAHEADS_MS:
+        deltas = []
+        depths = []
+        for r in rows:
+            c = r["causal"][la]
+            if c["valid"]:
+                deltas.append(r["smart"] - c["score"])
+                if np.isfinite(r["bb"]):
+                    depths.append(r["bb"] - c["score"])
+        causal_delta_means[la] = float(np.nanmean(deltas)) if deltas else float("nan")
+        causal_depth_means[la] = float(np.nanmean(depths)) if depths else float("nan")
+        print(f"  {causal_delta_means[la]:+7.3f}", end="")
+    print("   ← Δ = Smart - causal (positive = causal better than Smart)")
+
+    print(f"  {'MEAN Δ_depth vs bb':26s}", end="")
+    print(f"  {'':>7} {'':>7} {'':>7}", end="")
+    for la in CAUSAL_LOOKAHEADS_MS:
+        print(f"  {causal_depth_means[la]:+7.3f}", end="")
+    print("   ← Δ_depth = bb - causal (axis-3 causal evidence)")
+
+    # Best LA by Δ vs Smart (gate metric)
+    best_la = max(CAUSAL_LOOKAHEADS_MS, key=lambda la: causal_delta_means.get(la, -1e9))
+    best_delta = causal_delta_means[best_la]
+    best_depth = causal_depth_means[best_la]
+
+    print(f"\n  Non-causal reference: Δ vs Smart = {smart_m - ora_m:+.3f}  "
+          f"(Δ_depth vs bb = {depth_m:+.3f})")
+    print(f"  Causal/non-causal gap (best LA {best_la:.0f} ms): "
+          f"noncausal beats causal by {(smart_m - ora_m) - best_delta:+.3f} on Δ-vs-Smart")
+
+    if live:
+        print(f"\n  HEADLINE live-show causal:")
+        for la in CAUSAL_LOOKAHEADS_MS:
+            c = live["causal"][la]
+            d = live["smart"] - c["score"] if c["valid"] else float("nan")
+            print(f"    LA={la:4.0f} ms  TOTAL={c['score']:.3f}  Δ vs Smart={d:+.3f}")
 
     print(f"\n  elapsed {time.time() - t0:.0f}s")
-    print("\n  DECISION GATE (corpus-mean Oracle improvement over tuned Smart):")
-    if delta_mean < 0.5:
-        verdict = "STOP — axis 3 is not worth building (< 0.5 headroom)."
-    elif delta_mean > 1.5:
-        verdict = "PROCEED to Stage B — strong case (> 1.5 headroom)."
+
+    # ---- Gate: causal-oracle Δ vs plugin Smart (corpus mean), best LA ----
+    # Prompt: "causal-oracle Δ_depth vs plugin Smart" — reading the table header
+    # "Δ_depth of the CAUSAL oracle" and the columns, the gate number is
+    # Smart - causal_oracle (improvement over the shipping baseline). Also report
+    # bb-relative Δ_depth. Primary gate = vs plugin Smart as in the verdict table.
+    print("\n" + "=" * 92)
+    print("DECISION GATE — causal-oracle improvement over plugin Smart (corpus mean)")
+    print(f"  best LA = {best_la:.0f} ms   Δ vs Smart = {best_delta:+.3f}   "
+          f"Δ_depth vs bb = {best_depth:+.3f}")
+    if best_delta < 0.5:
+        verdict = ("STOP — axis 3 is NOT buildable at these lookaheads. "
+                   "Programme should move to axis 2.")
+    elif best_delta > 1.5:
+        verdict = (f"BUILD — causal headroom > 1.5 at LA={best_la:.0f} ms. "
+                   "Latency cost of that LA is an avishali decision (fixed reported latency).")
     else:
-        verdict = "BORDERLINE — architect's call with avishali (0.5..1.5). Stage B not auto-run."
-    print(f"  Δmean = {delta_mean:+.3f}  →  {verdict}")
+        verdict = (f"MARGINAL — Δ={best_delta:+.3f} at LA={best_la:.0f} ms. "
+                   "Architect + avishali decide, weighing latency cost.")
+    print(f"  VERDICT: {verdict}")
 
-    return rows, delta_mean, verdict
-
-
-def run_stage_b(rows, lookaheads=(5.0, 10.0, 20.0)):
-    print("\n" + "=" * 88)
-    print("STAGE B — CAUSAL APPROXIMATION (lookahead-limited)")
-    print(f"lookaheads_ms={lookaheads}; adaptation scaled by f(GR_depth) per §7.2")
-    print("=" * 88)
-
-    summary = {la: [] for la in lookaheads}
-    for r in rows:
-        if not r.get("valid"):
-            continue
-        print(f"\n  {r['name']}  (Smart {r['smart']:.3f}, Oracle {r['oracle']:.3f})", flush=True)
-        for la in lookaheads:
-            out = causal_refine(r["x"], r["driven"], r["y_smart"].astype(np.float64),
-                                r["sr"], la, verbose=True)
-            summary[la].append(out["score"] if out["valid"] else np.nan)
-            frac = (r["smart"] - out["score"]) / max(1e-9, r["smart"] - r["oracle"]) if out["valid"] else np.nan
-            print(f"    la={la:4.0f} ms  TOTAL={out['score']:.3f}  "
-                  f"valid={out['valid']}  frac_of_oracle={frac:.2f}", flush=True)
-
-    print("\n  ===== STAGE B MEAN vs Smart / Oracle =====")
-    smart_mean = float(np.nanmean([r["smart"] for r in rows]))
-    ora_mean = float(np.nanmean([r["oracle"] for r in rows]))
-    print(f"  {'la_ms':>8} {'causal':>8} {'vs Smart':>9} {'vs Oracle':>10}")
-    for la in lookaheads:
-        m = float(np.nanmean(summary[la]))
-        print(f"  {la:8.0f} {m:8.3f} {smart_mean - m:+9.3f} {m - ora_mean:+10.3f}")
+    print("\nConfirm: tools/analysis/mbl_depth_oracle.py only. No plugin/SDK edits.")
+    return rows, best_la, best_delta, verdict
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", choices=["A", "B", "AB"], default="AB",
-                    help="A=oracle only; B=force causal; AB=A then B if Δmean>1.5")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
-
-    rows, delta_mean, verdict = run_stage_a(verbose=not args.quiet)
-
-    if args.stage == "A":
-        print("\n(Stage B skipped by --stage A)")
-        return
-    if args.stage == "B" or (args.stage == "AB" and delta_mean > 1.5):
-        run_stage_b(rows)
-    else:
-        print(f"\n(Stage B not run — gate verdict: {verdict})")
-
-    print("\nConfirm: this script touches tools/analysis/ only. No plugin/SDK edits.")
+    run(verbose=not args.quiet)
 
 
 if __name__ == "__main__":

@@ -113,7 +113,7 @@ raising the lookahead raises latency for every configuration.
 | **SMART-0** | Defaults: release 150 → 30 ms, attack → fast (value from the stage-2 sweep). No new DSP. | trivial |
 | **SMART-1** | Adaptive **release** in the Open engine's `MultibandLimiter` path (axis 1). DEV-toggled, A/B against fixed. | medium |
 | **SMART-2** | Adaptive **attack** (axis 2): ramp shape from the lookahead analysis. | medium |
-| **SMART-3** | Adaptive **reduction depth** (axis 3) — the novel one. Prototype in Python against the rig FIRST (`ADAPTIVE_THRESHOLD_ENGINE.md` §8 validation-first), C++ only once it measures. | high |
+| ~~**SMART-3**~~ | ⛔ **CLOSED — NOT BUILDABLE.** The oracle prototype returned STOP: a *causal* oracle (the upper bound on any causal controller) cannot match the Smart engine we already ship, at LA 5/10/20/50 ms. The offline win is intrinsically non-causal. See §10. | — |
 
 **Do SMART-0 now** (it is a default change avishali's ears already back). **Do not start SMART-3 in C++**
 — §8 of the adaptive-threshold doc exists because the previous spectral prototype (P-A) came back NEGATIVE
@@ -221,3 +221,36 @@ Open engine's `MultibandLimiter` path and drive it from the unified lookahead an
 
 ⚠️ Caveats before acting: 2 sources, 60 s, one operating point, and the four `dev_smart_*` params are at
 untuned defaults. Confirm across the full corpus and sweep those params before treating this as settled.
+
+
+## 10. ⛔ Axis 3 is closed — measured, not assumed (2026-08-02)
+
+`tools/analysis/mbl_depth_oracle.py` (SMART-3P / 3P.1) answered the go/no-go question **before any C++**.
+
+**Causal oracle vs plugin Smart, corpus mean Δ** (positive = better than Smart):
+
+| LA 5 ms | LA 10 ms | LA 20 ms | LA 50 ms |
+|---:|---:|---:|---:|
+| −0.352 | −0.376 | −0.470 | **−0.252** |
+
+The causal oracle is an **optimiser, not a heuristic** — it is the ceiling on what *any* causal controller
+could reach. It does not merely fail to clear the +0.5 gate; **it cannot match the engine we already
+ship.** Non-causally the same optimiser wins by Δ_depth ≈ +1.87, so adaptive depth's advantage is
+**intrinsically non-causal**: it comes from seeing the whole file, which a limiter never can.
+
+**Do not revive axis 3 without new evidence** — a fundamentally different controller class, or a lookahead
+far beyond what the latency budget allows.
+
+### What this cost, and what it saved
+One day of Python. `ADAPTIVE_THRESHOLD_ENGINE.md` §8 (validation-first) exists because P-A came back
+negative in July *after* C++ work had begun. This time the negative arrived before a line of DSP.
+
+### Two caveats recorded so they are not mis-cited later
+- **SMART-3P's first verdict (+2.380 → PROCEED) was confounded** — a broadband oracle scored against the
+  2-band plugin measures topology *and* optimisation together. Cursor raised this itself. An oracle must be
+  compared against the same topology.
+- **Δ_topology (+0.36 mean, +1.16 live-show) is NOT clean**: the broadband baseline could often not reach
+  Smart's RMS and was "scored at peak-safe max loudness" — quieter, therefore less limited, therefore
+  flattered. Before anyone chases "broadband beats our 2-band reconstruction", re-run it at equal loudness.
+- live-show alone showed causal headroom (+2.56 at LA 5) that does not hold on the corpus. Genre-specific,
+  not a general engine.
