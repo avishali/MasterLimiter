@@ -209,20 +209,10 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     sldBandMsLink_.setTooltip ("Per-band Mid/Side link when Band M/S is on. 0 = independent M/S per band, 100 = linked max(|M|,|S|) per band.");
 
     btnMsSafetyClamp_.setClickingTogglesState (true);
-    btnMsSafetyClamp_.setTooltip ("M/S decoded-L/R safety clamp. Off = skip clamp (FinalCeiling still ceiling-safe).");
+    btnMsSafetyClamp_.setTooltip ("M/S decoded-L/R safety clamp. Off = skip clamp (Ceiling stage still peak-safe when on).");
     lblMsClampReadout_.setJustificationType (juce::Justification::centredRight);
     lblMsClampReadout_.setFont (ui_.type().labelFont().withHeight (11.0f));
     lblMsClampReadout_.setColour (juce::Label::textColourId, palette::textMuted);
-
-    btnFinalCeiling_.setClickingTogglesState (true);
-    btnFinalCeiling_.setTooltip ("OFF lets peaks exceed the ceiling - audition only.");
-    lblFinalCeilingReadout_.setJustificationType (juce::Justification::centredRight);
-    lblFinalCeilingReadout_.setFont (ui_.type().labelFont().withHeight (11.0f));
-    lblFinalCeilingReadout_.setColour (juce::Label::textColourId, palette::textMuted);
-
-    setupLabel (lblFcRelease_, "FC Release (ms)");
-    setupSlider (sldFcRelease_, 1, " ms");
-    sldFcRelease_.setTooltip ("FinalCeiling release time. Lower = less macro pump/flatten after transients (default 5 ms). Watch the FC GR meter while tuning.");
 
     setupLabel (lblSustainRatio_, "Manual Sustain");
     setupSlider (sldSustainRatio_, 2, {});
@@ -263,7 +253,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                          &lblSigmaAttack_, &lblSigmaDecay_, &lblLowScale_, &lblMidScale_,
                          &lblHighScale_, &lblWideScale_, &lblBandStereoLink_, &lblBandMsLink_,
                          &lblMsClampReadout_,
-                         &lblFinalCeilingReadout_, &lblFcRelease_, &lblSustainRatio_, &lblEngine_,
+                         &lblSustainRatio_, &lblEngine_,
                          &lblMbCrossover_, &lblMbAttackMode_, &lblMbAttackMs_, &lblMbRelease_, &lblMbLookahead_ })
     {
         content_.addAndMakeVisible (*label);
@@ -275,7 +265,7 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
                           &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                           &sldLaRelease_, &sldSmartFast_, &sldSmartSlow_, &sldSmartSustain_, &sldSmartLeak_,
                           &sldSigmaAttack_, &sldSigmaDecay_,
-                          &sldLowScale_, &sldMidScale_, &sldHighScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldFcRelease_, &sldSustainRatio_,
+                          &sldLowScale_, &sldMidScale_, &sldHighScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldSustainRatio_,
                           &sldMbCrossover_, &sldMbAttackMs_, &sldMbRelease_, &sldMbLookahead_ })
     {
         content_.addAndMakeVisible (*slider);
@@ -286,7 +276,6 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     content_.addAndMakeVisible (cmbReleaseEngine_);
     content_.addAndMakeVisible (cmbLaPoles_);
     content_.addAndMakeVisible (btnMsSafetyClamp_);
-    content_.addAndMakeVisible (btnFinalCeiling_);
     content_.addAndMakeVisible (btnBandMs_);
     content_.addAndMakeVisible (btnMbSafety_);
     content_.addAndMakeVisible (cmbMbAttackMode_);
@@ -323,8 +312,6 @@ DevControlsComponent::DevControlsComponent (MasterLimiterAudioProcessor& process
     attBandMs_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_band_ms), btnBandMs_);
     attBandMsLink_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_band_ms_link_pct), sldBandMsLink_);
     attMsSafetyClamp_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_ms_safety_clamp), btnMsSafetyClamp_);
-    attFinalCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::dev_final_ceiling), btnFinalCeiling_);
-    attFcRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::dev_final_ceiling_release_ms), sldFcRelease_);
     attSustainRatio_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_sustain_ratio), sldSustainRatio_);
     if (auto* mbEngineParam = apvts_.getParameter (pid (param::dev_mb_engine)))
     {
@@ -410,7 +397,7 @@ void DevControlsComponent::resized()
                               &sldXoverHiCutoff_, &sldXoverHiTransition_, &sldXoverHiAtten_, &sldBandLink_,
                               &sldLaRelease_, &sldSmartFast_, &sldSmartSlow_, &sldSmartSustain_, &sldSmartLeak_,
                           &sldSigmaAttack_, &sldSigmaDecay_, &sldLowScale_, &sldMidScale_, &sldHighScale_,
-                          &sldWideScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldFcRelease_, &sldSustainRatio_,
+                          &sldWideScale_, &sldBandStereoLink_, &sldBandMsLink_, &sldSustainRatio_,
                           &sldMbCrossover_, &sldMbAttackMs_, &sldMbRelease_, &sldMbLookahead_ })
             slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 58, 20);
     }
@@ -449,24 +436,13 @@ void DevControlsComponent::resized()
         return group.getBounds().reduced (16, 22);
     };
 
-    auto inner = placeGroupIfVisible (groupPeakControl_, 3);
+    auto inner = placeGroupIfVisible (groupPeakControl_, 1);
     if (! inner.isEmpty())
     {
-        {
-            auto row = inner.removeFromTop (rowH);
-            btnMsSafetyClamp_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 88)));
-            row.removeFromLeft (8);
-            lblMsClampReadout_.setBounds (row);
-        }
-        inner.removeFromTop (8);
-        {
-            auto row = inner.removeFromTop (rowH);
-            btnFinalCeiling_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 88)));
-            row.removeFromLeft (8);
-            lblFinalCeilingReadout_.setBounds (row);
-        }
-        inner.removeFromTop (8);
-        placeSliderRow (inner.removeFromTop (rowH), lblFcRelease_, sldFcRelease_);
+        auto row = inner.removeFromTop (rowH);
+        btnMsSafetyClamp_.setBounds (row.removeFromLeft (juce::jmax (120, row.getWidth() - 88)));
+        row.removeFromLeft (8);
+        lblMsClampReadout_.setBounds (row);
     }
 
     inner = placeGroupIfVisible (groupEngineSelector_, 1);
@@ -756,6 +732,4 @@ void DevControlsComponent::syncReadouts()
 
     lblMsClampReadout_.setText (formatClampReadout (processor_.getCurrentMsClampDb(), processor_.getMaxMsClampDb()),
                                 juce::dontSendNotification);
-    lblFinalCeilingReadout_.setText (formatClampReadout (processor_.getCurrentFinalCeilingDb(), processor_.getMaxFinalCeilingDb()),
-                                     juce::dontSendNotification);
 }

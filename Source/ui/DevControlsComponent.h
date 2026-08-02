@@ -132,10 +132,6 @@ private:
     juce::GroupComponent groupPeakControl_ { "PeakControlGroup", "PEAK - Global (DEV)" };
     juce::ToggleButton btnMsSafetyClamp_ { "M/S Safety Clamp" };
     juce::Label lblMsClampReadout_ {};
-    juce::ToggleButton btnFinalCeiling_ { "Final Ceiling" };
-    juce::Label lblFinalCeilingReadout_ {};
-    juce::Label lblFcRelease_ {};
-    juce::Slider sldFcRelease_;
 
     juce::GroupComponent groupManualRelease_ { "ManualReleaseGroup", "RELEASE - Manual" };
     juce::Label lblSustainRatio_ {};
@@ -186,8 +182,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attBandMs_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attBandMsLink_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attMsSafetyClamp_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attFinalCeiling_;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attFcRelease_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attSustainRatio_;
     std::unique_ptr<juce::ParameterAttachment> attMbEngineListener_;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attMbCrossover_;

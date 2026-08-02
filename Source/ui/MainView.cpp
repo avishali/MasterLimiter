@@ -126,7 +126,7 @@ juce::String formatPositiveBare (float v)
 
 juce::String formatClipReadout (float currentDb, float maxDb)
 {
-    return "CLIP GR " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
+    return "DRIVE GR " + formatPositiveBare (currentDb) + " / " + formatPositiveBare (maxDb);
 }
 
 juce::String scaleLabel (MeterGroupComponent::ScaleMode mode)
@@ -483,6 +483,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupLabel (lblClipperDrive_);
     setupLabel (lblClipperReadout_);
     setupLabel (lblCeiling_);
+    setupLabel (lblCeilingRelease_);
     setupLabel (lblRelease_);
     setupLabel (lblReleaseAuto_);
     setupLabel (lblCeilingMode_);
@@ -506,6 +507,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     styleRotary (sldGainDrive_);
     styleRotary (sldClipperDrive_);
     styleRotary (sldCeiling_);
+    styleRotary (sldCeilingRelease_);
     styleRotary (sldRelease_);
     styleRotary (sldStereoLink_);
     styleIoTrimFader (sldIoInputTrimL_);
@@ -524,9 +526,10 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     addAndMakeVisible (btnClipperActive_);
     btnClipperMode_.setClickingTogglesState (false);
     addAndMakeVisible (btnClipperMode_);
-    btnClipperPosition_.setClickingTogglesState (false);
-    addAndMakeVisible (btnClipperPosition_);
     addAndMakeVisible (sldCeiling_);
+    btnCeilingStageActive_.setClickingTogglesState (true);
+    addAndMakeVisible (btnCeilingStageActive_);
+    addAndMakeVisible (sldCeilingRelease_);
     addAndMakeVisible (sldRelease_);
     btnReleaseAuto_.setClickingTogglesState (true);
     addAndMakeVisible (btnReleaseAuto_);
@@ -548,7 +551,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     btnLimiterActive_.setName ("LimiterPower");
     btnClipperActive_.setName ("LimiterPower");
     btnClipperMode_.setName ("ClipperModeSegment");
-    btnClipperPosition_.setName ("ClipperPositionSegment");
+    btnCeilingStageActive_.setName ("LimiterPower");
     btnCeilingMode_.setName ("CeilingModeSegment");
     btnStereoMode_.setName ("StereoModeSegment");
     btnGainMatchAutoTrack_.setClickingTogglesState (true);
@@ -603,17 +606,11 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
                                                                        nullptr);
         attClipperMode_->sendInitialUpdate();
     }
-    if (auto* clipperPositionParam = apvts_.getParameter (pid (param::clipper_position)))
-    {
-        attClipperPosition_ = std::make_unique<juce::ParameterAttachment> (*clipperPositionParam,
-                                                                             [this] (float value)
-                                                                             {
-                                                                                 updateClipperPositionButton ((int) std::lround (value));
-                                                                             },
-                                                                             nullptr);
-        attClipperPosition_->sendInitialUpdate();
-    }
     attCeiling_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::ceiling_db), sldCeiling_);
+    attCeilingStageActive_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        apvts_, pid (param::dev_final_ceiling), btnCeilingStageActive_);
+    attCeilingRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        apvts_, pid (param::dev_final_ceiling_release_ms), sldCeilingRelease_);
     attGainCeilingLink_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::gain_ceiling_link), btnGainCeilingLink_);
     attRelease_ = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts_, pid (param::release_ms), sldRelease_);
     attReleaseAuto_ = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts_, pid (param::release_auto), btnReleaseAuto_);
@@ -645,6 +642,13 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     useSliderTextboxFormat (sldGainDrive_, 1, " dB");
     useSliderTextboxFormat (sldClipperDrive_, 1, " dB");
     useSliderTextboxFormat (sldCeiling_, 1, " dB");
+    useSliderTextboxFormat (sldCeilingRelease_, 1, " ms");
+    sldCeilingRelease_.textFromValueFunction = [] (double v)
+    {
+        if (v <= 0.0)
+            return juce::String ("Clip");
+        return juce::String (v, 1) + " ms";
+    };
     useSliderTextboxFormat (sldRelease_, 0, " ms");
     useSliderTextboxFormat (sldStereoLink_, 0, juce::String());
     sldStereoLink_.textFromValueFunction = [] (double v) { return juce::String (v, 0) + "%"; };
@@ -655,11 +659,13 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     setupValueEdit (sldGainDrive_, ValueSlider::ValueLabelMode::Centre);
     setupValueEdit (sldClipperDrive_, ValueSlider::ValueLabelMode::Centre);
     setupValueEdit (sldCeiling_, ValueSlider::ValueLabelMode::Centre);
+    setupValueEdit (sldCeilingRelease_, ValueSlider::ValueLabelMode::Centre);
     setupValueEdit (sldRelease_, ValueSlider::ValueLabelMode::Centre);
     setupValueEdit (sldStereoLink_, ValueSlider::ValueLabelMode::Centre);
     sldGainDrive_.setRange (sldGainDrive_.getMinimum(), sldGainDrive_.getMaximum(), 0.1);
     sldClipperDrive_.setRange (sldClipperDrive_.getMinimum(), sldClipperDrive_.getMaximum(), 0.1);
     sldCeiling_.setRange (sldCeiling_.getMinimum(), sldCeiling_.getMaximum(), 0.1);
+    sldCeilingRelease_.setRange (sldCeilingRelease_.getMinimum(), sldCeilingRelease_.getMaximum(), 0.1);
     setupValueEdit (sldIoInputTrimL_, ValueSlider::ValueLabelMode::Hidden);
     setupValueEdit (sldIoInputTrimR_, ValueSlider::ValueLabelMode::Hidden);
     setupValueEdit (sldIoOutputTrimL_, ValueSlider::ValueLabelMode::Hidden);
@@ -696,6 +702,10 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     {
         updateClipperActiveState();
     };
+    btnCeilingStageActive_.onClick = [this]
+    {
+        updateCeilingStageActiveState();
+    };
     btnBypass_.onClick = [this]
     {
         updateBypassButtonState();
@@ -718,11 +728,6 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     {
         if (attClipperMode_ != nullptr)
             attClipperMode_->setValueAsCompleteGesture (lastClipperModeIdx_ == 0 ? 1.0f : 0.0f);
-    };
-    btnClipperPosition_.onClick = [this]
-    {
-        if (attClipperPosition_ != nullptr)
-            attClipperPosition_->setValueAsCompleteGesture (lastClipperPositionIdx_ == 0 ? 1.0f : 0.0f);
     };
 
     sldIoInputTrimL_.onValueChange = [this] { syncLinkedFaders (sldIoInputTrimL_, sldIoInputTrimR_, btnIoInputLink_); };
@@ -756,6 +761,7 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
     updateIoTrimReadouts();
     updateLimiterActiveState();
     updateClipperActiveState();
+    updateCeilingStageActiveState();
     updateBypassButtonState();
     updateReleaseAutoControls (true);
     updateStereoModeControls();
@@ -780,14 +786,15 @@ MainView::MainView (mdsp_ui::UiContext& uiContext, MasterLimiterAudioProcessor& 
 
     sldGainDrive_.setTooltip ("Drive into the limiter in dB.");
     btnLimiterActive_.setTooltip ("Turns the limiter section on or off while preserving I/O trims.");
-    btnClipperActive_.setTooltip ("Toggle the clipper stage on/off.");
-    sldClipperDrive_.setTooltip ("Sets the clipper threshold from -12 to 0 dB.");
-    btnClipperMode_.setTooltip ("Toggles the clipper curve between Hard and Soft.");
-    btnClipperPosition_.setTooltip ("Clipper position: Pre = before the limiter (input shaping); "
-                                    "Post = after the limiter (transient catcher; TruePeak ceiling catches its inter-sample peaks).");
-    lblClipperReadout_.setTooltip ("Clipper gain-reduction depth in dB (current / max since reset). "
-                                   "Not an output-over indicator - output is limited by the ceiling stage. "
+    btnClipperActive_.setTooltip ("Toggle Drive (pre-engine tone/saturation) on/off.");
+    sldClipperDrive_.setTooltip ("Drive amount into the pre-engine clip stage (-12 to 0 dB).");
+    btnClipperMode_.setTooltip ("Toggles the Drive curve between Hard and Soft.");
+    lblClipperReadout_.setTooltip ("Drive gain-reduction depth in dB (current / max since reset). "
                                    "Click to reset max.");
+    btnCeilingStageActive_.setTooltip ("Peak-safety Ceiling on/off. Off lets peaks exceed the output level - audition only.");
+    sldCeilingRelease_.setTooltip ("Ceiling character: minimum = Clip (hard clip at Output Level); "
+                                   "higher = FinalCeiling limiter release (ms).");
+    lblCeilingRelease_.setTooltip ("Ceiling release. Min detent = Clip.");
     btnGainCeilingLink_.setTooltip ("When enabled, Gain and Ceiling move inversely.");
     btnGainMatchAutoTrack_.setTooltip ("Continuously matches limiter output loudness to the learned reference.");
     btnLearnInputGain_.setTooltip ("Click to learn a 3 s LUFS reference. Right-click to clear it.");
@@ -1232,15 +1239,6 @@ void MainView::updateClipperModeButton (int clipperIdx)
     repaint (btnClipperMode_.getBounds().expanded (4, 4));
 }
 
-void MainView::updateClipperPositionButton (int idx)
-{
-    const bool post = idx >= 1;
-    lastClipperPositionIdx_ = post ? 1 : 0;
-    btnClipperPosition_.setButtonText (post ? "Post" : "Pre");
-    btnClipperPosition_.setToggleState (post, juce::dontSendNotification);
-    repaint (btnClipperPosition_.getBounds().expanded (4, 4));
-}
-
 void MainView::updateClipperActiveState()
 {
     const bool active = btnClipperActive_.getToggleState();
@@ -1249,7 +1247,6 @@ void MainView::updateClipperActiveState()
     lblClipperDrive_.setEnabled (active);
     sldClipperDrive_.setEnabled (active);
     btnClipperMode_.setEnabled (active);
-    btnClipperPosition_.setEnabled (active);
 
     if (! active)
     {
@@ -1262,8 +1259,19 @@ void MainView::updateClipperActiveState()
     repaint (lblClipperDrive_.getBounds()
                  .getUnion (sldClipperDrive_.getBounds())
                  .getUnion (btnClipperMode_.getBounds())
-                 .getUnion (btnClipperPosition_.getBounds())
                  .getUnion (btnClipperActive_.getBounds())
+                 .expanded (8, 8));
+}
+
+void MainView::updateCeilingStageActiveState()
+{
+    const bool active = btnCeilingStageActive_.getToggleState();
+    lastCeilingStageActive_ = active;
+    lblCeilingRelease_.setEnabled (active);
+    sldCeilingRelease_.setEnabled (active);
+    repaint (lblCeilingRelease_.getBounds()
+                 .getUnion (sldCeilingRelease_.getBounds())
+                 .getUnion (btnCeilingStageActive_.getBounds())
                  .expanded (8, 8));
 }
 
@@ -1580,9 +1588,12 @@ void MainView::resized()
     lblClipperDrive_.setBounds (505, 116, 100, 18);
     btnClipperActive_.setBounds (450, 134, 34, 34);
     sldClipperDrive_.setBounds (505, 134, 100, 100);
-    btnClipperMode_.setBounds (505, 244, 50, 22);
-    btnClipperPosition_.setBounds (555, 244, 50, 22);
+    btnClipperMode_.setBounds (505, 244, 100, 22);
     lblClipperReadout_.setBounds (505, 270, 100, 18);
+
+    btnCeilingStageActive_.setBounds (250, 210, 34, 34);
+    lblCeilingRelease_.setBounds (505, knobY, 78, 18);
+    sldCeilingRelease_.setBounds (505, knobY + 18, 78, knobH);
 
     btnGainMatchAutoTrack_.setBounds (24, 528, 126, 30);
     gainMatchLabelArea_ = btnGainMatchAutoTrack_.getBounds().translated (8, 0).withY (506).withHeight (18);
@@ -1644,6 +1655,7 @@ void MainView::resized()
     lblMeterScaleRange_.toFront (false);
     btnLimiterActive_.toFront (false);
     btnClipperActive_.toFront (false);
+    btnCeilingStageActive_.toFront (false);
     presetMenu_.toFront (false);
     btnSavePreset_.toFront (false);
     btnCompareA_.toFront (false);
@@ -1653,7 +1665,6 @@ void MainView::resized()
     btnHistory_.toFront (false);
     btnBypass_.toFront (false);
     btnClipperMode_.toFront (false);
-    btnClipperPosition_.toFront (false);
     segAutoReleaseMode_.toFront (false);
     compGainBar_.toFront (false);
     valueEditor_.toFront (false);
@@ -1694,6 +1705,8 @@ void MainView::syncMetersFromProcessor()
         updateLimiterActiveState();
     if (btnClipperActive_.getToggleState() != lastClipperActive_)
         updateClipperActiveState();
+    if (btnCeilingStageActive_.getToggleState() != lastCeilingStageActive_)
+        updateCeilingStageActiveState();
 
     const float clipDb = processor_.getCurrentClipDb();
     const float maxClipDb = processor_.getMaxClipSinceResetDb();

@@ -191,7 +191,8 @@ private:
     void processCore (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi, bool forceBypass);
     void prepareMbEngine (double sampleRate, int samplesPerBlock);
     void updateMbEngineRuntimeConfig (bool forceUpdate = false) noexcept;
-    void syncReportedLatency (bool mbEngineOn) noexcept;
+    void syncReportedLatency() noexcept;
+    int  computeNativeLatencySamples (bool mbEngineOn) const noexcept;
     mdsp_dsp::LimiterEnvelope::AttackMode mapMbAttackModeIndex (int index) const noexcept;
     void configureMbBandLimiter (mdsp_dsp::SingleBandLimiter& limiter,
                                  float thresholdLin,
@@ -201,7 +202,11 @@ private:
     void runClipperStage (juce::dsp::AudioBlock<float>& block,
                           int hostNumSamples,
                           int numChannels,
-                          bool forceActive) noexcept;
+                          bool ceilingClipRole,
+                          mdsp_dsp::HalfbandPolyphaseOS& oversampler,
+                          juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>& alignDelay,
+                          int alignPad4x,
+                          float ceilingClipHeadroomDb = 0.0f) noexcept;
     mdsp_dsp::LinearPhaseCrossover::Spec readLoMidCrossoverSpecFromParams() const;
     mdsp_dsp::LinearPhaseCrossover::Spec readMidHiCrossoverSpecFromParams() const;
     void prepareCrossoverBanks (double osSampleRate);
@@ -277,8 +282,10 @@ private:
     mdsp_dsp::LimiterEnvelope envelopeMidR_;
     mdsp_dsp::LimiterEnvelope envelopeHighR_;
     mdsp_dsp::HalfbandPolyphaseOS limiterOversampler_;
-    mdsp_dsp::HalfbandPolyphaseOS clipperOversampler_;   // 1-stage (2×), runs inside the 4× domain
+    mdsp_dsp::HalfbandPolyphaseOS clipperOversampler_;        // Drive PRE (2× inside 4×)
+    mdsp_dsp::HalfbandPolyphaseOS ceilingClipOversampler_;    // Ceiling@Clip tip-catch (separate instance)
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> clipperOsAlignDelay_ { 4096 };
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> ceilingClipOsAlignDelay_ { 4096 };
 
     juce::AudioBuffer<float> peakBuf_;
     juce::AudioBuffer<float> gainBuf_;
@@ -318,7 +325,8 @@ private:
     mdsp_dsp::TruePeakDetector inputTruePeakR_;
     mdsp_dsp::TruePeakDetector outputTruePeakL_;
     mdsp_dsp::TruePeakDetector outputTruePeakR_;
-    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay_ { 4096 };
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay_ { 8192 };
+    mdsp_dsp::LookaheadDelay<float> wetLatencyPad_;
     juce::AudioBuffer<float> dryScratch_;
     juce::LinearSmoothedValue<float> bypassFade_;
     juce::LinearSmoothedValue<float> bandLinkSmoothed_;
@@ -397,6 +405,8 @@ private:
     std::atomic<float>* devMbLookaheadMs_ = nullptr;
 
     int  baseLatencySamples_ = 0;
+    int  baseMaxLookaheadSamples_ = 0;
+    int  fixedLatencySamples_ = 0;
     int  mbEngineActiveLookaheadSamples_ = 0;
     int  mbPreparedLookaheadSamples_ = 0;
     double mbEngineSampleRate_ = 0.0;
@@ -418,6 +428,7 @@ private:
     int  clipperOsLatencySamples4x_ = 0;   // padded total latency in 4×-rate samples
     int  clipperOsLatencyHostSamples_ = 0;
     int  clipperOsAlignPad4x_ = 0;
+    int  ceilingClipOsAlignPad4x_ = 0;
     int  finalCeilingLatencySamples_ = 0;
     int  cachedCeilingMode_   = 0;
     int  osMaxLookaheadSamples_ = 0;

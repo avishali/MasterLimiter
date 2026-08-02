@@ -38,21 +38,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (clipper_drive_db, 1),
-        "Clipper",
+        "Drive",
         NormalisableRange<float> (-12.0f, 0.0f, 0.01f),
         0.0f,
         AudioParameterFloatAttributes().withLabel ("dB")));
 
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (clipper_mode, 1),
-        "Clipper Mode",
+        "Drive Mode",
         StringArray { "Hard", "Soft" },
         0,
         AudioParameterChoiceAttributes()));
 
+    // Kept for preset compatibility; DSP is PRE-only (CLIP-1).
     layout.add (std::make_unique<AudioParameterChoice> (
         pid (clipper_position, 1),
-        "Clipper Position",
+        "Drive Position",
         StringArray { "Pre", "Post" },
         0,
         AudioParameterChoiceAttributes()));
@@ -199,7 +200,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
 
     layout.add (std::make_unique<AudioParameterBool> (
         pid (clipper_active, 1),
-        "Clipper Active",
+        "Drive Active",
         false,
         AudioParameterBoolAttributes()));
 
@@ -420,16 +421,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout Parameters::createParameterL
 
     layout.add (std::make_unique<AudioParameterBool> (
         pid (dev_final_ceiling, 1),
-        "DEV Final Ceiling",
+        "Ceiling Active",
         true,
         AudioParameterBoolAttributes()));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         pid (dev_final_ceiling_release_ms, 1),
-        "DEV FC Release",
-        NormalisableRange<float> (1.0f, 100.0f, 0.1f, 0.35f),
-        5.0f,
-        AudioParameterFloatAttributes().withLabel ("ms")));
+        "Ceiling Release",
+        NormalisableRange<float> (0.0f, 100.0f, 0.1f, 0.35f),
+        0.0f,
+        AudioParameterFloatAttributes()
+            .withLabel ("ms")
+            .withStringFromValueFunction ([] (float v, int)
+            {
+                if (v <= 0.0f)
+                    return juce::String ("Clip");
+                return juce::String (v, 1) + " ms";
+            })
+            .withValueFromStringFunction ([] (const juce::String& s)
+            {
+                if (s.trim().equalsIgnoreCase ("Clip"))
+                    return 0.0f;
+                return s.getFloatValue();
+            })));
 
     layout.add (std::make_unique<AudioParameterBool> (
         pid (dev_mb_engine, 1),

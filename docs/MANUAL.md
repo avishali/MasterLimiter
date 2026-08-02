@@ -1,7 +1,7 @@
 # MasterLimiter — User Guide (v0.3.0 beta)
 
-A mastering limiter / maximizer: clipper + drive → 2-band (frequency-selective)
-true-peak limiter → ceiling, with loudness metering and gain-match.
+A mastering limiter / maximizer: optional Drive (tone) → engine (Transparent /
+Open) → Ceiling (peak safety), with loudness metering and gain-match.
 
 > **Beta build.** Please report anything that sounds wrong, looks off, or
 > behaves unexpectedly. Known beta caveats are listed at the end.
@@ -27,7 +27,7 @@ cancels, click away closes).
 ## Signal flow
 
 ```
-In → Input trim → Clipper → Gain(drive) → 2-band limiter (Color) → Ceiling(SP/TP)
+In → Input trim → Drive (opt, PRE) → Gain → Engine → Ceiling (Clip↔Limiter)
    → Gain-Match comp → Output trim → Out
 ```
 
@@ -42,11 +42,12 @@ In → Input trim → Clipper → Gain(drive) → 2-band limiter (Color) → Cei
   (inter-sample, oversampled) — safer for lossy codecs / streaming.
 - **Gain⇄Ceiling Link** — when on, Gain and Ceiling move inversely, so you can
   push loudness while the output level stays put.
-- **Output Level (Ceiling)** — −24 to 0 dB. The level the output will not
-  exceed.
-- **Clipper** — a clip stage *before* the limiter that catches fast transients
-  for extra loudness. **Hard** = clamp; **Soft** = soft (tanh) knee. More
-  Clipper = harder clipping.
+- **Output Level** — −24 to 0 dB. Target output level (`ceiling_db`).
+- **Ceiling** (power + **Ceil Rel**) — the peak-safety stage. **On/Off**;
+  Release at minimum = **Clip** (hard clip at Output Level); higher = gentle
+  limiter release (ms). One peak stage — do not stack with Drive for peaks.
+- **Drive** — optional *pre-engine* tone/saturation (not peak safety).
+  **Hard** = clamp; **Soft** = soft (tanh) knee. LED follows the Drive toggle.
 - **Character** — **Clean / Tight / Aggressive**. The limiter's attack/release
   character, gentlest → most aggressive.
 - **Release** — manual release time (how fast gain recovers). Disabled when

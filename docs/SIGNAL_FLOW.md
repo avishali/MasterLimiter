@@ -6,7 +6,7 @@
 ---
 
 ## 0. Mental model in one paragraph
-MasterLimiter is a **mastering maximizer**. Audio comes in, optionally gets soft/hard **clipped**, gets an **input gain** push, is **4× oversampled** (so all limiting math runs at ~192 kHz to avoid aliasing), is split into **three bands** via a **linear-phase crossover tree** (Lo/Mid at ~120 Hz, Mid/Hi at ~2.5 kHz, both DEV-tunable), each band gets its own **limiter envelope** (a gain-reduction curve), the three bands are blended back toward wideband by **Band Link** (`band_color`; shipping Color knob greyed — tune via DEV dock), then a **wideband limiter** catches whatever is left, an **output Ceiling** gain is applied, the signal is **downsampled** back to host rate, and a final **true-peak brickwall** guarantees nothing exceeds the ceiling. In parallel, a **dry copy** is kept delay-aligned for the **bypass cross-fade**, and **LUFS loudness** is measured for optional **auto gain-match**. Everything you see on the meters is tapped at specific points in this chain.
+MasterLimiter is a **mastering maximizer**. Product chain: optional **Drive** (pre-engine tone) → **Engine** (Transparent 3-band / Open 2-band) → **Ceiling** (single peak-safety stage: limiter or hard-clip). Transparent path: Drive PRE inside 4× OS → input gain → linear-phase 3-band limiter → output-level gain → downsample → Ceiling (FinalCeiling when release > 0, or OS hard-clip at `ceiling_db` when release = Clip). Open path: optional Drive PRE → input gain → SDK `MultibandLimiter` → Ceiling tip-catch (default Clip). A dry copy stays delay-aligned for bypass; LUFS feeds optional auto gain-match.
 
 ---
 
@@ -40,10 +40,7 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.6 — Upsample 4×.** `processSamplesUp` → `osBlock` at 4× rate, `osN` samples.
 
-**2.7 — Clipper (optional).** Position: **`clipper_position`** — **Pre** (default, before limiter) or **Post** (after wideband limiter + ceiling, before lookahead pad + downsample). Gated by **Clipper Active**. The clipper's 2× OS round-trip runs **once per block** at the active site (even when inactive) so latency is constant across position and active toggle. Per sample: multiply by **drive** (`clipper_drive_db`, applied as a *boost into* the clipper), then:
-  - **Hard** (`mode 0`): `y = sign(x)` when `|x| > 1`.
-  - **Soft** (`mode 1`): tanh soft-knee above **0.891** (≈ −1 dBFS): `y = sign(x)·(0.891 + 0.109·tanh(over))`. Smooth saturation, asymptotic to ±1.
-  Then divide back out by the drive (un-drive) so the clipper adds harmonics/density without net level change. The peak attenuation it caused is metered as **Clip dB**. **Post** position relies on **TruePeak FinalCeiling** (default) to catch inter-sample peaks from the clipper.
+**2.7 — Drive (optional, PRE-only).** Gated by **`clipper_active`** (UI: Drive). Always before the engine; `clipper_position` is ignored (kept for presets). On Transparent the 2× clipper OS round-trip runs once per block inside the 4× domain even when inactive (constant latency). Per sample: multiply by **drive** (`clipper_drive_db`), then Hard clamp at ±1 or Soft tanh knee, then un-drive. Metered as Drive GR. Character tool — not peak safety.
 
 **2.8 — Input gain.** `input_gain_db` (0–24 dB), smoothed, multiplied in. **This is the knob that drives gain reduction** (the limiter threshold is fixed at 1.0 — see §3).
 
@@ -64,7 +61,11 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 **2.15 — Downsample.** `processSamplesDown` returns to host rate.
 
-**2.16 — Final ceiling brickwall.** `finalCeiling_.process()` (gated by DEV `dev_final_ceiling`, default On) — a residual **true-peak (or sample-peak) limiter** that catches inter-sample peaks created by downsampling. **`ceiling_mode` defaults to TruePeak** so the ~0.1 dB inter-sample residual left after main-stage lookahead limiting is caught; SamplePeak remains selectable. Applied reduction is published to `currentFinalCeilingDb_/maxFinalCeilingDb_` via `getLastBlockMaxReductionDb()`. When Off, overs may exceed the ceiling (audition only). (Details: §4.4.)
+**2.16 — Ceiling (peak safety, CLIP-1).** Main-window stage (`dev_final_ceiling` On/Off, `dev_final_ceiling_release_ms` Release):
+  - **Release = Clip (0):** oversampled **hard-clip** at `ceiling_db` (reuses `runClipperStage` Ceiling-clip role; Transparent: inside 4× before downsample; Open: post-engine OS tip-catch).
+  - **Release > 0:** `finalCeiling_.process()` (`FinalCeilingLimiter`) at that release — residual SP/TP brickwall. Mode from `ceiling_mode` (default TruePeak).
+  - **Off:** skip both (overs may escape — audition only).
+  Applied FC reduction → `currentFinalCeilingDb_/maxFinalCeilingDb_`. Open defaults to Ceiling On + Clip (no forced Drive/clipper).
 
 **2.17 — Loudness tracking, auto gain-match, bypass cross-fade.**
   - `loudnessTrack_` measures the processed output LUFS; `updateCompensationGainDb` derives a smoothed (~1 s) gain so output LUFS matches the learned reference (±12 dB clamp). Same applied to the dry path.
@@ -74,10 +75,11 @@ Each numbered step is what actually happens to a block in `processCore`. Steps *
 
 ---
 
-## 3. The Ceiling model (Ozone-style decouple) — important
-- The **limiter threshold is fixed at 1.0** (sample-peak) / **0.965** (true-peak). It does **not** move with the Ceiling knob.
-- **Ceiling = an output gain** applied *after* limiting (`ceilingLin`, step 2.14), with the FinalCeiling brickwall guaranteeing it.
-- Consequence: **gain reduction responds only to Input Gain, not to Ceiling.** Lowering the ceiling lowers output level without changing how hard the limiter works. `ceiling_db` default **0.0**.
+## 3. Output Level vs Ceiling stage — important
+- The **limiter threshold is fixed at 1.0** (sample-peak) / **0.965** (true-peak). It does **not** move with **Output Level** (`ceiling_db`).
+- **`ceiling_db` = output gain** applied after limiting (`ceilingLin`, step 2.14).
+- **Ceiling stage** (On/Off + Release) is the single peak-safety stage: Clip end = OS hard-clip at that level; limiter end = `FinalCeilingLimiter`.
+- Consequence: **engine GR responds only to Input Gain / Drive into the engine, not to Output Level.** Lowering Output Level lowers output without changing how hard the engine works.
 - `MDSP_BAND_HEADROOM_DB = 0` (the old per-band pre-shave is removed).
 
 ---

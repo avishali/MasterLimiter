@@ -254,12 +254,16 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
 
     limiterOsLatencySamples_ = limiterOversampler_.getLatencyInSamples();
 
-    // Clipper-only 2× OS at the 4× rate — gentle spec; suppresses images in the top octave of the 4× band.
+    // Drive / Ceiling-clip 2× OS at the 4× rate — gentle spec; separate instances so Drive PRE
+    // and Ceiling@Clip never share filter state in the same block (CLIP-1.1).
     clipperOversampler_.prepare (2, osMaxBlockSize, osSampleRate, { { 0.10, 90.0 } });
     clipperOversampler_.reset();
+    ceilingClipOversampler_.prepare (2, osMaxBlockSize, osSampleRate, { { 0.10, 90.0 } });
+    ceilingClipOversampler_.reset();
     const int rawClipperOsLat4x = clipperOversampler_.getLatencyInSamples();
     const int paddedClipperOsLat4x = ((rawClipperOsLat4x + 3) / 4) * 4;
     clipperOsAlignPad4x_ = paddedClipperOsLat4x - rawClipperOsLat4x;
+    ceilingClipOsAlignPad4x_ = clipperOsAlignPad4x_;
     clipperOsLatencySamples4x_ = paddedClipperOsLat4x;
     clipperOsLatencyHostSamples_ = paddedClipperOsLat4x / 4;
 
@@ -271,6 +275,10 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     clipperOsAlignDelay_.setMaximumDelayInSamples (std::max (1, clipperOsAlignPad4x_));
     clipperOsAlignDelay_.setDelay (static_cast<float> (clipperOsAlignPad4x_));
     clipperOsAlignDelay_.reset();
+    ceilingClipOsAlignDelay_.prepare (clipperOsAlignSpec);
+    ceilingClipOsAlignDelay_.setMaximumDelayInSamples (std::max (1, ceilingClipOsAlignPad4x_));
+    ceilingClipOsAlignDelay_.setDelay (static_cast<float> (ceilingClipOsAlignPad4x_));
+    ceilingClipOsAlignDelay_.reset();
 
     lookahead_.prepare (2, osMaxLookaheadSamples_);
     lookahead_.setDelaySamples (osLookaheadSamples);
@@ -407,7 +415,7 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     devMbReleaseMs_ = apvts.getRawParameterValue (param::dev_mb_release_ms.data());
     devMbSafety_ = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (param::dev_mb_safety.data()));
     devMbLookaheadMs_ = apvts.getRawParameterValue (param::dev_mb_lookahead_ms.data());
-    finalCeiling_.setReleaseMs (devFinalCeilingReleaseMs_ != nullptr ? devFinalCeilingReleaseMs_->load() : 5.0f);
+    finalCeiling_.setReleaseMs (devFinalCeilingReleaseMs_ != nullptr ? devFinalCeilingReleaseMs_->load() : 0.0f);
     finalCeiling_.setReleaseSustainRatio (1.0f);
     jassert (limiterActive_ != nullptr);
     jassert (pluginBypass_ != nullptr);
@@ -495,13 +503,16 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     ioOutputGainRSmoothed_.reset (sampleRate, controlSmoothingSeconds);
     ioOutputGainRSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (ioOutputRDb_ != nullptr ? ioOutputRDb_->load (std::memory_order_relaxed) : 0.0f));
 
+    baseMaxLookaheadSamples_ = baseMaxLookaheadSamples;
     baseLatencySamples_ = (2 * baseMaxLookaheadSamples) + limiterOsLatencySamples_ + finalCeilingLatencySamples_
                         + crossoverOsLatencyHostSamples_ + clipperOsLatencyHostSamples_;
     cachedCeilingMode_  = ceilingMode_->getIndex();
 
     limiterOversampler_.reset();
     clipperOversampler_.reset();
+    ceilingClipOversampler_.reset();
     clipperOsAlignDelay_.reset();
+    ceilingClipOsAlignDelay_.reset();
     lookahead_.reset();
     lookaheadWide_.reset();
     lookaheadPad_.reset();
@@ -531,13 +542,49 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     resetInputTruePeakHolds();
     resetOutputTruePeakHolds();
 
-    setLatencySamples (baseLatencySamples_);
-
     mbInputGainSmoothed_.reset (sampleRate, controlSmoothingSeconds);
     mbInputGainSmoothed_.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_ != nullptr ? inputGainDbParam_->get() : 0.0f));
     prepareMbEngine (sampleRate, samplesPerBlock);
     lastMbEngineOn_ = devMbEngine_ != nullptr && devMbEngine_->get();
-    syncReportedLatency (lastMbEngineOn_);
+
+    // Fixed host latency = max native latency across engine/Drive/Ceiling combos at this SR.
+    // Open: use ACTIVE MB lookahead (not prepare headroom) — MultibandLimiter::getLatencySamples()
+    // reports prepared headroom (20 ms) while audioDelay follows active (e.g. 5 ms).
+    // Ceiling@Clip+TruePeak adds FinalCeiling mop-up on top of the OS hard-clip.
+    fixedLatencySamples_ = 0;
+    for (const bool mb : { false, true })
+        for (int drive = 0; drive < 2; ++drive)
+            for (int ceilMode = 0; ceilMode < 4; ++ceilMode) // 0=off 1=clipSP 2=clipTP 3=limiter
+            {
+                const bool ceilingOn = ceilMode != 0;
+                const bool clipSp = ceilMode == 1;
+                const bool clipTp = ceilMode == 2;
+                const bool limiter = ceilMode == 3;
+                const int osStage = limiterOsLatencySamples_ + clipperOsLatencyHostSamples_;
+                int lat = 0;
+                if (mb)
+                {
+                    lat = mbEngineActiveLookaheadSamples_;
+                    if (drive != 0) lat += osStage;
+                    // Clip = OS hard-clip + short FinalCeiling mop-up (catches downsample ringing).
+                    if (clipSp || clipTp) lat += osStage + finalCeilingLatencySamples_;
+                    else if (limiter) lat += finalCeilingLatencySamples_;
+                }
+                else
+                {
+                    lat = (2 * baseMaxLookaheadSamples_) + limiterOsLatencySamples_ + crossoverOsLatencyHostSamples_;
+                    if (drive != 0) lat += clipperOsLatencyHostSamples_;
+                    if (clipSp || clipTp) lat += clipperOsLatencyHostSamples_ + finalCeilingLatencySamples_;
+                    else if (limiter) lat += finalCeilingLatencySamples_;
+                }
+                juce::ignoreUnused (ceilingOn);
+                fixedLatencySamples_ = juce::jmax (fixedLatencySamples_, lat);
+            }
+
+    wetLatencyPad_.prepare (2, juce::jmax (1, fixedLatencySamples_));
+    wetLatencyPad_.setDelaySamples (0);
+    wetLatencyPad_.reset();
+    syncReportedLatency();
 
     loudness_.prepare (sampleRate, samplesPerBlock);
     loudness_.reset();
@@ -559,7 +606,7 @@ void MasterLimiterAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     juce::dsp::ProcessSpec dryDelaySpec { sampleRate, static_cast<juce::uint32> (samplesPerBlock), 2 };
     dryDelay_.prepare (dryDelaySpec);
     dryDelay_.reset();
-    dryDelay_.setDelay (static_cast<float> (baseLatencySamples_));
+    dryDelay_.setDelay (static_cast<float> (currentReportedLatencySamples_));
 
     dryScratch_.setSize (2, std::max (samplesPerBlock, 4096), false, false, true);
     dryScratch_.clear();
@@ -1278,7 +1325,7 @@ void MasterLimiterAudioProcessor::prepareMbEngine (double sampleRate, int sample
     updateMbEngineRuntimeConfig (true);
 
     if (lastMbEngineOn_)
-        syncReportedLatency (true);
+        syncReportedLatency();
 }
 
 void MasterLimiterAudioProcessor::updateMbEngineRuntimeConfig (bool forceUpdate) noexcept
@@ -1341,27 +1388,34 @@ void MasterLimiterAudioProcessor::updateMbEngineRuntimeConfig (bool forceUpdate)
 void MasterLimiterAudioProcessor::runClipperStage (juce::dsp::AudioBlock<float>& block,
                                                    int hostNumSamples,
                                                    int numChannels,
-                                                   bool forceActive) noexcept
+                                                   bool ceilingClipRole,
+                                                   mdsp_dsp::HalfbandPolyphaseOS& oversampler,
+                                                   juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>& alignDelay,
+                                                   int alignPad4x,
+                                                   float ceilingClipHeadroomDb) noexcept
 {
-    const bool clipperActive = forceActive || (clipperActive_ != nullptr && clipperActive_->get());
-    const float clipCeilingLin = forceActive && ceilingDbParam_ != nullptr
-                               ? juce::Decibels::decibelsToGain (ceilingDbParam_->get())
+    const bool clipperActive = ceilingClipRole || (clipperActive_ != nullptr && clipperActive_->get());
+    // Ceiling@Clip: absolute hard-clip at ceiling_db (minus optional TP headroom for ISP mop-up).
+    const float clipCeilingLin = ceilingClipRole && ceilingDbParam_ != nullptr
+                               ? juce::Decibels::decibelsToGain (ceilingDbParam_->get() - juce::jmax (0.0f, ceilingClipHeadroomDb))
                                : 1.0f;
 
-    auto clipBlock = clipperOversampler_.processSamplesUp (block);
+    auto clipBlock = oversampler.processSamplesUp (block);
     const int clipN = static_cast<int> (clipBlock.getNumSamples());
 
     if (clipperActive)
     {
-        clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
-        const int clipperModeIdx = clipperMode_->getIndex();
+        if (! ceilingClipRole)
+            clipperDriveSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (-clipperDriveDb_->load (std::memory_order_relaxed)));
+
+        const int clipperModeIdx = ceilingClipRole ? 0 : clipperMode_->getIndex();
         float maxAttenuationDb = 0.0f;
-        float clipperDriveGain = clipperDriveSmoothed_.getCurrentValue();
+        float clipperDriveGain = ceilingClipRole ? 1.0f : clipperDriveSmoothed_.getCurrentValue();
         const float softKneeLin = clipCeilingLin * 0.891f;
 
         for (int i = 0; i < clipN; ++i)
         {
-            if ((i & 1) == 0)
+            if (! ceilingClipRole && (i & 1) == 0)
                 clipperDriveGain = clipperDriveSmoothed_.getNextValue();
 
             const int hostIdx = juce::jmin (hostNumSamples - 1, hostNumSamples > 0 ? i * hostNumSamples / clipN : 0);
@@ -1413,20 +1467,55 @@ void MasterLimiterAudioProcessor::runClipperStage (juce::dsp::AudioBlock<float>&
         currentClipDb_.store (0.0f, std::memory_order_relaxed);
     }
 
-    clipperOversampler_.processSamplesDown (block);
+    oversampler.processSamplesDown (block);
 
-    if (clipperOsAlignPad4x_ > 0)
+    if (alignPad4x > 0)
     {
         juce::dsp::ProcessContextReplacing<float> clipAlignCtx (block);
-        clipperOsAlignDelay_.process (clipAlignCtx);
+        alignDelay.process (clipAlignCtx);
     }
 }
 
-void MasterLimiterAudioProcessor::syncReportedLatency (bool mbEngineOn) noexcept
+int MasterLimiterAudioProcessor::computeNativeLatencySamples (bool mbEngineOn) const noexcept
 {
-    const int mbClipOsLatency = limiterOsLatencySamples_ + clipperOsLatencyHostSamples_;
-    const int latency = mbEngineOn ? mbEngine_.getLatencySamples() + mbClipOsLatency : baseLatencySamples_;
+    const bool ceilingOn = devFinalCeiling_ == nullptr
+                        || devFinalCeiling_->load (std::memory_order_relaxed) >= 0.5f;
+    const float ceilingReleaseMs = devFinalCeilingReleaseMs_ != nullptr
+                                 ? devFinalCeilingReleaseMs_->load (std::memory_order_relaxed)
+                                 : 0.0f;
+    const bool ceilingClip = ceilingOn && ceilingReleaseMs <= 0.0f;
+    const bool ceilingLimiter = ceilingOn && ceilingReleaseMs > 0.0f;
+    const bool driveOn = clipperActive_ != nullptr && clipperActive_->get();
+    const int osStageLatency = limiterOsLatencySamples_ + clipperOsLatencyHostSamples_;
 
+    if (mbEngineOn)
+    {
+        // Active lookahead only — see prepareToPlay fixed-latency sweep comment.
+        int latency = mbEngineActiveLookaheadSamples_;
+        if (devMbSafety_ != nullptr && devMbSafety_->get())
+            latency += mbEngineActiveLookaheadSamples_;
+        if (driveOn)
+            latency += osStageLatency;
+        if (ceilingClip)
+            latency += osStageLatency + finalCeilingLatencySamples_;
+        else if (ceilingLimiter)
+            latency += finalCeilingLatencySamples_;
+        return latency;
+    }
+
+    int latency = (2 * baseMaxLookaheadSamples_) + limiterOsLatencySamples_ + crossoverOsLatencyHostSamples_;
+    if (driveOn)
+        latency += clipperOsLatencyHostSamples_;
+    if (ceilingClip)
+        latency += clipperOsLatencyHostSamples_ + finalCeilingLatencySamples_;
+    else if (ceilingLimiter)
+        latency += finalCeilingLatencySamples_;
+    return latency;
+}
+
+void MasterLimiterAudioProcessor::syncReportedLatency() noexcept
+{
+    const int latency = juce::jmax (0, fixedLatencySamples_);
     if (latency == currentReportedLatencySamples_)
         return;
 
@@ -1551,7 +1640,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
 
     if (modeIdx != cachedCeilingMode_)
     {
-        syncReportedLatency (lastMbEngineOn_);
+        syncReportedLatency();
         cachedCeilingMode_ = modeIdx;
     }
 
@@ -1559,24 +1648,64 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     {
         const bool mbEngineOn = devMbEngine_->get();
 
+        const bool ceilingOn = devFinalCeiling_ == nullptr
+                            || devFinalCeiling_->load (std::memory_order_relaxed) >= 0.5f;
+        const float ceilingReleaseMs = devFinalCeilingReleaseMs_ != nullptr
+                                     ? devFinalCeilingReleaseMs_->load (std::memory_order_relaxed)
+                                     : 0.0f;
+        const bool ceilingClip = ceilingOn && ceilingReleaseMs <= 0.0f;
+        const bool ceilingLimiter = ceilingOn && ceilingReleaseMs > 0.0f;
+        const bool ceilingClipTp = ceilingClip && modeIdx == 1;
+
         if (mbEngineOn != lastMbEngineOn_)
-        {
             lastMbEngineOn_ = mbEngineOn;
-            syncReportedLatency (mbEngineOn);
-        }
+        syncReportedLatency();
 
         if (mbEngineOn)
         {
+            // Drive PRE (tone) — optional; OS wrap only when user Drive is on.
+            if (clipperActive_ != nullptr && clipperActive_->get())
+            {
+                juce::dsp::AudioBlock<float> driveBlock (buffer);
+                auto driveOsBlock = limiterOversampler_.processSamplesUp (driveBlock);
+                runClipperStage (driveOsBlock, n, nch, false,
+                                 clipperOversampler_, clipperOsAlignDelay_, clipperOsAlignPad4x_);
+                limiterOversampler_.processSamplesDown (driveBlock);
+            }
+
             buffer.applyGain (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
 
             updateMbEngineRuntimeConfig();
             processMbEngineInBlocks (mbEngine_, buffer, kMbProcessBlockSize);
 
+            float fcGrDb = 0.0f;
+            if (ceilingClip)
             {
                 juce::dsp::AudioBlock<float> mbBlock (buffer);
                 auto mbOsBlock = limiterOversampler_.processSamplesUp (mbBlock);
-                runClipperStage (mbOsBlock, n, nch, true);
+                // TruePeak: leave 1 dB clip headroom so hard-clip edges don't regenerate ISP above ceiling.
+                runClipperStage (mbOsBlock, n, nch, true,
+                                 ceilingClipOversampler_, ceilingClipOsAlignDelay_, ceilingClipOsAlignPad4x_,
+                                 ceilingClipTp ? 1.0f : 0.0f);
                 limiterOversampler_.processSamplesDown (mbBlock);
+            }
+
+            // Clip and limiter both finish in FinalCeiling: Clip uses a snappy release to catch
+            // post-downsample ringing that OS hard-clip alone misses on program material.
+            if (ceilingLimiter || ceilingClip)
+            {
+                const float ceilingLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
+                finalCeiling_.setMode (modeIdx == 1 ? mdsp_dsp::FinalCeilingLimiter::Mode::TruePeak
+                                                     : mdsp_dsp::FinalCeilingLimiter::Mode::SamplePeak);
+                finalCeiling_.setCeilingLinear (ceilingLin);
+                finalCeiling_.setReleaseMs (ceilingClip ? 1.0f : ceilingReleaseMs);
+                finalCeiling_.setReleaseSustainRatio (1.0f);
+                finalCeiling_.process (buffer);
+                fcGrDb = finalCeiling_.getLastBlockMaxReductionDb();
+            }
+            else
+            {
+                currentClipDb_.store (0.0f, std::memory_order_relaxed);
             }
 
             const float grLow = mbEngine_.getBandGrDb (0);
@@ -1592,7 +1721,9 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
             currentGrHighLDb_.store (grHigh, std::memory_order_relaxed);
             currentGrHighRDb_.store (grHigh, std::memory_order_relaxed);
             currentMsClampDb_.store (0.0f, std::memory_order_relaxed);
-            currentFinalCeilingDb_.store (0.0f, std::memory_order_relaxed);
+            currentFinalCeilingDb_.store (fcGrDb, std::memory_order_relaxed);
+            if (fcGrDb > maxFinalCeilingDb_.load (std::memory_order_relaxed))
+                maxFinalCeilingDb_.store (fcGrDb, std::memory_order_relaxed);
 
             if (grMax > maxGrSinceResetDb_.load (std::memory_order_relaxed))
                 maxGrSinceResetDb_.store (grMax, std::memory_order_relaxed);
@@ -1631,10 +1762,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         auto osBlock = limiterOversampler_.processSamplesUp (block);
         const int osN = (int) osBlock.getNumSamples();
 
-        const bool clipperPre = clipperPosition_->getIndex() == 0;
-
-        if (clipperPre)
-            runClipperStage (osBlock, n, nch, false);
+        // Drive PRE-only (clipper_position ignored; CLIP-1). Skip OS when Drive off (CLIP-1.1).
+        if (clipperActive_ != nullptr && clipperActive_->get())
+            runClipperStage (osBlock, n, nch, false,
+                             clipperOversampler_, clipperOsAlignDelay_, clipperOsAlignPad4x_);
 
         inputGainSmoothed_.setTargetValue (juce::Decibels::decibelsToGain (inputGainDbParam_->get()));
         for (int i = 0; i < osN; ++i)
@@ -1648,11 +1779,12 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         }
 
         const float ceilingLin = juce::Decibels::decibelsToGain (ceilingDbParam_->get());
+        // ceiling_db is output gain after limiting (SIGNAL_FLOW §3). Ceiling@Clip tip-catches at ceilingLin.
+        const float applyCeil = ceilingLin;
         finalCeiling_.setMode (modeIdx == 1 ? mdsp_dsp::FinalCeilingLimiter::Mode::TruePeak
                                              : mdsp_dsp::FinalCeilingLimiter::Mode::SamplePeak);
         finalCeiling_.setCeilingLinear (ceilingLin);
-        finalCeiling_.setReleaseMs (devFinalCeilingReleaseMs_ != nullptr ? devFinalCeilingReleaseMs_->load (std::memory_order_relaxed)
-                                                                          : 5.0f);
+        finalCeiling_.setReleaseMs (ceilingReleaseMs > 0.0f ? ceilingReleaseMs : 5.0f);
         finalCeiling_.setReleaseSustainRatio (1.0f);
         const float thresholdLin = 1.0f;
         const float bandThresholdLin = thresholdLin * juce::Decibels::decibelsToGain (-kBandHeadroomDb);
@@ -2181,7 +2313,7 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                     auto* d = osBlock.getChannelPointer ((size_t) ch);
                     const float delayed = lookaheadWide_.pushPop (ch, bandLimited[i]);
                     const float wideGain = (ch == 0) ? gainWideL[i] : gainWideR[i];
-                    d[i] = delayed * wideGain * ceilingLin;
+                    d[i] = delayed * wideGain * applyCeil;
 
                     const float gDeepBand = (ch == 0) ? gDeepBandL : gDeepBandR;
                     const float totalGain = gDeepBand * wideGain;
@@ -2238,8 +2370,8 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
                 }
                 minMsSafety = std::min (minMsSafety, msSafetyGain);
 
-                outL[i] *= ceilingLin;
-                outR[i] *= ceilingLin;
+                outL[i] *= applyCeil;
+                outR[i] *= applyCeil;
 
                 const float totalGainL = gDeepBand * gainWideL[i] * msSafetyGain;
                 const float totalGainR = gDeepBand * gainWideR[i] * msSafetyGain;
@@ -2300,8 +2432,11 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         if (frameMaxGr > maxGrSinceResetDb_.load (std::memory_order_relaxed))
             maxGrSinceResetDb_.store (frameMaxGr, std::memory_order_relaxed);
 
-        if (! clipperPre)
-            runClipperStage (osBlock, n, nch, false);
+        // Ceiling@Clip: OS hard-clip inside 4×, then short FinalCeiling mop-up after downsample.
+        if (ceilingClip)
+            runClipperStage (osBlock, n, nch, true,
+                             ceilingClipOversampler_, ceilingClipOsAlignDelay_, ceilingClipOsAlignPad4x_,
+                             ceilingClipTp ? 1.0f : 0.0f);
 
         const int padSamples = (osMaxLookahead - laBandActive) + (osMaxLookahead - laWideActive);
         lookaheadPad_.setDelaySamples (padSamples);
@@ -2320,8 +2455,10 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
         limiterOversampler_.processSamplesDown (block);
 
         float fcGrDb = 0.0f;
-        if (devFinalCeiling_ == nullptr || devFinalCeiling_->load (std::memory_order_relaxed) >= 0.5f)
+        if (ceilingLimiter || ceilingClip)
         {
+            if (ceilingClip)
+                finalCeiling_.setReleaseMs (1.0f);
             finalCeiling_.process (buffer);
             fcGrDb = finalCeiling_.getLastBlockMaxReductionDb();
         }
@@ -2350,6 +2487,31 @@ void MasterLimiterAudioProcessor::processCore (juce::AudioBuffer<float>& buffer,
     }
 
     loudnessTrack_.process (buffer);
+
+    // Pad wet to fixed host latency so every engine/Drive/Ceiling combo matches setLatencySamples.
+    // Limiter-off path already copied dryScratch_ (delayed by fixedLatency), so pad only when active.
+    // LookaheadDelay delay=0 is NOT a bypass (circular buffer length) — skip the pad entirely when 0.
+    if (limiterActive_->get())
+    {
+        const bool mbEngineOn = devMbEngine_->get();
+        const int native = computeNativeLatencySamples (mbEngineOn);
+        const int pad = juce::jmax (0, fixedLatencySamples_ - native);
+        if (pad > 0)
+        {
+            if (pad != wetLatencyPad_.getDelaySamples())
+                wetLatencyPad_.setDelaySamples (pad);
+            for (int i = 0; i < n; ++i)
+            {
+                for (int ch = 0; ch < nch; ++ch)
+                {
+                    auto* d = buffer.getWritePointer (ch);
+                    d[i] = wetLatencyPad_.pushPop (ch, d[i]);
+                }
+                if (nch == 1)
+                    (void) wetLatencyPad_.pushPop (1, 0.0f);
+            }
+        }
+    }
 
     const bool mbParityPath = limiterActive_->get() && devMbEngine_->get();
     const float liveCompDb = mbParityPath ? 0.0f : updateCompensationGainDb (loudnessTrack_.getSnapshot().shortTermLufs);
