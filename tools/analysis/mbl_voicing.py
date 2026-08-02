@@ -47,7 +47,11 @@ CORPUS = [   # spread of macro-dynamics (dry rng3s in comment), all 44.1 kHz
     ("homework-dense", TF + "/Homework MIX nom.wav"),
 ]
 
-GR_TARGET = 8.0         # dB of ACTUAL gain reduction -- see match() for why this replaced an RMS push
+GR_TARGET = 3.0         # dB of ACTUAL (RMS-based) gain reduction.
+# NB this is RMS gain reduction, NOT the peak GR a meter shows -- for a peak limiter the RMS figure is
+# much smaller. 8.0 here needed +20..+24 dB of input drive, far beyond any real mastering, and that
+# unrealistic operating point is what produced the "no global optimum" reading that contradicted
+# avishali's ears. 3.0 lands at ~+14..+17 dB drive, which is a hard but real master.
 MAX_SECS = 120.0        # plenty of 3 s windows for the macro statistic, half the render cost
 
 
