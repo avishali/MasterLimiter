@@ -24,9 +24,41 @@
 - **Remove the forced clipper** on the Open engine branch.
 - Update `docs/ENGINE_NAMING.md` (+ SIGNAL_FLOW / MANUAL): Ceiling = peak stage (Limiter→Clipper); Drive = pre tone.
 
-## Behaviour preservation (the gate)
-- **Open engine must sound the same:** at Ceiling=clip (min release, −1, Hard, oversampled), the Open engine output must match today's Open (2-band + forced clipper). **Claude verifies:** render jazz/EDM through Open, matched loudness → **300 ms range ≈ 4.9 / 6.4 and sample-peak ≈ −1**, matching the pre-CLIP-1 build (null/close). If it diverges, the Ceiling clip path isn't identical to the old clipper — fix.
+## ⚠️ GATE REVISED 2026-08-02 — read this before building
+
+**The original gate below was unsatisfiable.** It asked you to match "range ≈ 4.9 AND sample-peak ≈ −1,
+matching the pre-CLIP-1 build". Measured on 2026-08-02, **the pre-CLIP-1 build does not do both at once**
+(jazz `MIX 0003`, 2-band@120, Ramp, rel 150, ceiling −1 SamplePeak, drive +8.2 — identical results on the
+installed VST3, `build/`, and `build-release/`, i.e. including the binary shipped as 0.3.2-beta):
+
+| `dev_mb_safety` | sample peak | 300 ms range |
+|---|---:|---:|
+| OFF (the "clipper tip-catch" config) | **−0.15** (ceiling missed by 0.85 dB) | 4.88 |
+| ON | −1.00 | **3.15** (below Ozone IRC1's 4.68) |
+
+Also measured: **`clipper_active` is a bit-exact no-op in the Open path** (residual −240 dB between ON and
+OFF) — consistent with the MB branch force-enabling the clipper, which is the LED hack this slice removes.
+
+So the Open engine's headline claim ("Ozone-IRC1-parity breathing **with** peaks held to −1") is **not
+reproducible on the plugin path**. The range is real; the peak control is not. Most likely the −1 came from
+the C++ bench (`mbl_clip` hardclip) and the plugin path diverged — the same class of bench-vs-plugin
+divergence already caught once in MB-1.1 (`42a4aa9`).
+
+**This makes CLIP-1 load-bearing rather than cosmetic:** a Ceiling stage that actually clips at `ceiling_db`
+is exactly the missing tip-catcher. Do NOT "preserve" the current behaviour — the current behaviour is the bug.
+
+### The gate that replaces it
+- [ ] **Open holds the ceiling: sample peak ≤ −1.00 dB** at drive +8.2 (jazz) and the matched EDM drive,
+      Ceiling=clip, `dev_mb_safety` OFF. This is the fix.
+- [ ] **AND range stays ≈ 4.9 (jazz) / ≈ 6.4 (edm)** at matched loudness — i.e. the breathing survives real
+      peak control. **Report both numbers together; neither alone is a pass.**
+- [ ] If the two cannot both be met, **stop and report** — do not tune the range down to buy the peak. That
+      tradeoff is an architect/avishali decision, because it decides whether Open is actually shippable.
+- [ ] `clipper_active` (now Drive) must become a real, audible user toggle — a non-null residual between
+      ON and OFF, in both engines.
 - **Transparent engine unaffected** except Ceiling replaces FinalCeiling (same limiter DSP at release > 0).
+
+Verification is `tools/analysis/mbl_frontier.py` + the config in its `ours_configs()`; Claude runs it.
 
 ## Non-goals
 - No SDK edits (compose existing FinalCeilingLimiter + clipper). No engine/breathing DSP change. Don't touch Smart/Adaptive.
@@ -39,8 +71,38 @@
 ## Output requirements
 1. Retrieval log. 2. Diffs (Ceiling group, Drive relabel/pre-only, Open-branch de-force, processor composition). 3. Build+install mtimes. 4. Open-engine range/peak vs pre-CLIP-1. 5. Confirm no SDK edits, Smart untouched. 6. Open questions.
 
-## Notes for the architect (decide with avishali before build)
-- **Clipper → pre-Drive vs remove:** default = keep as pre-Drive (no lost capability). Confirm.
-- **Ceiling location:** main window (recommended, it's a core control now) vs DEV.
-- **Release→clip mapping:** a single Release knob where MIN = clip is simplest; alternatively a small "Limiter | Clipper" mode + a release knob. Recommend the single knob with a clear MIN="Clip" detent/label.
-- May split: **CLIP-1a** = Ceiling composition + Open de-force (DSP/peak model) ; **CLIP-1b** = Drive relabel + UI move + docs. Split if the diff can't be reviewed in ~10 min.
+## DECIDED (avishali, 2026-08-02) — these are no longer open questions
+1. **Keep the clipper as a pre-engine "Drive"** (do NOT remove it). No coloring capability is lost.
+2. **Ceiling lives on the MAIN WINDOW**, not DEV. It is a core user control now.
+3. **Single Release knob, MIN = clip**, labelled with a clear `Clip` detent at the minimum.
+   No separate "Limiter | Clipper" mode selector.
+
+May still split if the diff can't be reviewed in ~10 min:
+**CLIP-1a** = Ceiling composition + Open de-force (DSP/peak model) ; **CLIP-1b** = Drive relabel + UI move + docs.
+
+## ⚠️ ADDED MID-SLICE 2026-08-02 (avishali) — FIXED LATENCY, one value for everything
+
+**Decision: the plugin reports ONE constant latency — the longest configuration — always.**
+Rationale (avishali): a latency that moves is another source of confusion during testing; we would rather
+pay the worst-case delay everywhere than debug PDC differences between engines and settings.
+
+The current WIP goes the wrong way. `syncReportedLatency()` now branches on `mbEngineOn`,
+`clipperActive_`, `ceilingClip` AND `ceilingLimiter` — so latency changes when the user toggles Drive or
+moves Ceiling Release. That is four NEW moving latencies on top of the engine one.
+
+**Required instead:**
+- Compute `kFixedLatencySamples = max()` over **every** combination (Transparent/Open x Drive on/off x
+  Ceiling clip/limiter/off) once in `prepareToPlay`.
+- `setLatencySamples (kFixedLatencySamples)` **once per prepare**. Never call it from `processCore`.
+- Every configuration shorter than the max pads its wet path to the fixed total (reuse the existing
+  `lookaheadPad_` / align-delay pattern). `dryDelay_` tracks the same constant.
+- **Measured gate:** reported latency identical, and impulse-measured latency identical, across all of
+  those combinations, at 44.1/48/96 kHz. `tools/analysis/mbl_calibrate.py` check B covers this.
+
+This supersedes AB-1a in `SLICE_AB1_trustworthy_engine_ab.md` (that slice can drop its latency section
+once this lands).
+
+## Sequencing note (2026-08-02)
+This slice is deliberately **engine-agnostic** and lands BEFORE the Transparent-vs-Open verdict:
+it is behaviour-preserving for both engines, so it does not pre-judge which one ships. Do not
+fold any voicing or engine-selection change into it.
