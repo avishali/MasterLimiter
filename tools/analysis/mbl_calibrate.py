@@ -506,25 +506,31 @@ def group_K(path):
 
 
 def group_L(path):
-    """Stereo link is a shipping control that has never been verified on deterministic signals."""
-    print("\nL. Stereo link — shipping control, previously unverified")
+    """Stereo link. MUST compare R with L silent vs L loud at each link setting -- comparing R across
+    link settings with L always loud cannot tell "always linked" from "never linked" (it fooled me once)."""
+    print("\nL. Stereo link — does the link control actually unlink?")
     n = int(2.0 * SR)
     t = np.arange(n) / SR
     loud = _fade(0.9 * np.sin(2 * np.pi * 220 * t).astype(np.float32))
-    quiet = _fade(0.02 * np.sin(2 * np.pi * 3000 * t).astype(np.float32))
-    x = np.stack([loud, quiet], axis=1)          # L drives the limiter, R is a probe tone
+    sil = np.zeros(n, dtype=np.float32)
+    probe = _fade(0.02 * np.sin(2 * np.pi * 3000 * t).astype(np.float32))
 
-    levels = {}
-    for link in (100.0, 0.0):
-        p = new(path); p.set("input_gain", 15.0); p.set("ceiling", -1.0)
-        p.set("stereo_link", link)
-        y = settled(p.render(x))
-        levels[link] = db(np.sqrt(np.mean(y[:, 1] ** 2)))
+    for mode, ctrl in (("Stereo", "stereo_link"), ("M/S", "m_s_link")):
+        duck = {}
+        for link in (100.0, 0.0):
+            out = []
+            for L in (sil, loud):
+                p = new(path); p.set("input_gain", 15.0); p.set("ceiling", -1.0)
+                p.p.stereo_mode = mode
+                setattr(p.p, ctrl, link)
+                y = settled(p.render(np.stack([L, probe], axis=1)))
+                out.append(db(np.sqrt(np.mean(y[:, 1] ** 2))))
+            duck[link] = out[1] - out[0]      # how much L's GR pulls R down
 
-    check("L", "link 100% — R is ducked by L's gain reduction", levels[100.0] < levels[0.0] - 1.0,
-          f"R probe: link100 {levels[100.0]:.2f} dB vs link0 {levels[0.0]:.2f} dB")
-    check("L", "link 0% — R is (nearly) untouched by L", levels[0.0] > levels[100.0] + 1.0,
-          f"difference {levels[0.0]-levels[100.0]:.2f} dB")
+        check("L", f"{mode}: link 100% links the channels", duck[100.0] < -6.0,
+              f"R ducked {duck[100.0]:+.2f} dB by L")
+        check("L", f"{mode}: link 0% UNLINKS the channels", abs(duck[0.0]) < 1.0,
+              f"R ducked {duck[0.0]:+.2f} dB by L (should be ~0)")
 
 
 def group_M(path):
