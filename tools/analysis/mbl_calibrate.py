@@ -534,24 +534,53 @@ def group_L(path):
 
 
 def group_M(path):
-    """Aliasing. The product claims 4x limiter / 8x clipper oversampling; a hot HF tone driven into
-    the nonlinearity must not fold energy back down into the audible band."""
-    print("\nM. Alias suppression — oversampling has to actually buy us something")
-    f0 = 15000.0
-    x = sine(f0, 2.0, amp=0.8)
-    p = new(path); p.set("input_gain", 18.0); p.set("ceiling", -1.0)
-    p.set("drive_on", True); p.set("drive_db", -10.0); p.set("drive_mode", "Hard")
-    y = settled(p.render(x))
-    m = y.mean(1) * np.hanning(len(y))
-    spec = np.abs(np.fft.rfft(m))
-    freqs = np.fft.rfftfreq(len(m), 1 / SR)
+    """Intermodulation. A 19 kHz + 20 kHz pair puts a difference tone at exactly 1 kHz if anything in
+    the chain is nonlinear -- and nothing legitimate can be there. This is the honest test of what the
+    oversampling buys.
 
-    fund = spec[int(np.argmin(np.abs(freqs - f0)))]
-    # alias products land at |k*f0 - n*fs|; everything below 12 kHz here is folded-back garbage
-    band = (freqs > 200) & (freqs < 12000)
-    worst = float(np.max(spec[band]))
-    check("M", f"no audible aliasing from a hot {f0/1000:.0f} kHz tone into the clipper",
-          db(worst / fund) < -60, f"worst in-band product {db(worst/fund):.1f} dBc")
+    The first version of this check drove DRIVE (a hard clipper) and called the result "aliasing".
+    A hard clipper generating IMD is the clipper WORKING, not the oversampling failing. Drive must be
+    OFF to measure the limiter; it is measured separately below and only sanity-bounded.
+    """
+    print("\nM. Intermodulation — 19 kHz + 20 kHz two-tone, difference tone at 1 kHz")
+    n = int(4.0 * SR)
+    t = np.arange(n) / SR
+    two = _fade(0.45 * (np.sin(2 * np.pi * 19000 * t) + np.sin(2 * np.pi * 20000 * t)).astype(np.float32))
+    x = stereo(two)
+
+    def imd(y):
+        m = settled(y).mean(1)
+        w = np.hanning(len(m))
+        S = np.abs(np.fft.rfft(m * w))
+        fr = np.fft.rfftfreq(len(m), 1 / SR)
+
+        def lvl(f0, bw=30):
+            sel = (fr > f0 - bw) & (fr < f0 + bw)
+            return float(np.sqrt(np.sum(S[sel] ** 2)))
+        fund = np.sqrt(lvl(19000) ** 2 + lvl(20000) ** 2)
+        return db(lvl(1000) / (fund + 1e-30))
+
+    floor = imd(x)
+    check("M", "analysis floor is low enough to resolve IMD", floor < -100,
+          f"dry source {floor:.1f} dBc")
+
+    for label, mb in (("Transparent", False), ("Open", True)):
+        p = new(path)
+        if mb:
+            p.open_engine()
+        p.set("input_gain", 18.0); p.set("ceiling", -1.0)
+        p.set("drive_on", False)
+        got = imd(p.render(x))
+        # reference points measured 2026-08-02: Ozone IRC -132.0, Pro-L 2 Transparent 4x OS -105.6
+        check("M", f"{label} limiter IMD <= -100 dBc (Drive off)", got <= -100.0,
+              f"{got:.1f} dBc   [Pro-L 2 4xOS -105.6, Ozone -132.0]")
+
+    p = new(path)
+    p.set("input_gain", 18.0); p.set("ceiling", -1.0)
+    p.set("drive_on", True); p.set("drive_db", -6.0); p.set("drive_mode", "Hard")
+    got = imd(p.render(x))
+    check("M", "Drive Hard produces IMD (it is a clipper -- expected)", got > -100.0,
+          f"{got:.1f} dBc — deliberate nonlinearity, not a defect")
 
 
 def group_N(path):
