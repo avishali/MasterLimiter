@@ -99,20 +99,35 @@ def prol2_configs():
 def ours_configs():
     p = load_plugin(OURS)
 
+    names = set(p.parameters.keys())
+
+    def put(attr, value):
+        """pedalboard SILENTLY accepts a set to a non-existent attribute (it just creates a Python
+        attribute), and it names attributes from the DISPLAY name -- so CLIP-1's "Clipper*" ->
+        "Drive*" relabel turned three setters here into no-ops without any error. Fail loudly."""
+        if attr not in names:
+            raise KeyError(f"{attr!r} does not exist on this build "
+                           f"-- a silent no-op would misconfigure the measurement")
+        setattr(p, attr, value)
+
     def setup(gain, mb):
-        p.dev_mb_engine = mb
+        put("dev_mb_engine", mb)
         if mb:
-            p.dev_mb_crossover_hz = 120.0
-            p.dev_mb_attack_mode = "Ramp"
-            p.dev_mb_release_ms = 150.0
-            p.dev_mb_safety = False
-        p.limiter_active = True
-        p.clipper_active = mb           # Open uses the OS clipper as tip-catcher
-        p.clipper_drive_db = 0.0
-        p.ceiling_mode = "SamplePeak"
-        p.ceiling_db = CEIL_DB
-        p.gain_match_auto = False
-        p.input_gain_db = float(gain)
+            put("dev_mb_crossover_hz", 120.0)
+            put("dev_mb_attack_mode", "Ramp")
+            put("dev_mb_release_ms", 150.0)
+            put("dev_mb_safety", False)
+        put("limiter_active", True)
+        # Post-CLIP-1 the peak tip-catch is the CEILING stage (release = Clip), not the user clipper.
+        # Drive is now a separate PRE tone control and stays OFF for a clean engine measurement.
+        put("drive_active", False)
+        put("drive_db", 0.0)
+        put("ceiling_active", True)
+        put("ceiling_release_ms", "Clip")
+        put("ceiling_mode", "SamplePeak")
+        put("ceiling_db", CEIL_DB)
+        put("auto_track", False)
+        put("input_gain_db", float(gain))
         return p(x_cur, SR)
 
     return [("MasterLimiter OPEN", lambda g: setup(g, True), 24.0),
