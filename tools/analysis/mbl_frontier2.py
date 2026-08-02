@@ -15,12 +15,18 @@ import numpy as np
 import mbl_pump as P
 from mbl_voicing import CORPUS, load, gr_of, GR_TARGET
 
-def ours(x, sr, gain, engine):
+def ours(x, sr, gain, engine, mb=True):
     p = P._plug(P.OURS)
-    p.dev_mb_engine = True
-    p.dev_mb_crossover_hz = 120.0; p.dev_mb_attack_mode = "Ramp"
-    p.dev_mb_release_ms = 30.0; p.dev_mb_safety = False
-    p.dev_mb_release_engine = engine
+    p.dev_mb_engine = mb
+    if mb:
+        p.dev_mb_crossover_hz = 120.0; p.dev_mb_attack_mode = "Ramp"
+        p.dev_mb_release_ms = 30.0; p.dev_mb_safety = False
+        p.dev_mb_release_engine = engine
+    # Set the four Smart knobs EXPLICITLY rather than leaning on defaults. They are currently the
+    # SMART-1.1 tuned values, but a run that depends on an unstated default is not reproducible --
+    # and silent defaults have burned this project repeatedly today.
+    p.dev_smart_fast_ms = 40.0; p.dev_smart_slow_ms = 300.0
+    p.dev_smart_sustain_ms = 450.0; p.dev_smart_leak = 0.15
     p.limiter_active = True; p.drive_active = False
     p.ceiling_active = True; p.ceiling_release_ms = "Clip"
     p.ceiling_mode = "SamplePeak"; p.ceiling_db = -1.0; p.auto_track = False
@@ -30,6 +36,7 @@ def ours(x, sr, gain, engine):
 CONFIGS = [
     ("OPEN + Manual",        lambda x, sr, g: ours(x, sr, g, "Manual")),
     ("OPEN + Smart",         lambda x, sr, g: ours(x, sr, g, "Smart")),
+    ("TRANSPARENT",          lambda x, sr, g: ours(x, sr, g, "Manual", mb=False)),
     ("Pro-L 2 Transparent",  lambda x, sr, g: P.render_prol(x, sr, g, "Transparent")),
     ("Pro-L 2 Allround",     lambda x, sr, g: P.render_prol(x, sr, g, "Allround")),
     ("Pro-L 2 Aggressive",   lambda x, sr, g: P.render_prol(x, sr, g, "Aggressive")),
