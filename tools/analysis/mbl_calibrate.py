@@ -464,6 +464,32 @@ def group_Z(path):
     check("Z", "full chain: true peak <= ceiling", true_peak_db(y) <= -0.9,
           f"true peak {true_peak_db(y):+.2f} dBTP")
 
+    # Discontinuity check. Group Z previously asserted only "finite" and "TP <= ceiling", which is why
+    # it passed a build where Drive + Ceiling=Clip produced audible clicks in the Open path.
+    # The test is RELATIVE, not absolute: turning Drive on must not change the worst sample-to-sample
+    # step much, because Drive is a tone stage and cannot legitimately create steps the engine did not
+    # already make. An absolute threshold hid the bug -- the synthetic burst reached 0.82 (under a 0.95
+    # ceiling-amplitude bar) while every other config sat at 0.05, a 19x outlier that is obviously wrong.
+    def worst_step(mb, crel, drive):
+        q = new(path)
+        if mb:
+            q.open_engine()
+        q.set("input_gain", 14.0); q.set("ceiling", -1.0); q.set("ceiling_on", True)
+        try:
+            q.set("ceiling_rel", crel)
+        except Exception:
+            q.set("ceiling_rel", 0.0 if crel == "Clip" else 20.0)
+        q.set("drive_on", drive); q.set("drive_db", -6.0); q.set("drive_mode", "Hard")
+        mono = settled(q.render(bursts(secs=6.0))).mean(1)
+        return float(np.max(np.abs(np.diff(mono)))) if len(mono) > 1 else 0.0
+
+    for eng_label, mb in (("Open", True), ("Transparent", False)):
+        for crel in ("Clip", "20.0 ms"):
+            off, on = worst_step(mb, crel, False), worst_step(mb, crel, True)
+            ratio = on / max(off, 1e-9)
+            check("Z", f"Drive adds no discontinuity  {eng_label}/Ceiling={crel}", ratio <= 3.0,
+                  f"worst step {off:.4f} -> {on:.4f}  ({ratio:.1f}x)")
+
     p2 = new(path).open_engine()
     p2.set("input_gain", 12.0); p2.set("ceiling", -1.0); p2.set("ceiling_mode", "TruePeak")
     p2.set("drive_on", False); p2.set("drive_db", -3.0)
